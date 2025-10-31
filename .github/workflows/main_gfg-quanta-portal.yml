@@ -30,7 +30,8 @@ jobs:
 
       - name: Prepare standalone output
         run: |
-          cp -r .next/standalone ./deploy
+          mkdir -p ./deploy
+          cp -r .next/standalone/. ./deploy
           cp -r .next/static ./deploy/.next/static
           cp -r public ./deploy/public
 
