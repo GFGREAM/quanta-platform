@@ -30,11 +30,11 @@ jobs:
           rm -rf ./deploy
           mkdir -p ./deploy
           cp -r .next/standalone/* ./deploy/
-          cp -r .next/static ./deploy/.next/
-          cp -r public ./deploy/
+          mkdir -p ./deploy/.next
+          cp -r .next/static ./deploy/.next/static
+          cp -r public ./deploy/public
           cp package.json ./deploy/
           cp package-lock.json ./deploy/
-          cd ./deploy && npm install --omit=dev
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
