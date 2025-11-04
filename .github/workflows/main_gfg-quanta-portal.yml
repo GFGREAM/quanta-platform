@@ -30,10 +30,15 @@ jobs:
       - name: Build Next.js project
         run: npm run build
 
-      # 5️⃣ Desplegar directamente usando publish profile
+      # 5️⃣ Login a Azure (usando publish profile)
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_B4AA0E94097495C5824072C1D62E1CE8 }}
+
+      # 6️⃣ Desplegar a App Service
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
         with:
           app-name: 'gfg-quanta-portal'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_B4AA0E94097495C5824072C1D62E1CE8 }}
           package: .
