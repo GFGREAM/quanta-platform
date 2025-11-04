@@ -1,11 +1,4 @@
-# ==========================================================
-#  GitHub Actions Workflow - Deploy Quanta Portal to Azure
-# ==========================================================
-#  Utiliza Oryx Build + Publish Profile (sin ZIP manual)
-#  Compatible con Next.js 14+ y Node 22 en App Service.
-# ==========================================================
-
-name: Deploy Quanta Portal to Azure
+name: Build and Deploy Quanta Portal to Azure
 
 on:
   push:
@@ -17,10 +10,6 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
-    env:
-      NODE_VERSION: 22.x
-      AZURE_WEBAPP_NAME: gfg-quanta-portal
-
     steps:
       # 1️⃣ Clonar el repositorio
       - name: Checkout repository
@@ -30,8 +19,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          node-version: '22.x'
+          cache: 'npm'
 
       # 3️⃣ Instalar dependencias (solo producción)
       - name: Install dependencies
@@ -43,15 +32,15 @@ jobs:
         run: |
           npm run build
 
-      # 5️⃣ Asegurar script de inicio
-      - name: Ensure start script in package.json
-        run: |
-          jq '.scripts.start="node server.js"' package.json > tmp.json && mv tmp.json package.json
+      # 5️⃣ Iniciar sesión en Azure
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_B4AA0E94097495C5824072C1D62E1CE8 }}
 
-      # 6️⃣ Desplegar directamente con Oryx (sin ZIP)
-      - name: Deploy to Azure Web App (Oryx)
+      # 6️⃣ Desplegar a Azure Web App (Oryx autodetectará Next.js)
+      - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
+          app-name: 'gfg-quanta-portal'
           package: .
