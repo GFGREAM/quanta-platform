@@ -26,9 +26,9 @@ jobs:
       - name: Build Next.js project
         run: npm run build
 
-      - name: Deploy to Azure Web App
+      # 👉 OJO: SIN app-name. Solo publish-profile + package
+      - name: Deploy to Azure Web App (via Publish Profile)
         uses: azure/webapps-deploy@v2
         with:
-          app-name: 'gfg-quanta-portal-dkesgqc7gwdyfjes'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_B4AA0E94047945C5824072C1D6E1ECE8 }}
           package: .
