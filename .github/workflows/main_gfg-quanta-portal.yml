@@ -49,8 +49,10 @@ jobs:
       - name: Prepare deployment package
         run: |
           mkdir deploy
-          cp -r .next public server.js package.json deploy/
+          cp -r .next public server.js package.json startup.sh deploy/
           cd deploy
+          # ⚙️ Asegurar que el script de inicio esté definido correctamente
+          jq '.scripts.start="node server.js"' package.json > tmp.json && mv tmp.json package.json
           npm install --omit=dev
           zip -r ../deploy.zip .
 
