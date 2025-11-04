@@ -1,6 +1,9 @@
-# ============================================
-# 🚀 Deploy Quanta Portal to Azure Web App
-# ============================================
+# ==========================================================
+#  GitHub Actions Workflow - Deploy Quanta Portal to Azure
+# ==========================================================
+#  Despliega automáticamente la app Next.js a Azure Web App
+#  utilizando ZIP Deploy y Publish Profile.
+# ==========================================================
 
 name: Deploy Quanta Portal to Azure
 
@@ -42,12 +45,16 @@ jobs:
         run: |
           npm run build
 
-      # 5️⃣ Crear paquete de despliegue (ZIP)
-      - name: Create deploy.zip
+      # 5️⃣ Preparar el paquete completo para ZIP Deploy
+      - name: Prepare deployment package
         run: |
-          zip -r deploy.zip .next public server.js package.json startup.sh
+          mkdir deploy
+          cp -r .next public server.js package.json deploy/
+          cd deploy
+          npm install --omit=dev
+          zip -r ../deploy.zip .
 
-      # 6️⃣ Desplegar en Azure App Service
+      # 6️⃣ Desplegar en Azure Web App
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
