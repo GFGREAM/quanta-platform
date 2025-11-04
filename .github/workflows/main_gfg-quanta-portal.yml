@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
@@ -16,21 +17,18 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22.x'
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci --force
+        run: npm ci --omit=dev
 
-      - name: Build Next.js app
+      - name: Build Next.js project
         run: npm run build
-
-      - name: Ensure startup script permissions
-        run: chmod +x startup.sh
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
         with:
-          app-name: "quanta-gfgam-portal"
+          app-name: 'gfg-quanta-portal-dkesgqc7gwdyfjes'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_B4AA0E94047945C5824072C1D6E1ECE8 }}
           package: .
