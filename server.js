@@ -1,10 +1,17 @@
 import { createServer } from "http";
 import { parse } from "url";
 import next from "next";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// Asegurar cwd correcto en Azure
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+process.chdir(__dirname);
 
 const port = process.env.PORT || 8080;
 const dev = process.env.NODE_ENV !== "production";
-const app = next({ dev });
+const app = next({ dev, dir: __dirname });
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
