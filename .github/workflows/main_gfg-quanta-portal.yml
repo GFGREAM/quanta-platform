@@ -1,8 +1,8 @@
 # ==========================================================
 #  GitHub Actions Workflow - Deploy Quanta Portal to Azure
 # ==========================================================
-#  Despliega automáticamente la app Next.js a Azure Web App
-#  utilizando ZIP Deploy y Publish Profile.
+#  Utiliza Oryx Build + Publish Profile (sin ZIP manual)
+#  Compatible con Next.js 14+ y Node 22 en App Service.
 # ==========================================================
 
 name: Deploy Quanta Portal to Azure
@@ -20,8 +20,6 @@ jobs:
     env:
       NODE_VERSION: 22.x
       AZURE_WEBAPP_NAME: gfg-quanta-portal
-      AZURE_WEBAPP_PACKAGE_PATH: "."
-      BUILD_DIR: ".next"
 
     steps:
       # 1️⃣ Clonar el repositorio
@@ -45,21 +43,15 @@ jobs:
         run: |
           npm run build
 
-      # 5️⃣ Preparar el paquete completo para ZIP Deploy
-      - name: Prepare deployment package
+      # 5️⃣ Asegurar script de inicio
+      - name: Ensure start script in package.json
         run: |
-          mkdir deploy
-          cp -r .next public server.js package.json startup.sh deploy/
-          cd deploy
-          # ⚙️ Asegurar que el script de inicio esté definido correctamente
           jq '.scripts.start="node server.js"' package.json > tmp.json && mv tmp.json package.json
-          npm install --omit=dev
-          zip -r ../deploy.zip .
 
-      # 6️⃣ Desplegar en Azure Web App
-      - name: Deploy to Azure Web App
+      # 6️⃣ Desplegar directamente con Oryx (sin ZIP)
+      - name: Deploy to Azure Web App (Oryx)
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
-          package: deploy.zip
+          package: .
