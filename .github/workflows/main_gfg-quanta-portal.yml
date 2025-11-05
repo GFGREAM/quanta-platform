@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
   build-and-deploy:
@@ -17,18 +16,17 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
-          cache: 'npm'
+          node-version: 22
 
       - name: Install dependencies
-        run: npm ci --omit=dev
+        run: npm ci --force
 
       - name: Build Next.js project
         run: npm run build
 
-      # 👉 OJO: SIN app-name. Solo publish-profile + package
-      - name: Deploy to Azure Web App (via Publish Profile)
+      - name: Deploy to Azure Web App using Oryx
         uses: azure/webapps-deploy@v2
         with:
+          app-name: gfg-quanta-portal
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_B4AA0E94047945C5824072C1D6E1ECE8 }}
           package: .
