@@ -19,6 +19,6 @@ else
   echo "🏗️ Build detectado, omitiendo recompilación..."
 fi
 
-# 3. Iniciar el servidor Node.js
+# 3. Iniciar el servidor Next.js
 echo "🚀 Iniciando servidor Quanta Portal..."
-exec node server.js
+exec npm start
