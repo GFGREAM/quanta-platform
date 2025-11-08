@@ -1,8 +1,10 @@
 import { createServer } from "http";
 import { parse } from "url";
-import next from "next/dist/server/next.js";
 import path from "path";
 import { fileURLToPath } from "url";
+
+// Dynamic import para Next.js 16 con ES modules
+const next = (await import('next')).default;
 
 // Asegurar cwd correcto en Azure
 const __filename = fileURLToPath(import.meta.url);
