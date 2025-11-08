@@ -1,6 +1,6 @@
 import { createServer } from "http";
 import { parse } from "url";
-import next from "next";
+import next from "next/dist/server/next.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
