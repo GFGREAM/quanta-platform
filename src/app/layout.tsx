@@ -17,7 +17,6 @@ export const metadata: Metadata = {
   description: "Plataforma de Business Intelligence",
   icons: {
     icon: "/favicon.svg",
-    apple: "/quanta_logo.png",
   },
   openGraph: {
     title: "Quanta by GFG AM",
