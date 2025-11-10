@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   title: "Quanta by GFG AM",
   description: "Plataforma de Business Intelligence",
   icons: {
-    icon: "/quanta_logo.png",
+    icon: "/favicon.svg",
     apple: "/quanta_logo.png",
   },
 };
