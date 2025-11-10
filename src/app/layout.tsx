@@ -19,6 +19,23 @@ export const metadata: Metadata = {
     icon: "/favicon.svg",
     apple: "/quanta_logo.png",
   },
+  openGraph: {
+    title: "Quanta by GFG AM",
+    description: "Plataforma de Business Intelligence",
+    url: "https://quanta.gfgam.com",
+    siteName: "Quanta",
+    images: [
+      {
+        url: "/quanta_logo.png",
+        width: 1200,
+        height: 630,
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    images: ["/quanta_logo.png"],
+  },
 };
 
 export default function RootLayout({
