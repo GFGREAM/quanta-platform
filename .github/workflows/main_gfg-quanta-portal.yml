@@ -25,10 +25,11 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Copy static assets to standalone
+      - name: Prepare standalone package
         run: |
           cp -r public .next/standalone/public
           cp -r .next/static .next/standalone/.next/static
+          cp startup.sh .next/standalone/startup.sh
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
@@ -36,3 +37,4 @@ jobs:
           app-name: gfg-quanta-portal
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_B4AA0E94047945C5824072C1D6E1ECE8 }}
           package: .next/standalone
+          startup-command: bash startup.sh

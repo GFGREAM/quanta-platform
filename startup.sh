@@ -1,4 +1,6 @@
 #!/bin/bash
 echo "Starting Quanta Portal..."
 cd /home/site/wwwroot
-exec node .next/standalone/server.js
+export HOSTNAME=0.0.0.0
+export PORT=8080
+exec node server.js
