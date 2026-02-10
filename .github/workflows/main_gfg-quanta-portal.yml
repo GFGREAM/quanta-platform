@@ -13,9 +13,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Deploy to Azure Web App using Oryx
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Copy static assets to standalone
+        run: |
+          cp -r public .next/standalone/public
+          cp -r .next/static .next/standalone/.next/static
+
+      - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
         with:
           app-name: gfg-quanta-portal
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_B4AA0E94047945C5824072C1D6E1ECE8 }}
-          package: .
+          package: .next/standalone
