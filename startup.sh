@@ -1,3 +1,4 @@
 #!/bin/bash
 echo "Starting Quanta Portal..."
-exec npm start
+cd /home/site/wwwroot
+exec ./node_modules/.bin/next start
