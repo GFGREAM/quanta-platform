@@ -37,4 +37,3 @@ jobs:
           app-name: gfg-quanta-portal
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_B4AA0E94047945C5824072C1D6E1ECE8 }}
           package: .next/standalone
-          startup-command: bash startup.sh
