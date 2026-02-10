@@ -1,2 +1,6 @@
-[config]
-SCM_DO_BUILD_DURING_DEPLOYMENT=true
+UPDATE core.market_metadata
+SET 
+    market_name = 'Guanacaste Peninsula, Costa Rica',
+    tripadvisor_market_url = 'https://www.tripadvisor.com/Hotels-g309235-Province_of_Guanacaste-Hotels.html',
+    tripadvisor_geo_id = 'g309235'
+WHERE market_id = 2;
