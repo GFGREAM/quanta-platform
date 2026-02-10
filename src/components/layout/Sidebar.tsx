@@ -4,7 +4,20 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, DollarSign, FileText, Calculator, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, ChevronLeft, ChevronRight, X } from 'lucide-react';
 
-const menuItems = [
+interface MenuItem {
+  label: string;
+  icon: any;
+  href: string;
+}
+
+interface MenuCategory {
+  category: string;
+  items: MenuItem[];
+}
+
+type MenuEntry = MenuItem | MenuCategory;
+
+const menuItems: MenuEntry[] = [
   { label: 'Home', icon: Home, href: '/dashboard' },
   { category: 'FINANZAS', items: [
     { label: 'RevPAR', icon: DollarSign, href: '/dashboard/financials/revpar' },
@@ -32,7 +45,7 @@ export default function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: bo
 
   useEffect(() => { if (mobileOpen && onMobileClose) { const handleResize = () => { if (window.innerWidth >= 768) onMobileClose(); }; window.addEventListener('resize', handleResize); return () => window.removeEventListener('resize', handleResize); } }, [mobileOpen, onMobileClose]);
 
-  const renderLink = (item: { label: string; icon: any; href: string }, key: number) => {
+  const renderLink = (item: MenuItem, key: number) => {
     const Icon = item.icon;
     const isActive = pathname === item.href;
     return (
@@ -46,7 +59,7 @@ export default function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: bo
     <div className="flex flex-col h-full">
       <nav className="flex-1 overflow-y-auto py-4 px-2">
         {menuItems.map((item, index) => {
-          if ('href' in item) return renderLink(item, index);
+          if ('href' in item) return renderLink(item as MenuItem, index);
           return (
             <div key={index} className="mb-2">
               {!(collapsed && !mobileOpen) && <p className="text-[10px] font-semibold tracking-wider text-[var(--text-secondary)] px-3 pt-4 pb-1">{item.category}</p>}
