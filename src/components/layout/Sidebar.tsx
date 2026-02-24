@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, DollarSign, FileText, Calculator, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Home, DollarSign, FileText, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, ChevronLeft, ChevronRight, X } from 'lucide-react';
 
 interface MenuItem {
   label: string;
@@ -19,24 +19,30 @@ type MenuEntry = MenuItem | MenuCategory;
 
 const menuItems: MenuEntry[] = [
   { label: 'Home', icon: Home, href: '/dashboard' },
-  { category: 'FINANZAS', items: [
-    { label: 'RevPAR', icon: DollarSign, href: '/dashboard/financials/revpar' },
-    { label: 'P&L', icon: FileText, href: '/dashboard/financials/pl' },
-    { label: 'Budget', icon: Calculator, href: '/dashboard/financials/budget' },
+  { category: 'TOP LINE', items: [
+    { label: 'Rooms Rev$ (Pack)', icon: DollarSign, href: '/dashboard/topline/rooms-rev' },
+    { label: 'Other Rev$ (Non Pack)', icon: DollarSign, href: '/dashboard/topline/other-rev' },
+    { label: 'Market Share', icon: TrendingUp, href: '/dashboard/topline/market-share' },
+    { label: 'On the Books', icon: BarChart3, href: '/dashboard/topline/on-the-books' },
   ]},
-  { category: 'OPERATIVO', items: [
-    { label: 'Occupancy', icon: Hotel, href: '/dashboard/operations/occupancy' },
-    { label: 'Staffing', icon: Users, href: '/dashboard/operations/staff' },
-    { label: 'Maintenance', icon: Wrench, href: '/dashboard/operations/maintenance' },
+  { category: 'BOTTOM LINE', items: [
+    { label: 'Expenses', icon: DollarSign, href: '/dashboard/bottomline/expenses' },
+    { label: 'Staffing', icon: Users, href: '/dashboard/bottomline/staffing' },
+    { label: 'Utilities', icon: Wrench, href: '/dashboard/bottomline/utilities' },
+    { label: 'Projects', icon: FileText, href: '/dashboard/bottomline/projects' },
   ]},
-  { category: 'MERCADO', items: [
-    { label: 'Comp Set', icon: BarChart3, href: '/dashboard/market/comp-set' },
-    { label: 'Market Share', icon: TrendingUp, href: '/dashboard/market/market-share' },
+  { category: 'PROFIT & LOSS', items: [
+    { label: 'P&L Statement', icon: FileText, href: '/dashboard/pnl/statement' },
+    { label: 'Forecast', icon: Sparkles, href: '/dashboard/pnl/forecast' },
   ]},
-  { category: 'PREDICTIVE', items: [
-    { label: 'Forecast', icon: Sparkles, href: '/dashboard/predictive/forecast' },
+  { category: 'GUEST EXPERIENCE', items: [
+    { label: 'Hotel META Positioning', icon: Hotel, href: '/dashboard/guest/meta-positioning' },
+    { label: 'Guest Satisfaction', icon: Star, href: '/dashboard/guest/satisfaction' },
   ]},
-  { label: 'Favoritos', icon: Star, href: '/dashboard/favorites' },
+  { category: 'MARKET TRENDS', items: [
+    { label: 'Airport Passengers', icon: BarChart3, href: '/dashboard/market/airport-passengers' },
+    { label: 'Market Demand', icon: BarChart3, href: '/dashboard/market/market-demand' },
+  ]},
 ];
 
 export default function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {

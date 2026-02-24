@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev)",
+      "Bash(npm install:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: complete UI design - layout, sidebar, header, dashboard pages, login, responsive\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git checkout:*)",
+      "Bash(git rebase:*)",
+      "Bash(git commit:*)",
+      "Bash(az webapp log tail:*)",
+      "Bash(powershell -Command \"az webapp log tail --name gfg-quanta-portal --resource-group gfg-am-production 2>&1 | Select-Object -First 50\")"
+    ]
+  }
+}
