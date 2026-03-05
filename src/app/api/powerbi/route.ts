@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { ConfidentialClientApplication } from "@azure/msal-node";
 
-const msalConfig = {
-  auth: {
-    clientId: process.env.POWERBI_CLIENT_ID!,
-    clientSecret: process.env.POWERBI_CLIENT_SECRET!,
-    authority: `https://login.microsoftonline.com/${process.env.POWERBI_TENANT_ID}`,
-  },
-};
-
-const cca = new ConfidentialClientApplication(msalConfig);
+function getMsalClient() {
+  return new ConfidentialClientApplication({
+    auth: {
+      clientId: process.env.POWERBI_CLIENT_ID || "",
+      clientSecret: process.env.POWERBI_CLIENT_SECRET || "",
+      authority: `https://login.microsoftonline.com/${process.env.POWERBI_TENANT_ID || ""}`,
+    },
+  });
+}
 
 async function generateEmbedToken(
   accessToken: string,
@@ -24,7 +24,6 @@ async function generateEmbedToken(
     "Content-Type": "application/json",
   };
 
-  // First try without identity
   let body: any = { accessLevel: "View" };
 
   let response = await fetch(url, {
@@ -33,7 +32,6 @@ async function generateEmbedToken(
     body: JSON.stringify(body),
   });
 
-  // If it fails requiring effective identity, retry with identity
   if (!response.ok) {
     const errorText = await response.text();
     if (errorText.includes("effective identity") && datasetId) {
@@ -77,6 +75,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "reportId is required" }, { status: 400 });
     }
 
+    const cca = getMsalClient();
+
     const tokenResponse = await cca.acquireTokenByClientCredential({
       scopes: ["https://analysis.windows.net/powerbi/api/.default"],
     });
@@ -87,7 +87,6 @@ export async function GET(request: Request) {
 
     const accessToken = tokenResponse.accessToken;
 
-    // Get report details
     const reportResponse = await fetch(
       `https://api.powerbi.com/v1.0/myorg/groups/${workspaceId}/reports/${reportId}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -100,7 +99,6 @@ export async function GET(request: Request) {
 
     const report = await reportResponse.json();
 
-    // Generate embed token (handles both with and without RLS)
     const embedResult = await generateEmbedToken(
       accessToken,
       workspaceId!,
@@ -127,3 +125,5 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+export const dynamic = "force-dynamic";
