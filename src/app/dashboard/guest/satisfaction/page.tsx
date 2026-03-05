@@ -1,6 +1,11 @@
 "use client";
 
-import PowerBIEmbed from "@/components/powerbi/PowerBIEmbed";
+import dynamic from "next/dynamic";
+
+const PowerBIEmbed = dynamic(
+  () => import("@/components/powerbi/PowerBIEmbed"),
+  { ssr: false }
+);
 
 export default function GuestSatisfactionPage() {
   return (

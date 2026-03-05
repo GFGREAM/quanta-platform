@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import * as pbi from "powerbi-client";
+import type * as pbi from "powerbi-client";
 
 interface PowerBIEmbedProps {
   reportId: string;
@@ -38,10 +38,12 @@ export default function PowerBIEmbed({ reportId, workspaceId }: PowerBIEmbedProp
         powerbiRef.current.reset(embedRef.current);
       }
 
-      const powerbi = new pbi.service.Service(
-        pbi.factories.hpmFactory,
-        pbi.factories.wpmpFactory,
-        pbi.factories.routerFactory
+      const pbiModule = await import("powerbi-client");
+
+      const powerbi = new pbiModule.service.Service(
+        pbiModule.factories.hpmFactory,
+        pbiModule.factories.wpmpFactory,
+        pbiModule.factories.routerFactory
       );
       powerbiRef.current = powerbi;
 
@@ -50,13 +52,13 @@ export default function PowerBIEmbed({ reportId, workspaceId }: PowerBIEmbedProp
         id: data.reportId,
         embedUrl: data.embedUrl,
         accessToken: data.embedToken,
-        tokenType: pbi.models.TokenType.Embed,
+        tokenType: pbiModule.models.TokenType.Embed,
         settings: {
           panes: {
             filters: { visible: false },
             pageNavigation: { visible: true },
           },
-          background: pbi.models.BackgroundType.Transparent,
+          background: pbiModule.models.BackgroundType.Transparent,
         },
       };
 
