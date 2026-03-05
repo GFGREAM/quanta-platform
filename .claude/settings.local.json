@@ -11,7 +11,10 @@
       "Bash(git rebase:*)",
       "Bash(git commit:*)",
       "Bash(az webapp log tail:*)",
-      "Bash(powershell -Command \"az webapp log tail --name gfg-quanta-portal --resource-group gfg-am-production 2>&1 | Select-Object -First 50\")"
+      "Bash(powershell -Command \"az webapp log tail --name gfg-quanta-portal --resource-group gfg-am-production 2>&1 | Select-Object -First 50\")",
+      "Bash(git config:*)",
+      "Bash(npm run:*)",
+      "Bash(wsl bash:*)"
     ]
   }
 }
