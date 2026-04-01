@@ -3,16 +3,28 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type * as pbi from "powerbi-client";
 
+export interface PowerBIFilter {
+  $schema: string;
+  target: { table: string; column: string };
+  operator: string;
+  values: (string | number)[];
+}
+
 interface PowerBIEmbedProps {
   reportId: string;
   workspaceId?: string;
+  filters?: PowerBIFilter[];
 }
 
-export default function PowerBIEmbed({ reportId, workspaceId }: PowerBIEmbedProps) {
+const DEFAULT_ASPECT_RATIO = 16 / 9;
+
+export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBIEmbedProps) {
   const embedRef = useRef<HTMLDivElement>(null);
   const powerbiRef = useRef<pbi.service.Service | null>(null);
+  const reportRef = useRef<pbi.Report | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [aspectRatio, setAspectRatio] = useState<number>(DEFAULT_ASPECT_RATIO);
   const attemptsRef = useRef(0);
   const maxAttempts = 3;
 
@@ -33,7 +45,6 @@ export default function PowerBIEmbed({ reportId, workspaceId }: PowerBIEmbedProp
 
       if (!embedRef.current) return;
 
-      // Clean up previous embed
       if (powerbiRef.current) {
         powerbiRef.current.reset(embedRef.current);
       }
@@ -56,17 +67,39 @@ export default function PowerBIEmbed({ reportId, workspaceId }: PowerBIEmbedProp
         settings: {
           panes: {
             filters: { visible: false },
-            pageNavigation: { visible: true },
+            pageNavigation: { visible: false },
           },
-          background: pbiModule.models.BackgroundType.Transparent,
+          bars: {
+            statusBar: { visible: false },
+            actionBar: { visible: false },
+          },
+          background: 1,
+          layoutType: 3,
         },
       };
 
-      const report = powerbi.embed(embedRef.current, config);
+      const report = powerbi.embed(embedRef.current, config) as pbi.Report;
+      reportRef.current = report;
 
       report.on("loaded", () => {
         attemptsRef.current = 0;
         setLoading(false);
+        if (filters && filters.length > 0) {
+          report.setFilters(filters as any[]).catch(() => {});
+        }
+      });
+
+      report.on("rendered", async () => {
+        try {
+          const pages = await report.getPages();
+          const activePage = pages.find((p: any) => p.isActive);
+          if (activePage && (activePage as any).defaultSize) {
+            const { width, height } = (activePage as any).defaultSize;
+            if (width && height) {
+              setAspectRatio(width / height);
+            }
+          }
+        } catch {}
       });
 
       report.on("error", () => {
@@ -94,8 +127,17 @@ export default function PowerBIEmbed({ reportId, workspaceId }: PowerBIEmbedProp
     embedReport();
   }, [embedReport]);
 
+  useEffect(() => {
+    if (!reportRef.current || loading) return;
+    if (filters && filters.length > 0) {
+      reportRef.current.setFilters(filters as any[]).catch(() => {});
+    } else {
+      reportRef.current.removeFilters().catch(() => {});
+    }
+  }, [filters, loading]);
+
   return (
-    <div className="w-full h-full relative">
+    <div className="w-full relative" style={{ aspectRatio: String(aspectRatio) }}>
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#FAFAFA]">
           <div className="flex flex-col items-center gap-3">
@@ -120,7 +162,7 @@ export default function PowerBIEmbed({ reportId, workspaceId }: PowerBIEmbedProp
           </div>
         </div>
       )}
-      <div ref={embedRef} className="w-full h-full min-h-[600px]" />
+      <div ref={embedRef} className="w-full h-full" />
     </div>
   );
 }

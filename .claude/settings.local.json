@@ -14,7 +14,10 @@
       "Bash(powershell -Command \"az webapp log tail --name gfg-quanta-portal --resource-group gfg-am-production 2>&1 | Select-Object -First 50\")",
       "Bash(git config:*)",
       "Bash(npm run:*)",
-      "Bash(wsl bash:*)"
+      "Bash(wsl bash:*)",
+      "Bash(npx tsx:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx next:*)"
     ]
   }
 }
