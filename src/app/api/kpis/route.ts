@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ConfidentialClientApplication } from "@azure/msal-node";
 
 const DATASET_ID = process.env.POWERBI_DATASET_ID || "";
+const WORKSPACE_ID = process.env.POWERBI_WORKSPACE_ID || "";
 
 const REVENUE_USD = "SUM('AAG'[Rooms Revenue]) + SUM('AAG'[Other Revenue])";
 const EXPENSES_USD = "SUM('AAG'[Departmental Expenses]) + SUM('AAG'[Undistributed Expenses])";
@@ -122,7 +123,7 @@ export async function GET(request: Request) {
     }
 
     const response = await fetch(
-      `https://api.powerbi.com/v1.0/myorg/datasets/${DATASET_ID}/executeQueries`,
+      `https://api.powerbi.com/v1.0/myorg/groups/${WORKSPACE_ID}/datasets/${DATASET_ID}/executeQueries`,
       {
         method: "POST",
         headers: {
