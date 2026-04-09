@@ -12,9 +12,16 @@ function getMsalClient() {
   });
 }
 
+const VALID_ROLES = new Set([
+  "BBG", "BBGZ", "BURSZTYN", "GFGAM", "HALABE", "HDMLC", "HELMUT",
+  "HYATT HOUSE SANTA FE", "JAC", "MARRIOT", "ST REGIS", "WALDORF ASTORIA", "ZOETRY",
+]);
+
+const DEFAULT_ROLE = "GFGAM";
+
 function getRoleFromEmail(email: string): string {
-  const prefix = email.split("@")[0];
-  return prefix.toUpperCase();
+  const prefix = email.split("@")[0].toUpperCase();
+  return VALID_ROLES.has(prefix) ? prefix : DEFAULT_ROLE;
 }
 
 async function generateEmbedToken(
