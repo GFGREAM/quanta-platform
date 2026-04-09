@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
 import { ConfidentialClientApplication } from "@azure/msal-node";
 
 function getMsalClient() {
@@ -11,12 +12,17 @@ function getMsalClient() {
   });
 }
 
+function getRoleFromEmail(email: string): string {
+  const prefix = email.split("@")[0];
+  return prefix.toUpperCase();
+}
+
 async function generateEmbedToken(
   accessToken: string,
   workspaceId: string,
   reportId: string,
   datasetId: string | null,
-  role: string | null
+  role: string
 ) {
   const url = `https://api.powerbi.com/v1.0/myorg/groups/${workspaceId}/reports/${reportId}/GenerateToken`;
   const headers = {
@@ -40,7 +46,7 @@ async function generateEmbedToken(
         identities: [
           {
             username: "QuantaViewer",
-            roles: [role || "GFGAM"],
+            roles: [role],
             datasets: [datasetId],
           },
         ],
@@ -66,10 +72,16 @@ async function generateEmbedToken(
 
 export async function GET(request: Request) {
   try {
+    const session = await getServerSession();
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const userRole = getRoleFromEmail(session.user.email);
+
     const { searchParams } = new URL(request.url);
     const reportId = searchParams.get("reportId");
     const workspaceId = searchParams.get("workspaceId") || process.env.POWERBI_WORKSPACE_ID;
-    const role = searchParams.get("role");
 
     if (!reportId) {
       return NextResponse.json({ error: "reportId is required" }, { status: 400 });
@@ -104,7 +116,7 @@ export async function GET(request: Request) {
       workspaceId!,
       reportId,
       report.datasetId,
-      role
+      userRole
     );
 
     if (embedResult.error) {

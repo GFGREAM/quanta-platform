@@ -14,7 +14,7 @@ export default function MetaPositioningPage() {
         Hotel META Positioning
       </h1>
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden" style={{ height: "700px" }}>
-        <PowerBIEmbed reportId="36ef53bd-e4cb-4b2c-a6f9-8240f03206f8" />
+        <PowerBIEmbed reportId={process.env.NEXT_PUBLIC_POWERBI_META_REPORT_ID || ""} />
       </div>
     </div>
   );

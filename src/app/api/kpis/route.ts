@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ConfidentialClientApplication } from "@azure/msal-node";
 
-const DATASET_ID = "9dfb72f1-7281-47c6-aa3d-5bcecdf9fa63";
+const DATASET_ID = process.env.POWERBI_DATASET_ID || "";
 
 const REVENUE_USD = "SUM('AAG'[Rooms Revenue]) + SUM('AAG'[Other Revenue])";
 const EXPENSES_USD = "SUM('AAG'[Departmental Expenses]) + SUM('AAG'[Undistributed Expenses])";

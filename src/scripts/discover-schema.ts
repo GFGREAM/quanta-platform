@@ -1,6 +1,6 @@
 import { ConfidentialClientApplication } from "@azure/msal-node";
 
-const DATASET_ID = "9dfb72f1-7281-47c6-aa3d-5bcecdf9fa63";
+const DATASET_ID = process.env.POWERBI_DATASET_ID || "";
 
 async function run() {
   const cca = new ConfidentialClientApplication({

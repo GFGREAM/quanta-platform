@@ -376,8 +376,8 @@ export default function DashboardHome() {
       </div>
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <PowerBIEmbed
-          workspaceId="3eabf576-cb9c-4f2e-970d-b29d851d31b3"
-          reportId="f05be719-0c0a-43a8-8498-c42d2fa6b8ea"
+          workspaceId={process.env.NEXT_PUBLIC_POWERBI_WORKSPACE_ID || ""}
+          reportId={process.env.NEXT_PUBLIC_POWERBI_REPORT_ID || ""}
           filters={filters}
         />
       </div>
