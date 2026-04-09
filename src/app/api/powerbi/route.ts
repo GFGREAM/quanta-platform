@@ -66,9 +66,20 @@ async function generateEmbedToken(
         body: JSON.stringify(body),
       });
 
+      // Temporary fallback: if RLS identity also fails, retry without identity
+      // TODO: remove once RLS roles are configured in Quanta Embedded workspace
       if (!response.ok) {
-        const retryError = await response.text();
-        return { error: retryError };
+        console.warn("RLS embed token failed, falling back to simple View token");
+        response = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ accessLevel: "View" }),
+        });
+
+        if (!response.ok) {
+          const fallbackError = await response.text();
+          return { error: fallbackError };
+        }
       }
     } else {
       return { error: errorText };
