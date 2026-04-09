@@ -3,6 +3,7 @@ import { Search, ChevronDown, LogOut, Menu } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
 
 const searchableDashboards = [
   { label: 'RevPAR', href: '/dashboard/financials/revpar' },
@@ -17,12 +18,27 @@ const searchableDashboards = [
   { label: 'Favoritos', href: '/dashboard/favorites' },
 ];
 
+function getInitials(name: string | null | undefined): string {
+  if (!name) return '??';
+  return name
+    .split(' ')
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
+  const { data: session } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+
+  const userName = session?.user?.name || 'Usuario';
+  const userEmail = session?.user?.email || '';
+  const initials = getInitials(session?.user?.name);
 
   const filteredDashboards = searchQuery.trim()
     ? searchableDashboards.filter(d => d.label.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -61,16 +77,16 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
       </div>
       <div className="relative">
         <button onClick={() => setMenuOpen(!menuOpen)} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[#F3F4F6] transition-colors">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium" style={{ backgroundColor: 'var(--accent)' }}>JL</div>
-          <span className="text-sm font-medium hidden md:inline" style={{ color: 'var(--primary)' }}>Julio López</span>
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium" style={{ backgroundColor: 'var(--accent)' }}>{initials}</div>
+          <span className="text-sm font-medium hidden md:inline" style={{ color: 'var(--primary)' }}>{userName}</span>
           <ChevronDown size={16} className="text-[var(--text-secondary)] hidden md:inline" />
         </button>
         {menuOpen && (
           <div className="absolute right-0 top-12 w-48 bg-white rounded-lg shadow-lg border py-1" style={{ borderColor: 'var(--border)' }}>
-            <p className="px-4 py-2 text-sm font-medium" style={{ color: 'var(--primary)' }}>Julio López</p>
-            <p className="px-4 pb-2 text-xs" style={{ color: 'var(--text-secondary)' }}>julio@gfgam.com</p>
+            <p className="px-4 py-2 text-sm font-medium" style={{ color: 'var(--primary)' }}>{userName}</p>
+            <p className="px-4 pb-2 text-xs" style={{ color: 'var(--text-secondary)' }}>{userEmail}</p>
             <div className="border-t" style={{ borderColor: 'var(--border)' }} />
-            <button className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-[#F3F4F6] transition-colors"><LogOut size={16} />Cerrar sesión</button>
+            <button onClick={() => signOut({ callbackUrl: '/login' })} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-[#F3F4F6] transition-colors"><LogOut size={16} />Cerrar sesion</button>
           </div>
         )}
       </div>
