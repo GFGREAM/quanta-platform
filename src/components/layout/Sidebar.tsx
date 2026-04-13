@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, DollarSign, FileText, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Home, DollarSign, FileText, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, ChevronLeft, ChevronRight, X, Target } from 'lucide-react';
 
 interface MenuItem {
   label: string;
@@ -38,6 +38,9 @@ const menuItems: MenuEntry[] = [
   { category: 'GUEST EXPERIENCE', items: [
     { label: 'Hotel META Positioning', icon: Hotel, href: '/dashboard/guest/meta-positioning' },
     { label: 'Guest Satisfaction', icon: Star, href: '/dashboard/guest/satisfaction' },
+  ]},
+  { category: 'STRATEGIC & PLANNING', items: [
+    { label: 'Action Plan Tracker', icon: Target, href: '/dashboard/strategic/action-plan-tracker' },
   ]},
   { category: 'MARKET TRENDS', items: [
     { label: 'Airport Passengers', icon: BarChart3, href: '/dashboard/market/airport-passengers' },
