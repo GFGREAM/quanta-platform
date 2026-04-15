@@ -25,21 +25,41 @@ function getRoleFromEmail(email: string): string {
   return VALID_ROLES.has(prefix) ? prefix : DEFAULT_ROLE;
 }
 
-async function datasetHasRls(
+async function getDatasetRlsInfo(
   accessToken: string,
   workspaceId: string,
   datasetId: string
-): Promise<boolean> {
+): Promise<{ needsRls: boolean; roles: string[] }> {
   try {
-    const res = await fetch(
+    const dsRes = await fetch(
       `https://api.powerbi.com/v1.0/myorg/groups/${workspaceId}/datasets/${datasetId}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-    if (!res.ok) return false;
-    const ds = await res.json();
-    return ds.isEffectiveIdentityRequired === true;
+    if (!dsRes.ok) return { needsRls: false, roles: [] };
+    const ds = await dsRes.json();
+
+    if (!ds.isEffectiveIdentityRequired) return { needsRls: false, roles: [] };
+
+    // Fetch actual RLS roles configured in the dataset
+    const rolesDirectRes = await fetch(
+      `https://api.powerbi.com/v1.0/myorg/groups/${workspaceId}/datasets/${datasetId}/roles`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+
+    const roles: string[] = [];
+    if (rolesDirectRes.ok) {
+      const rolesData = await rolesDirectRes.json();
+      if (rolesData.value) {
+        rolesData.value.forEach((r: any) => {
+          if (r.name) roles.push(r.name);
+        });
+      }
+    }
+
+    console.info(`[PowerBI] Dataset RLS info | dataset=${datasetId} | needsRls=true | roles=[${roles.join(', ')}]`);
+    return { needsRls: true, roles };
   } catch {
-    return false;
+    return { needsRls: false, roles: [] };
   }
 }
 
@@ -56,23 +76,34 @@ async function generateEmbedToken(
     "Content-Type": "application/json",
   };
 
-  // Check if dataset requires RLS before choosing token strategy
-  const needsRls = datasetId
-    ? await datasetHasRls(accessToken, workspaceId, datasetId)
-    : false;
+  // Check if dataset requires RLS and discover available roles
+  const rlsInfo = datasetId
+    ? await getDatasetRlsInfo(accessToken, workspaceId, datasetId)
+    : { needsRls: false, roles: [] as string[] };
 
-  console.info(`[PowerBI] Token strategy | workspace=${workspaceId} | report=${reportId} | dataset=${datasetId} | needsRls=${needsRls} | role=${role}`);
+  const { needsRls } = rlsInfo;
+
+  // Pick the best role: prefer the user's role if it exists in the dataset, otherwise use the first available
+  let effectiveRole = role;
+  if (needsRls && rlsInfo.roles.length > 0) {
+    const userRoleMatch = rlsInfo.roles.find(
+      (r) => r.toUpperCase() === role.toUpperCase()
+    );
+    effectiveRole = userRoleMatch || rlsInfo.roles[0];
+  }
+
+  console.info(`[PowerBI] Token strategy | workspace=${workspaceId} | report=${reportId} | dataset=${datasetId} | needsRls=${needsRls} | requestedRole=${role} | effectiveRole=${effectiveRole} | availableRoles=[${rlsInfo.roles.join(', ')}]`);
 
   let body: any;
 
   if (needsRls && datasetId) {
-    // Dataset requires effective identity — send RLS identity directly
+    // Dataset requires effective identity — send RLS identity with the correct role
     body = {
       accessLevel: "View",
       identities: [
         {
           username: "QuantaViewer",
-          roles: [role],
+          roles: [effectiveRole],
           datasets: [datasetId],
         },
       ],
@@ -90,7 +121,7 @@ async function generateEmbedToken(
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error(`[PowerBI] Token generation FAILED | status=${response.status} | needsRls=${needsRls} | workspace=${workspaceId} | report=${reportId} | dataset=${datasetId} | role=${role} | body=${errorText}`);
+    console.error(`[PowerBI] Token generation FAILED | status=${response.status} | needsRls=${needsRls} | workspace=${workspaceId} | report=${reportId} | dataset=${datasetId} | effectiveRole=${effectiveRole} | body=${errorText}`);
 
     // If we sent RLS identity and it failed, retry without identity as fallback
     if (needsRls) {
@@ -111,7 +142,9 @@ async function generateEmbedToken(
     }
   }
 
-  return await response.json();
+  const tokenData = await response.json();
+  console.info(`[PowerBI] Token generated OK | workspace=${workspaceId} | report=${reportId} | needsRls=${needsRls} | effectiveRole=${effectiveRole} | hasToken=${!!tokenData.token} | expiry=${tokenData.expiration || 'n/a'}`);
+  return tokenData;
 }
 
 export async function GET(request: Request) {
