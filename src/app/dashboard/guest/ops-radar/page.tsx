@@ -1,6 +1,8 @@
 'use client';
 
-import { useMemo, useState, MouseEvent } from 'react';
+import { useMemo, useRef, useState, MouseEvent } from 'react';
+import { toPng } from 'html-to-image';
+import { Download } from 'lucide-react';
 import KpiCard from '@/components/ui/KpiCard';
 
 type Prop = {
@@ -70,6 +72,34 @@ export default function OpsRadarPage() {
   const [active, setActive] = useState<Set<number>>(new Set([0, 1, 2, 3, 4, 5, 6]));
   const [crit, setCrit] = useState<number | null>(null);
   const [tt, setTT] = useState<TT>(null);
+  const radarRef = useRef<HTMLDivElement>(null);
+  const heatmapRef = useRef<HTMLDivElement>(null);
+
+  const exportPng = async (node: HTMLDivElement | null, name: string) => {
+    if (!node) return;
+    const scrollers = Array.from(
+      node.querySelectorAll<HTMLElement>('[class*="overflow-x-auto"],[class*="overflow-auto"]'),
+    );
+    const saved = scrollers.map((el) => el.style.overflow);
+    scrollers.forEach((el) => { el.style.overflow = 'visible'; });
+    const width = Math.max(node.scrollWidth, node.clientWidth);
+    try {
+      const dataUrl = await toPng(node, {
+        pixelRatio: 2,
+        backgroundColor: '#ffffff',
+        cacheBust: true,
+        width,
+        style: { width: `${width}px` },
+        filter: (n) => !(n instanceof HTMLElement && n.hasAttribute('data-export-hide')),
+      });
+      const link = document.createElement('a');
+      link.download = `${name}-${new Date().toISOString().slice(0, 10)}.png`;
+      link.href = dataUrl;
+      link.click();
+    } finally {
+      scrollers.forEach((el, i) => { el.style.overflow = saved[i]; });
+    }
+  };
 
   const avgs = useMemo(() => PROPS.map(p => p.scores.reduce((s, v) => s + v, 0) / p.scores.length), []);
   const myProp = PROPS.find(p => p.mine)!;
@@ -107,10 +137,11 @@ export default function OpsRadarPage() {
 
   return (
     <div className="p-7" style={{ background: 'var(--background)' }}>
+      <div ref={radarRef} style={{ background: 'var(--background)' }}>
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="text-[1.625rem] font-bold tracking-tight mb-1" style={{ color: DEEP }}>
-            Ops Radar — Peninsula Papagayo
+            Competitive Set Radar — Guanacaste, Costa Rica
           </h1>
           <p className="text-[0.9375rem]" style={{ color: TEXT_SECONDARY }}>
             Multidimensional operational assessment · Field visit · Scale 1–5
@@ -126,16 +157,25 @@ export default function OpsRadarPage() {
       </div>
 
       {/* Radar + Legend */}
-      <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: '1fr 280px' }}>
+      <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: '1fr 280px', background: 'var(--background)' }}>
         <div className="rounded-xl border p-6" style={{ background: 'var(--card)', borderColor: BORDER_LIGHT, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
           <div className="flex items-start justify-between gap-3 mb-4">
             <div>
               <div className="text-base font-semibold" style={{ color: TEXT_PRIMARY }}>Operational Radar</div>
               <div className="text-[0.8125rem]" style={{ color: TEXT_MUTED }}>Comparison by dimension · Select properties in the legend</div>
             </div>
+            <button
+              onClick={() => exportPng(radarRef.current, 'ops-radar')}
+              data-export-hide
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors hover:bg-[var(--muted)] cursor-pointer"
+              style={{ borderColor: BORDER_LIGHT, color: TEXT_SECONDARY }}
+              title="Export chart as PNG"
+            >
+              <Download size={13} /> PNG
+            </button>
           </div>
 
-          <svg viewBox="0 0 500 420" className="w-full h-auto block">
+          <svg viewBox="-60 0 620 420" className="w-full h-auto block">
             {[1, 2, 3, 4, 5].map(ring => {
               const r = (ring / 5) * RAD;
               return (
@@ -179,12 +219,14 @@ export default function OpsRadarPage() {
                       strokeWidth="4" strokeLinejoin="round" opacity="0.25" style={{ filter: 'blur(3px)' }} />
                   )}
                   <polygon points={pStr} fill={prop.color}
-                    fillOpacity={isMine ? 0.15 : 0.05} stroke={prop.color}
-                    strokeWidth={isMine ? 3 : 1.5} strokeDasharray={isMine ? undefined : '6 3'}
-                    strokeLinejoin="round" opacity={isMine ? 1 : 0.7} />
+                    fillOpacity={isMine ? 0.04 : 0.05} stroke={prop.color}
+                    strokeWidth={isMine ? 2.5 : 1.5} strokeDasharray={isMine ? undefined : '6 3'}
+                    strokeLinejoin="round" opacity={isMine ? 0.65 : 0.7} />
                   {verts.map((v, di) => (
                     <circle key={di} cx={v.x.toFixed(1)} cy={v.y.toFixed(1)} r={isMine ? 6 : 4}
-                      fill={isMine ? prop.color : '#fff'} stroke={prop.color} strokeWidth={isMine ? 2 : 1.5}
+                      fill={prop.color} fillOpacity={isMine ? 0.04 : 0.05}
+                      stroke={prop.color} strokeWidth={isMine ? 2 : 1.5}
+                      opacity={isMine ? 0.95 : 1}
                       style={{ cursor: 'pointer' }}
                       onMouseEnter={e => showTT(e, prop, di)}
                       onMouseMove={moveTT}
@@ -248,19 +290,30 @@ export default function OpsRadarPage() {
           </div>
           <div className="mt-4 pt-[14px]" style={{ borderTop: `1px solid ${BORDER_LIGHT}` }}>
             <div className="text-[0.6875rem] font-semibold uppercase tracking-wider mb-3" style={{ color: TEXT_MUTED }}>Visit Date</div>
-            <div className="text-sm font-semibold" style={{ color: TEXT_PRIMARY }}>March 2026</div>
+            <div className="text-sm font-semibold" style={{ color: TEXT_PRIMARY }}>April 2026</div>
             <div className="text-xs mt-[2px]" style={{ color: TEXT_MUTED }}>Visited by: Ray Velasquez</div>
           </div>
         </div>
       </div>
 
+      </div>
+
       {/* Heatmap */}
-      <div className="rounded-xl border p-6" style={{ background: 'var(--card)', borderColor: BORDER_LIGHT, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+      <div ref={heatmapRef} className="rounded-xl border p-6" style={{ background: 'var(--card)', borderColor: BORDER_LIGHT, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
         <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
           <div>
             <div className="text-base font-semibold" style={{ color: TEXT_PRIMARY }}>Operational Dimension Heatmap</div>
             <div className="text-[0.8125rem]" style={{ color: TEXT_MUTED }}>Score 1–5 · dark blue = benchmark · red = below standard</div>
           </div>
+          <button
+            onClick={() => exportPng(heatmapRef.current, 'ops-heatmap')}
+            data-export-hide
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors hover:bg-[var(--muted)] cursor-pointer"
+            style={{ borderColor: BORDER_LIGHT, color: TEXT_SECONDARY }}
+            title="Export heatmap as PNG"
+          >
+            <Download size={13} /> PNG
+          </button>
           <div className="flex gap-[6px] flex-wrap">
             {[null, 0, 1, 2, 3, 4].map((idx, i) => {
               const label = idx === null ? 'All' : DIMS[idx];
