@@ -22,9 +22,9 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
   const embedRef = useRef<HTMLDivElement>(null);
   const powerbiRef = useRef<pbi.service.Service | null>(null);
   const reportRef = useRef<pbi.Report | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [aspectRatio, setAspectRatio] = useState<number>(DEFAULT_ASPECT_RATIO);
   const attemptsRef = useRef(0);
   const maxAttempts = 3;
 
@@ -95,8 +95,8 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
           const activePage = pages.find((p: any) => p.isActive);
           if (activePage && (activePage as any).defaultSize) {
             const { width, height } = (activePage as any).defaultSize;
-            if (width && height) {
-              setAspectRatio(width / height);
+            if (width && height && containerRef.current) {
+              containerRef.current.style.aspectRatio = String(width / height);
             }
           }
         } catch {}
@@ -137,7 +137,7 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
   }, [filters, loading]);
 
   return (
-    <div className="w-full relative" style={{ aspectRatio: String(aspectRatio) }}>
+    <div ref={containerRef} className="w-full relative" style={{ aspectRatio: String(DEFAULT_ASPECT_RATIO) }}>
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#FAFAFA]">
           <div className="flex flex-col items-center gap-3">
