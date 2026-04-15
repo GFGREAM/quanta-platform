@@ -101,9 +101,13 @@ export default function ActionPlanTrackerPage() {
     });
   }, [filtered, mode]);
 
-  // KPI Strip stats — main projects only (subProjectId === 1)
+  // KPI Strip stats — reflects active filters. A project is "in scope" if ANY of its rows
+  // (main subProjectId === 1 or any sub-action) pass the filters. KPIs are then computed
+  // on the main rows of those projects, so sub-actions never double-count investment/return.
   const stats = useMemo(() => {
-    const macro = actions.filter((a) => a.subProjectId === 1);
+    const projectIds = new Set<number>();
+    filtered.forEach((a) => { if (a.projectId != null) projectIds.add(a.projectId); });
+    const macro = actions.filter((a) => a.subProjectId === 1 && a.projectId != null && projectIds.has(a.projectId));
     const totalInv = macro.reduce((sum, a) => sum + a.investmentUsd, 0);
     const totalRet = macro.reduce((sum, a) => sum + a.expectedReturnUsd, 0);
     const roiGlobal = totalInv > 0 ? Math.round(((totalRet - totalInv) / totalInv) * 100) : 0;
@@ -111,7 +115,7 @@ export default function ActionPlanTrackerPage() {
     const completed = macro.filter((a) => a.status === 'Completed').length;
     const pctComp = macro.length ? Math.round((completed / macro.length) * 100) : 0;
     return { count: macro.length, totalInv, totalRet, roiGlobal, inProgress, completed, pctComp };
-  }, [actions]);
+  }, [actions, filtered]);
 
   // Unique options for selects
   const hotelOptions = useMemo(
