@@ -105,6 +105,14 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
         } catch {}
       });
 
+      // Fallback: force loading off if "loaded" event never fires
+      setTimeout(() => {
+        setLoading((prev) => {
+          if (prev) console.warn("[PowerBI] Fallback: forcing loading=false after 5s timeout");
+          return false;
+        });
+      }, 5000);
+
       report.on("error", (event: any) => {
         const errorMsg = event?.detail?.message || "";
         console.error("[PowerBI] Embed error event:", JSON.stringify(event?.detail));
