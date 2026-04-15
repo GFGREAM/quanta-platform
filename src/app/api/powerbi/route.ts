@@ -20,6 +20,10 @@ const VALID_ROLES = new Set([
 
 const DEFAULT_ROLE = "GFGAM";
 
+const WORKSPACE_ROLE_MAP: Record<string, string> = {
+  "8926167c-fb2b-44ff-8aa2-bcff7fcf9339": "WACCR", // Guest Satisfaction
+};
+
 function getRoleFromEmail(email: string): string {
   const prefix = email.split("@")[0].toUpperCase();
   return VALID_ROLES.has(prefix) ? prefix : DEFAULT_ROLE;
@@ -154,11 +158,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userRole = getRoleFromEmail(session.user.email);
-
     const { searchParams } = new URL(request.url);
     const reportId = searchParams.get("reportId");
     const workspaceId = searchParams.get("workspaceId") || process.env.POWERBI_WORKSPACE_ID;
+
+    const userRole = WORKSPACE_ROLE_MAP[workspaceId!] || getRoleFromEmail(session.user.email);
 
     if (!reportId) {
       return NextResponse.json({ error: "reportId is required" }, { status: 400 });
