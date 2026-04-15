@@ -10,7 +10,6 @@ import {
   MONTHS, AREAS, STATUS_LIST, PRIORITIES,
   SEED_ACTIONS, fmtMoney, getRoi, fmtDate,
 } from './data';
-import KpiCard from '@/components/ui/KpiCard';
 
 type View = 'gantt' | 'table';
 type Mode = 'macro' | 'detail';
