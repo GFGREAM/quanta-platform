@@ -134,16 +134,36 @@ export async function GET(request: Request) {
 
     const report = await reportResponse.json();
 
+    let datasetId: string | null = report.datasetId || null;
+
+    if (!datasetId) {
+      const datasetsRes = await fetch(
+        `https://api.powerbi.com/v1.0/myorg/groups/${workspaceId}/datasets`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (datasetsRes.ok) {
+        const { value: datasets } = await datasetsRes.json();
+        if (datasets?.length === 1) {
+          datasetId = datasets[0].id;
+        } else if (datasets?.length > 1) {
+          const match = datasets.find((ds: any) => ds.name === report.name);
+          if (match) datasetId = match.id;
+          else datasetId = datasets[0].id;
+        }
+        console.warn(`[PowerBI] report.datasetId was null, resolved from datasets API: ${datasetId}`);
+      }
+    }
+
     const embedResult = await generateEmbedToken(
       accessToken,
       workspaceId!,
       reportId,
-      report.datasetId,
+      datasetId,
       userRole
     );
 
     if (embedResult.error) {
-      console.error(`[PowerBI] Embed token FAILED | workspace=${workspaceId} | report=${reportId} | dataset=${report.datasetId} | role=${userRole} | error=${embedResult.error}`);
+      console.error(`[PowerBI] Embed token FAILED | workspace=${workspaceId} | report=${reportId} | dataset=${datasetId} | role=${userRole} | error=${embedResult.error}`);
       return NextResponse.json(
         { error: `Failed to generate embed token: ${embedResult.error}` },
         { status: 500 }
