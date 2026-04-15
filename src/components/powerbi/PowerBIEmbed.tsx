@@ -24,6 +24,7 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
   const reportRef = useRef<pbi.Report | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [permanentError, setPermanentError] = useState(false);
   const [loading, setLoading] = useState(true);
   const attemptsRef = useRef(0);
   const maxAttempts = 3;
@@ -102,21 +103,25 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
         } catch {}
       });
 
-      report.on("error", () => {
+      report.on("error", (event: any) => {
+        console.error("[PowerBI] Embed error event:", JSON.stringify(event?.detail));
         attemptsRef.current++;
         if (attemptsRef.current < maxAttempts) {
           setTimeout(() => embedReport(), 3000);
         } else {
           setError("Error loading dashboard");
+          setPermanentError(true);
           setLoading(false);
         }
       });
     } catch (err) {
+      console.error("[PowerBI] embedReport catch:", err);
       attemptsRef.current++;
       if (attemptsRef.current < maxAttempts) {
         setTimeout(() => embedReport(), 3000);
       } else {
         setError("Failed to connect to Power BI");
+        setPermanentError(true);
         setLoading(false);
       }
     }
@@ -150,15 +155,18 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
         <div className="absolute inset-0 flex items-center justify-center bg-[#FAFAFA]">
           <div className="flex flex-col items-center gap-3 text-center">
             <p className="text-sm text-red-500">{error}</p>
-            <button
-              onClick={() => {
-                attemptsRef.current = 0;
-                embedReport();
-              }}
-              className="px-4 py-2 text-sm bg-[#00AFAD] text-white rounded-md hover:bg-[#009490] transition-colors"
-            >
-              Retry
-            </button>
+            {!permanentError && (
+              <button
+                onClick={() => {
+                  attemptsRef.current = 0;
+                  setPermanentError(false);
+                  embedReport();
+                }}
+                className="px-4 py-2 text-sm bg-[#00AFAD] text-white rounded-md hover:bg-[#009490] transition-colors"
+              >
+                Retry
+              </button>
+            )}
           </div>
         </div>
       )}
