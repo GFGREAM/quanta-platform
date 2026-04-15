@@ -106,13 +106,19 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
       });
 
       report.on("error", (event: any) => {
+        const errorMsg = event?.detail?.message || "";
         console.error("[PowerBI] Embed error event:", JSON.stringify(event?.detail));
+
+        // Ignore non-fatal warnings
+        if (errorMsg === "mobileLayoutError") return;
+
+        // Only retry on actual errors
         attemptsRef.current++;
         if (attemptsRef.current < maxAttempts) {
           setTimeout(() => embedReport(), 3000);
         } else {
-          setError("Error loading dashboard");
           setPermanentError(true);
+          setError("Error loading dashboard");
           setLoading(false);
         }
       });
