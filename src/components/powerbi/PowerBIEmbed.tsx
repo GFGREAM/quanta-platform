@@ -30,6 +30,8 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
   const maxAttempts = 3;
 
   const embedReport = useCallback(async () => {
+    if (!reportId) return;
+
     try {
       setError(null);
       setLoading(true);
@@ -128,9 +130,10 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
   }, [reportId, workspaceId]);
 
   useEffect(() => {
+    if (!reportId) return;
     attemptsRef.current = 0;
     embedReport();
-  }, [embedReport]);
+  }, [embedReport, reportId]);
 
   useEffect(() => {
     if (!reportRef.current || loading) return;
