@@ -27,6 +27,7 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
   const [permanentError, setPermanentError] = useState(false);
   const [loading, setLoading] = useState(true);
   const attemptsRef = useRef(0);
+  const loadedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const maxAttempts = 3;
 
   const embedReport = useCallback(async () => {
@@ -77,22 +78,38 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
             actionBar: { visible: false },
           },
           background: 1,
-          layoutType: 3,
         },
       };
 
       const report = powerbi.embed(embedRef.current, config) as pbi.Report;
       reportRef.current = report;
 
+      const clearFallback = () => {
+        if (loadedTimerRef.current) {
+          clearTimeout(loadedTimerRef.current);
+          loadedTimerRef.current = null;
+        }
+      };
+
+      const revealReport = () => {
+        clearFallback();
+        setLoading(false);
+      };
+
       report.on("loaded", () => {
         attemptsRef.current = 0;
-        setLoading(false);
+        // Start fallback timer — if "rendered" never fires, reveal after 4s
+        loadedTimerRef.current = setTimeout(() => {
+          console.warn("[PowerBI] Fallback: rendered event not received 4s after loaded, forcing reveal");
+          revealReport();
+        }, 4000);
         if (filters && filters.length > 0) {
           report.setFilters(filters as any[]).catch(() => {});
         }
       });
 
       report.on("rendered", async () => {
+        revealReport();
         try {
           const pages = await report.getPages();
           const activePage = pages.find((p: any) => p.isActive);
@@ -105,13 +122,9 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
         } catch {}
       });
 
-      // Fallback: force loading off if "loaded" event never fires
-      setTimeout(() => {
-        setLoading((prev) => {
-          if (prev) console.warn("[PowerBI] Fallback: forcing loading=false after 5s timeout");
-          return false;
-        });
-      }, 5000);
+      report.on("pageChanged", () => {
+        revealReport();
+      });
 
       report.on("error", (event: any) => {
         const errorMsg = event?.detail?.message || "";
