@@ -49,7 +49,8 @@ async function generateEmbedToken(
   if (!response.ok) {
     const errorText = await response.text();
     console.error(`[PowerBI] Token attempt 1 (simple View) FAILED | status=${response.status} | workspace=${workspaceId} | report=${reportId} | body=${errorText}`);
-    if (errorText.includes("effective identity") && datasetId) {
+    console.error(`[PowerBI] Gate check values | datasetId=${datasetId} | errorText(200)=${errorText.slice(0, 200)}`);
+    if (errorText.toLowerCase().includes("effective identity") && datasetId) {
       body = {
         accessLevel: "View",
         identities: [
