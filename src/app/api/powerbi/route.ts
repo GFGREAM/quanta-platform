@@ -48,6 +48,7 @@ async function generateEmbedToken(
 
   if (!response.ok) {
     const errorText = await response.text();
+    console.error(`[PowerBI] Token attempt 1 (simple View) FAILED | status=${response.status} | workspace=${workspaceId} | report=${reportId} | body=${errorText}`);
     if (errorText.includes("effective identity") && datasetId) {
       body = {
         accessLevel: "View",
@@ -69,7 +70,8 @@ async function generateEmbedToken(
       // Temporary fallback: if RLS identity also fails, retry without identity
       // TODO: remove once RLS roles are configured in Quanta Embedded workspace
       if (!response.ok) {
-        console.warn("RLS embed token failed, falling back to simple View token");
+        const rlsError = await response.text();
+        console.error(`[PowerBI] Token attempt 2 (RLS identity) FAILED | status=${response.status} | role=${role} | dataset=${datasetId} | body=${rlsError}`);
         response = await fetch(url, {
           method: "POST",
           headers,
@@ -78,6 +80,7 @@ async function generateEmbedToken(
 
         if (!response.ok) {
           const fallbackError = await response.text();
+          console.error(`[PowerBI] Token attempt 3 (final fallback) FAILED | status=${response.status} | body=${fallbackError}`);
           return { error: fallbackError };
         }
       }
@@ -125,6 +128,7 @@ export async function GET(request: Request) {
 
     if (!reportResponse.ok) {
       const error = await reportResponse.text();
+      console.error(`[PowerBI] Report fetch FAILED | status=${reportResponse.status} | workspace=${workspaceId} | report=${reportId} | body=${error}`);
       return NextResponse.json({ error: `Failed to get report: ${error}` }, { status: 500 });
     }
 
@@ -139,6 +143,7 @@ export async function GET(request: Request) {
     );
 
     if (embedResult.error) {
+      console.error(`[PowerBI] Embed token FAILED | workspace=${workspaceId} | report=${reportId} | dataset=${report.datasetId} | role=${userRole} | error=${embedResult.error}`);
       return NextResponse.json(
         { error: `Failed to generate embed token: ${embedResult.error}` },
         { status: 500 }
