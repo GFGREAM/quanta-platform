@@ -15,8 +15,8 @@ export default function GuestSatisfactionPage() {
       </h1>
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden" style={{ height: "700px" }}>
         <PowerBIEmbed
-          reportId="b33408a6-356c-47ea-a1eb-b01cdd2e77d7"
-          workspaceId="8926167c-fb2b-44ff-8aa2-bcff7fcf9339"
+          reportId={process.env.NEXT_PUBLIC_POWERBI_SATISFACTION_REPORT_ID || ""}
+          workspaceId={process.env.NEXT_PUBLIC_POWERBI_SATISFACTION_WORKSPACE_ID || ""}
         />
       </div>
     </div>

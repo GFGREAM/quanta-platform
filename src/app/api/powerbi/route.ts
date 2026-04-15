@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { ConfidentialClientApplication } from "@azure/msal-node";
 
 function getMsalClient() {
@@ -11,12 +13,24 @@ function getMsalClient() {
   });
 }
 
+const VALID_ROLES = new Set([
+  "BBG", "BBGZ", "BURSZTYN", "GFGAM", "HALABE", "HDMLC", "HELMUT",
+  "HYATT HOUSE SANTA FE", "JAC", "MARRIOT", "ST REGIS", "WALDORF ASTORIA", "ZOETRY",
+]);
+
+const DEFAULT_ROLE = "GFGAM";
+
+function getRoleFromEmail(email: string): string {
+  const prefix = email.split("@")[0].toUpperCase();
+  return VALID_ROLES.has(prefix) ? prefix : DEFAULT_ROLE;
+}
+
 async function generateEmbedToken(
   accessToken: string,
   workspaceId: string,
   reportId: string,
   datasetId: string | null,
-  role: string | null
+  role: string
 ) {
   const url = `https://api.powerbi.com/v1.0/myorg/groups/${workspaceId}/reports/${reportId}/GenerateToken`;
   const headers = {
@@ -40,7 +54,7 @@ async function generateEmbedToken(
         identities: [
           {
             username: "QuantaViewer",
-            roles: [role || "GFGAM"],
+            roles: [role],
             datasets: [datasetId],
           },
         ],
@@ -52,9 +66,20 @@ async function generateEmbedToken(
         body: JSON.stringify(body),
       });
 
+      // Temporary fallback: if RLS identity also fails, retry without identity
+      // TODO: remove once RLS roles are configured in Quanta Embedded workspace
       if (!response.ok) {
-        const retryError = await response.text();
-        return { error: retryError };
+        console.warn("RLS embed token failed, falling back to simple View token");
+        response = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ accessLevel: "View" }),
+        });
+
+        if (!response.ok) {
+          const fallbackError = await response.text();
+          return { error: fallbackError };
+        }
       }
     } else {
       return { error: errorText };
@@ -66,10 +91,16 @@ async function generateEmbedToken(
 
 export async function GET(request: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const userRole = getRoleFromEmail(session.user.email);
+
     const { searchParams } = new URL(request.url);
     const reportId = searchParams.get("reportId");
     const workspaceId = searchParams.get("workspaceId") || process.env.POWERBI_WORKSPACE_ID;
-    const role = searchParams.get("role");
 
     if (!reportId) {
       return NextResponse.json({ error: "reportId is required" }, { status: 400 });
@@ -104,7 +135,7 @@ export async function GET(request: Request) {
       workspaceId!,
       reportId,
       report.datasetId,
-      role
+      userRole
     );
 
     if (embedResult.error) {
