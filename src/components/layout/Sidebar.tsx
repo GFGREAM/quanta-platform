@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, DollarSign, FileText, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, ChevronLeft, ChevronRight, X, Target, Radar } from 'lucide-react';
+import { Home, DollarSign, FileText, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, ChevronLeft, ChevronRight, X, Target, Radar, PlaneTakeoff } from 'lucide-react';
 
 interface MenuItem {
   label: string;
@@ -44,7 +44,7 @@ const menuItems: MenuEntry[] = [
     { label: 'Forecast', icon: Sparkles, href: '/dashboard/strategic/forecast' },
   ]},
   { category: 'MARKET TRENDS', items: [
-    { label: 'Airport Passengers', icon: BarChart3, href: '/dashboard/market/airport-passengers' },
+    { label: 'Airport Passengers', icon: PlaneTakeoff, href: '/dashboard/market/airport-passengers' },
     { label: 'Market Demand', icon: BarChart3, href: '/dashboard/market/market-demand' },
   ]},
 ];
