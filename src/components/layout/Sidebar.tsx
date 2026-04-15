@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, DollarSign, FileText, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, ChevronLeft, ChevronRight, X, Target } from 'lucide-react';
+import { Home, DollarSign, FileText, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, ChevronLeft, ChevronRight, X, Target, Radar } from 'lucide-react';
 
 interface MenuItem {
   label: string;
@@ -33,14 +33,15 @@ const menuItems: MenuEntry[] = [
   ]},
   { category: 'PROFIT & LOSS', items: [
     { label: 'P&L Statement', icon: FileText, href: '/dashboard/pnl/statement' },
-    { label: 'Forecast', icon: Sparkles, href: '/dashboard/pnl/forecast' },
   ]},
   { category: 'GUEST EXPERIENCE', items: [
     { label: 'Hotel META Positioning', icon: Hotel, href: '/dashboard/guest/meta-positioning' },
     { label: 'Guest Satisfaction', icon: Star, href: '/dashboard/guest/satisfaction' },
+    { label: 'Ops Radar', icon: Radar, href: '/dashboard/guest/ops-radar' },
   ]},
   { category: 'STRATEGIC & PLANNING', items: [
     { label: 'Action Plan Tracker', icon: Target, href: '/dashboard/strategic/action-plan-tracker' },
+    { label: 'Forecast', icon: Sparkles, href: '/dashboard/strategic/forecast' },
   ]},
   { category: 'MARKET TRENDS', items: [
     { label: 'Airport Passengers', icon: BarChart3, href: '/dashboard/market/airport-passengers' },
