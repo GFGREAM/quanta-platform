@@ -37,7 +37,7 @@ const menuItems: MenuEntry[] = [
   { category: 'GUEST EXPERIENCE', items: [
     { label: 'Hotel META Positioning', icon: Hotel, href: '/dashboard/guest/meta-positioning' },
     { label: 'Guest Satisfaction', icon: Star, href: '/dashboard/guest/satisfaction' },
-    { label: 'Ops Radar', icon: Radar, href: '/dashboard/guest/ops-radar' },
+    { label: 'Competitive Set Radar', icon: Radar, href: '/dashboard/guest/ops-radar' },
   ]},
   { category: 'STRATEGIC & PLANNING', items: [
     { label: 'Action Plan Tracker', icon: Target, href: '/dashboard/strategic/action-plan-tracker' },

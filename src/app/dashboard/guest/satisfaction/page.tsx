@@ -13,7 +13,7 @@ export default function GuestSatisfactionPage() {
       <h1 className="text-2xl font-semibold text-[#172951] mb-4">
         Guest Satisfaction
       </h1>
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden" style={{ height: "700px" }}>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <PowerBIEmbed
           reportId="6895b69c-ccf2-484c-aea3-ee9f8cc266eb"
           workspaceId="8926167c-fb2b-44ff-8aa2-bcff7fcf9339"
