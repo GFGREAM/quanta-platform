@@ -7,8 +7,9 @@ import {
   Action,
   AREA_COLORS, STATUS_COLORS, PRIORITY_COLORS,
   MONTHS, AREAS, STATUS_LIST, PRIORITIES,
-  SEED_ACTIONS, fmtMoney, getRoi, monthIdx, fmtDate,
+  SEED_ACTIONS, fmtMoney, getRoi, fmtDate,
 } from './data';
+import KpiCard from '@/components/ui/KpiCard';
 
 type View = 'gantt' | 'table';
 type Mode = 'macro' | 'detail';
@@ -105,9 +106,16 @@ export default function ActionPlanTrackerPage() {
   // (main subProjectId === 1 or any sub-action) pass the filters. KPIs are then computed
   // on the main rows of those projects, so sub-actions never double-count investment/return.
   const stats = useMemo(() => {
-    const projectIds = new Set<number>();
-    filtered.forEach((a) => { if (a.projectId != null) projectIds.add(a.projectId); });
-    const macro = actions.filter((a) => a.subProjectId === 1 && a.projectId != null && projectIds.has(a.projectId));
+    const projectKeys = new Set<string>();
+    filtered.forEach((a) => {
+      if (a.projectId != null) projectKeys.add(`${a.hotelId ?? 'x'}::${a.projectId}`);
+    });
+    const macro = actions.filter(
+      (a) =>
+        a.subProjectId === 1 &&
+        a.projectId != null &&
+        projectKeys.has(`${a.hotelId ?? 'x'}::${a.projectId}`),
+    );
     const totalInv = macro.reduce((sum, a) => sum + a.investmentUsd, 0);
     const totalRet = macro.reduce((sum, a) => sum + a.expectedReturnUsd, 0);
     const roiGlobal = totalInv > 0 ? Math.round(((totalRet - totalInv) / totalInv) * 100) : 0;
@@ -117,18 +125,41 @@ export default function ActionPlanTrackerPage() {
     return { count: macro.length, totalInv, totalRet, roiGlobal, inProgress, completed, pctComp };
   }, [actions, filtered]);
 
-  // Unique options for selects
+  // Cascading options: each dropdown shows only values compatible with the OTHER active filters.
+  const optionsFor = (exclude: 'hotel' | 'project' | 'area' | 'status' | 'priority' | 'owner') =>
+    actions.filter((a) => {
+      if (exclude !== 'hotel' && filterHotel && a.hotelProperty !== filterHotel) return false;
+      if (exclude !== 'project' && filterProject && a.project !== filterProject) return false;
+      if (exclude !== 'area' && filterArea && a.area !== filterArea) return false;
+      if (exclude !== 'status' && filterStatus && a.status !== filterStatus) return false;
+      if (exclude !== 'priority' && filterPriority && a.priority !== filterPriority) return false;
+      if (exclude !== 'owner' && filterOwner && a.owner !== filterOwner) return false;
+      return true;
+    });
+
   const hotelOptions = useMemo(
-    () => Array.from(new Set(actions.map((a) => a.hotelProperty))).sort(),
-    [actions],
+    () => Array.from(new Set(optionsFor('hotel').map((a) => a.hotelProperty))).sort(),
+    [actions, filterProject, filterArea, filterStatus, filterPriority, filterOwner],
   );
   const projectOptions = useMemo(
-    () => Array.from(new Set(actions.map((a) => a.project))).sort(),
-    [actions],
+    () => Array.from(new Set(optionsFor('project').map((a) => a.project))).sort(),
+    [actions, filterHotel, filterArea, filterStatus, filterPriority, filterOwner],
+  );
+  const areaOptions = useMemo(
+    () => Array.from(new Set(optionsFor('area').map((a) => a.area))).sort(),
+    [actions, filterHotel, filterProject, filterStatus, filterPriority, filterOwner],
+  );
+  const statusOptions = useMemo(
+    () => Array.from(new Set(optionsFor('status').map((a) => a.status))),
+    [actions, filterHotel, filterProject, filterArea, filterPriority, filterOwner],
+  );
+  const priorityOptions = useMemo(
+    () => Array.from(new Set(optionsFor('priority').map((a) => a.priority))),
+    [actions, filterHotel, filterProject, filterArea, filterStatus, filterOwner],
   );
   const ownerOptions = useMemo(
-    () => Array.from(new Set(actions.map((a) => a.owner))).sort(),
-    [actions],
+    () => Array.from(new Set(optionsFor('owner').map((a) => a.owner))).sort(),
+    [actions, filterHotel, filterProject, filterArea, filterStatus, filterPriority],
   );
 
   const detailAction = detailId !== null ? actions.find((a) => a.id === detailId) : null;
@@ -212,15 +243,15 @@ export default function ActionPlanTrackerPage() {
           </select>
           <select className="h-9 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterArea} onChange={(e) => setFilterArea(e.target.value)}>
             <option value="">All areas</option>
-            {AREAS.map((a) => <option key={a} value={a}>{a}</option>)}
+            {areaOptions.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
           <select className="h-9 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
             <option value="">All statuses</option>
-            {STATUS_LIST.map((s) => <option key={s} value={s}>{s}</option>)}
+            {STATUS_LIST.filter((s) => statusOptions.includes(s)).map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
           <select className="h-9 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
             <option value="">All priorities</option>
-            {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+            {PRIORITIES.filter((p) => priorityOptions.includes(p)).map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
           <select className="h-9 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
             <option value="">All owners</option>
@@ -334,21 +365,6 @@ export default function ActionPlanTrackerPage() {
 }
 
 // ── Sub-components ───────────────────────────────────────────
-function KpiCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
-  return (
-    <div
-      className="bg-white rounded-lg border p-4 flex flex-col gap-1.5 transition-shadow hover:shadow-md"
-      style={{ borderColor: 'var(--border)' }}
-    >
-      <div className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-        {label}
-      </div>
-      <div className="text-xl font-bold leading-tight" style={{ color }}>{value}</div>
-      <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>{sub}</div>
-    </div>
-  );
-}
-
 function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
@@ -369,8 +385,16 @@ function DetailRow({ label, value, valueColor }: { label: string; value: string;
   );
 }
 
+const dayPct = (dateStr: string) => {
+  const d = new Date(dateStr + 'T00:00:00');
+  const m = d.getMonth();
+  const dim = new Date(d.getFullYear(), m + 1, 0).getDate();
+  return ((m + (d.getDate() - 1) / dim) / 12) * 100;
+};
+
 function GanttView({ filtered, onShowDetail }: { filtered: Action[]; onShowDetail: (id: number) => void }) {
-  const todayPct = (CURRENT_MONTH / 12) * 100 + (TODAY.getDate() / 31) * (100 / 12);
+  const todayDim = new Date(TODAY.getFullYear(), TODAY.getMonth() + 1, 0).getDate();
+  const todayPct = ((CURRENT_MONTH + (TODAY.getDate() - 1) / todayDim) / 12) * 100;
   return (
     <div className="bg-white border rounded-lg overflow-hidden shadow-sm" style={{ borderColor: 'var(--border)' }}>
       {/* Header */}
@@ -408,10 +432,10 @@ function GanttView({ filtered, onShowDetail }: { filtered: Action[]; onShowDetai
         const color = AREA_COLORS[a.area] || '#9CA3AF';
         const eColor = STATUS_COLORS[a.status];
         const r = getRoi(a);
-        const startM = a.startMonth != null ? a.startMonth - 1 : monthIdx(a.startDate);
-        const endM = a.endMonth != null ? a.endMonth - 1 : (a.endDate ? monthIdx(a.endDate) : startM);
-        const left = (startM / 12) * 100;
-        const width = Math.max(((endM - startM + 1) / 12) * 100, 100 / 12);
+        const left = dayPct(a.startDate);
+        const endBase = a.endDate || a.startDate;
+        const right = Math.max(dayPct(endBase), left);
+        const width = Math.max(right - left, 0.8);
         const isChild = (a.subProjectId ?? 1) > 1;
         return (
           <div

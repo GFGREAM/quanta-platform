@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, MouseEvent } from 'react';
+import KpiCard from '@/components/ui/KpiCard';
 
 type Prop = {
   name: string;
@@ -13,31 +14,32 @@ type Prop = {
 const DIMS = ['Location', 'Cleanliness', 'Service', 'Value', 'Sense of Arrival'];
 
 const PROPS: Prop[] = [
-  { name: 'Waldorf Astoria', full: 'Waldorf Astoria Costa Rica', color: '#172951', scores: [4.7, 4.7, 4.7, 3.8, 4.3], mine: true },
+  { name: 'Waldorf Astoria', full: 'Waldorf Astoria Costa Rica', color: '#172951', scores: [4.7, 4.7, 4.7, 3.8, 3.6], mine: true },
   { name: 'Nekajui RC Reserve', full: 'Nekajui, a Ritz-Carlton Reserve', color: '#00AFAD', scores: [5.0, 5.0, 4.9, 4.7, 4.9], mine: false },
   { name: 'Four Seasons', full: 'Four Seasons Peninsula Papagayo', color: '#1E4080', scores: [4.7, 4.9, 4.8, 4.2, 4.8], mine: false },
   { name: 'Andaz Papagayo', full: 'Andaz Peninsula Papagayo', color: '#69D9D0', scores: [4.7, 4.9, 4.7, 4.4, 4.4], mine: false },
   { name: 'JW Marriott Guanacaste', full: 'JW Marriott Hotel Guanacaste Resort & Spa', color: '#7C3AED', scores: [3.9, 4.7, 4.3, 3.8, 4.0], mine: false },
   { name: 'El Mangroove', full: 'El Mangroove, Autograph Collection', color: '#D97706', scores: [4.5, 4.7, 4.5, 4.1, 4.3], mine: false },
+  { name: 'Waldorf Site Inspection', full: 'Waldorf Astoria Costa Rica — Site Inspection', color: '#BE123C', scores: [4.8, 4.7, 4.3, 3.8, 3.6], mine: false },
 ];
 
-const DEEP = '#172951';
-const GREEN_OCEAN = '#00AFAD';
-const LIGHT_GREEN = '#69D9D0';
-const BORDER_LIGHT = '#EBEBEB';
-const BORDER = '#E5E5E5';
-const MUTED = '#F5F5F5';
-const TEXT_MUTED = '#9CA3AF';
-const TEXT_SECONDARY = '#6B7280';
-const TEXT_PRIMARY = '#172951';
+const DEEP = 'var(--primary)';
+const GREEN_OCEAN = 'var(--accent)';
+const LIGHT_GREEN = 'var(--accent-light)';
+const BORDER_LIGHT = 'var(--border-light)';
+const BORDER = 'var(--border)';
+const MUTED = 'var(--muted)';
+const TEXT_MUTED = 'var(--text-muted)';
+const TEXT_SECONDARY = 'var(--text-secondary)';
+const TEXT_PRIMARY = 'var(--primary)';
 const ACTIVE_BG = 'rgba(0,175,173,0.08)';
-const SUCCESS = '#10B981';
+const SUCCESS = 'var(--success)';
 const SUCCESS_BG = 'rgba(16,185,129,0.12)';
-const INFO = '#0EA5E9';
+const INFO = 'var(--info)';
 const INFO_BG = 'rgba(14,165,233,0.12)';
-const WARNING = '#F59E0B';
+const WARNING = 'var(--warning)';
 const WARNING_BG = 'rgba(245,158,11,0.12)';
-const DANGER = '#EF4444';
+const DANGER = 'var(--danger)';
 
 function heatColor(score: number) {
   if (score >= 4.5) return { bg: '#172951', text: '#FFFFFF' };
@@ -65,7 +67,7 @@ const poly = (r: number) => ANG.map(a => pt(a, r)).map(p => p.x.toFixed(1) + ','
 type TT = { x: number; y: number; prop: Prop; di: number } | null;
 
 export default function OpsRadarPage() {
-  const [active, setActive] = useState<Set<number>>(new Set([0, 1, 2, 3, 4, 5]));
+  const [active, setActive] = useState<Set<number>>(new Set([0, 1, 2, 3, 4, 5, 6]));
   const [crit, setCrit] = useState<number | null>(null);
   const [tt, setTT] = useState<TT>(null);
 
@@ -119,18 +121,13 @@ export default function OpsRadarPage() {
       {/* KPIs */}
       <div className="grid grid-cols-4 gap-3 mb-5">
         {kpis.map((k, i) => (
-          <div key={i} className="relative overflow-hidden rounded-xl border px-[18px] py-[14px]" style={{ background: '#fff', borderColor: BORDER_LIGHT }}>
-            <div className="text-[0.6875rem] font-semibold uppercase tracking-wider mb-2" style={{ color: TEXT_MUTED }}>{k.lbl}</div>
-            <div className="text-[1.375rem] font-extrabold tracking-tight mb-[3px]" style={{ color: DEEP }}>{k.val}</div>
-            <div className="text-xs" style={{ color: TEXT_SECONDARY }}>{k.sub}</div>
-            <div className="absolute bottom-0 left-0 right-0 h-[3px]" style={{ background: k.accent }} />
-          </div>
+          <KpiCard key={i} label={k.lbl} value={String(k.val)} sub={k.sub} accent={k.accent} />
         ))}
       </div>
 
       {/* Radar + Legend */}
       <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: '1fr 280px' }}>
-        <div className="rounded-xl border p-6" style={{ background: '#fff', borderColor: BORDER_LIGHT, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+        <div className="rounded-xl border p-6" style={{ background: 'var(--card)', borderColor: BORDER_LIGHT, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
           <div className="flex items-start justify-between gap-3 mb-4">
             <div>
               <div className="text-base font-semibold" style={{ color: TEXT_PRIMARY }}>Operational Radar</div>
@@ -161,7 +158,7 @@ export default function OpsRadarPage() {
               const anchor = cos > 0.15 ? 'start' : cos < -0.15 ? 'end' : 'middle';
               return (
                 <text key={i} x={lp.x.toFixed(1)} y={lp.y.toFixed(1)} textAnchor={anchor} dominantBaseline="middle"
-                  fontFamily="Inter, sans-serif" fontSize="10.5" fontWeight="600" fill="#6B7280">
+                  fontFamily="Inter, sans-serif" fontSize="10.5" fontWeight="600" style={{ fill: 'var(--text-secondary)' }}>
                   {label}
                 </text>
               );
@@ -208,11 +205,12 @@ export default function OpsRadarPage() {
         </div>
 
         {/* Legend */}
-        <div className="rounded-xl border p-6 flex flex-col" style={{ background: '#fff', borderColor: BORDER_LIGHT, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+        <div className="rounded-xl border p-6 flex flex-col" style={{ background: 'var(--card)', borderColor: BORDER_LIGHT, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
           <div className="text-[0.6875rem] font-semibold uppercase tracking-wider mb-3" style={{ color: TEXT_MUTED }}>Properties</div>
           <div>
-            {PROPS.map((p, i) => {
-              const avg = (p.scores.reduce((s, v) => s + v, 0) / p.scores.length);
+            {PROPS.map((p, i) => ({ p, i, avg: p.scores.reduce((s, v) => s + v, 0) / p.scores.length }))
+              .sort((a, b) => (b.p.mine ? 1 : 0) - (a.p.mine ? 1 : 0) || b.avg - a.avg)
+              .map(({ p, i, avg }) => {
               const isActive = active.has(i);
               const isMine = p.mine;
               const bg = avg >= 4.5 ? SUCCESS_BG : avg >= 3.5 ? INFO_BG : WARNING_BG;
@@ -232,7 +230,7 @@ export default function OpsRadarPage() {
                       color: isMine ? DEEP : TEXT_PRIMARY,
                     }}>
                       {p.name}
-                      {isMine && <span className="ml-1" style={{ color: GREEN_OCEAN, fontSize: '0.6875rem' }}>★ Mi propiedad</span>}
+                      {isMine && <span className="ml-1" style={{ color: GREEN_OCEAN, fontSize: '0.6875rem' }}>★ My property</span>}
                     </div>
                     <div className="text-[0.6875rem] mt-[1px]" style={{ color: TEXT_MUTED }}>{avg.toFixed(1)} avg · TripAdvisor</div>
                   </div>
@@ -250,14 +248,14 @@ export default function OpsRadarPage() {
           </div>
           <div className="mt-4 pt-[14px]" style={{ borderTop: `1px solid ${BORDER_LIGHT}` }}>
             <div className="text-[0.6875rem] font-semibold uppercase tracking-wider mb-3" style={{ color: TEXT_MUTED }}>Visit Date</div>
-            <div className="text-sm font-semibold" style={{ color: TEXT_PRIMARY }}>Marzo 2026</div>
+            <div className="text-sm font-semibold" style={{ color: TEXT_PRIMARY }}>March 2026</div>
             <div className="text-xs mt-[2px]" style={{ color: TEXT_MUTED }}>Visited by: Ray Velasquez</div>
           </div>
         </div>
       </div>
 
       {/* Heatmap */}
-      <div className="rounded-xl border p-6" style={{ background: '#fff', borderColor: BORDER_LIGHT, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+      <div className="rounded-xl border p-6" style={{ background: 'var(--card)', borderColor: BORDER_LIGHT, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
         <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
           <div>
             <div className="text-base font-semibold" style={{ color: TEXT_PRIMARY }}>Operational Dimension Heatmap</div>
@@ -272,7 +270,7 @@ export default function OpsRadarPage() {
                   className="px-3 py-[5px] rounded-full text-[0.8125rem] whitespace-nowrap transition-all cursor-pointer"
                   style={{
                     border: `1px solid ${isActive ? GREEN_OCEAN : BORDER}`,
-                    background: isActive ? ACTIVE_BG : '#fff',
+                    background: isActive ? ACTIVE_BG : 'var(--card)',
                     color: isActive ? GREEN_OCEAN : TEXT_MUTED,
                     fontWeight: isActive ? 600 : 500,
                   }}>
@@ -342,7 +340,7 @@ export default function OpsRadarPage() {
           </table>
         </div>
         <div className="flex items-center gap-2 mt-[14px] text-xs flex-wrap" style={{ color: TEXT_MUTED }}>
-          <span>Escala:</span>
+          <span>Scale:</span>
           <div className="flex gap-[2px]">
             {scaleSteps.map((bg, i) => (
               <div key={i} className="rounded-sm" style={{ width: 22, height: 10, background: bg, border: '0.5px solid rgba(0,0,0,0.06)' }} />
