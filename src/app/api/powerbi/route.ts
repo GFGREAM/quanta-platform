@@ -25,6 +25,24 @@ function getRoleFromEmail(email: string): string {
   return VALID_ROLES.has(prefix) ? prefix : DEFAULT_ROLE;
 }
 
+async function datasetHasRls(
+  accessToken: string,
+  workspaceId: string,
+  datasetId: string
+): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `https://api.powerbi.com/v1.0/myorg/groups/${workspaceId}/datasets/${datasetId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!res.ok) return false;
+    const ds = await res.json();
+    return ds.isEffectiveIdentityRequired === true;
+  } catch {
+    return false;
+  }
+}
+
 async function generateEmbedToken(
   accessToken: string,
   workspaceId: string,
@@ -38,7 +56,31 @@ async function generateEmbedToken(
     "Content-Type": "application/json",
   };
 
-  let body: any = { accessLevel: "View" };
+  // Check if dataset requires RLS before choosing token strategy
+  const needsRls = datasetId
+    ? await datasetHasRls(accessToken, workspaceId, datasetId)
+    : false;
+
+  console.info(`[PowerBI] Token strategy | workspace=${workspaceId} | report=${reportId} | dataset=${datasetId} | needsRls=${needsRls} | role=${role}`);
+
+  let body: any;
+
+  if (needsRls && datasetId) {
+    // Dataset requires effective identity — send RLS identity directly
+    body = {
+      accessLevel: "View",
+      identities: [
+        {
+          username: "QuantaViewer",
+          roles: [role],
+          datasets: [datasetId],
+        },
+      ],
+    };
+  } else {
+    // No RLS required — simple View token
+    body = { accessLevel: "View" };
+  }
 
   let response = await fetch(url, {
     method: "POST",
@@ -48,42 +90,21 @@ async function generateEmbedToken(
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error(`[PowerBI] Token attempt 1 (simple View) FAILED | status=${response.status} | workspace=${workspaceId} | report=${reportId} | body=${errorText}`);
-    console.error(`[PowerBI] Gate check values | datasetId=${datasetId} | errorText(200)=${errorText.slice(0, 200)}`);
-    if (errorText.toLowerCase().includes("effective identity") && datasetId) {
-      body = {
-        accessLevel: "View",
-        identities: [
-          {
-            username: "QuantaViewer",
-            roles: [role],
-            datasets: [datasetId],
-          },
-        ],
-      };
+    console.error(`[PowerBI] Token generation FAILED | status=${response.status} | needsRls=${needsRls} | workspace=${workspaceId} | report=${reportId} | dataset=${datasetId} | role=${role} | body=${errorText}`);
 
+    // If we sent RLS identity and it failed, retry without identity as fallback
+    if (needsRls) {
+      console.warn(`[PowerBI] RLS token failed, retrying with simple View token`);
       response = await fetch(url, {
         method: "POST",
         headers,
-        body: JSON.stringify(body),
+        body: JSON.stringify({ accessLevel: "View" }),
       });
 
-      // Temporary fallback: if RLS identity also fails, retry without identity
-      // TODO: remove once RLS roles are configured in Quanta Embedded workspace
       if (!response.ok) {
-        const rlsError = await response.text();
-        console.error(`[PowerBI] Token attempt 2 (RLS identity) FAILED | status=${response.status} | role=${role} | dataset=${datasetId} | body=${rlsError}`);
-        response = await fetch(url, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ accessLevel: "View" }),
-        });
-
-        if (!response.ok) {
-          const fallbackError = await response.text();
-          console.error(`[PowerBI] Token attempt 3 (final fallback) FAILED | status=${response.status} | body=${fallbackError}`);
-          return { error: fallbackError };
-        }
+        const fallbackError = await response.text();
+        console.error(`[PowerBI] Fallback (simple View) also FAILED | status=${response.status} | body=${fallbackError}`);
+        return { error: fallbackError };
       }
     } else {
       return { error: errorText };
