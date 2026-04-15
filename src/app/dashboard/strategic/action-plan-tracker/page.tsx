@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Eye, X, ListFilter, Layers, GitBranch, ChevronRight } from 'lucide-react';
 import { Table as TableIcon } from 'lucide-react';
+import KpiCard from '@/components/ui/KpiCard';
 import {
   Action,
   AREA_COLORS, STATUS_COLORS, PRIORITY_COLORS,
@@ -101,9 +102,13 @@ export default function ActionPlanTrackerPage() {
     });
   }, [filtered, mode]);
 
-  // KPI Strip stats — main projects only (subProjectId === 1)
+  // KPI Strip stats — reflects active filters. A project is "in scope" if ANY of its rows
+  // (main subProjectId === 1 or any sub-action) pass the filters. KPIs are then computed
+  // on the main rows of those projects, so sub-actions never double-count investment/return.
   const stats = useMemo(() => {
-    const macro = actions.filter((a) => a.subProjectId === 1);
+    const projectIds = new Set<number>();
+    filtered.forEach((a) => { if (a.projectId != null) projectIds.add(a.projectId); });
+    const macro = actions.filter((a) => a.subProjectId === 1 && a.projectId != null && projectIds.has(a.projectId));
     const totalInv = macro.reduce((sum, a) => sum + a.investmentUsd, 0);
     const totalRet = macro.reduce((sum, a) => sum + a.expectedReturnUsd, 0);
     const roiGlobal = totalInv > 0 ? Math.round(((totalRet - totalInv) / totalInv) * 100) : 0;
@@ -111,7 +116,7 @@ export default function ActionPlanTrackerPage() {
     const completed = macro.filter((a) => a.status === 'Completed').length;
     const pctComp = macro.length ? Math.round((completed / macro.length) * 100) : 0;
     return { count: macro.length, totalInv, totalRet, roiGlobal, inProgress, completed, pctComp };
-  }, [actions]);
+  }, [actions, filtered]);
 
   // Unique options for selects
   const hotelOptions = useMemo(
@@ -330,21 +335,6 @@ export default function ActionPlanTrackerPage() {
 }
 
 // ── Sub-components ───────────────────────────────────────────
-function KpiCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
-  return (
-    <div
-      className="bg-white rounded-lg border p-4 flex flex-col gap-1.5 transition-shadow hover:shadow-md"
-      style={{ borderColor: 'var(--border)' }}
-    >
-      <div className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-        {label}
-      </div>
-      <div className="text-xl font-bold leading-tight" style={{ color }}>{value}</div>
-      <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>{sub}</div>
-    </div>
-  );
-}
-
 function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
