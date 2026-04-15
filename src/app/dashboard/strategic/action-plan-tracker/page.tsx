@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Eye, X, ListFilter, Layers, GitBranch, ChevronRight } from 'lucide-react';
 import { Table as TableIcon } from 'lucide-react';
+import KpiCard from '@/components/ui/KpiCard';
 import {
   Action,
   AREA_COLORS, STATUS_COLORS, PRIORITY_COLORS,
@@ -334,21 +335,6 @@ export default function ActionPlanTrackerPage() {
 }
 
 // ── Sub-components ───────────────────────────────────────────
-function KpiCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
-  return (
-    <div
-      className="bg-white rounded-lg border p-4 flex flex-col gap-1.5 transition-shadow hover:shadow-md"
-      style={{ borderColor: 'var(--border)' }}
-    >
-      <div className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-        {label}
-      </div>
-      <div className="text-xl font-bold leading-tight" style={{ color }}>{value}</div>
-      <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>{sub}</div>
-    </div>
-  );
-}
-
 function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2">

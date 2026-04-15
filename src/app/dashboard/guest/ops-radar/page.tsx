@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, MouseEvent } from 'react';
+import KpiCard from '@/components/ui/KpiCard';
 
 type Prop = {
   name: string;
@@ -21,15 +22,6 @@ const PROPS: Prop[] = [
   { name: 'El Mangroove', full: 'El Mangroove, Autograph Collection', color: '#D97706', scores: [4.5, 4.7, 4.5, 4.1, 4.3], mine: false },
 ];
 
-const DEEP = '#172951';
-const GREEN_OCEAN = '#00AFAD';
-const LIGHT_GREEN = '#69D9D0';
-const BORDER_LIGHT = '#EBEBEB';
-const BORDER = '#E5E5E5';
-const MUTED = '#F5F5F5';
-const TEXT_MUTED = '#9CA3AF';
-const TEXT_SECONDARY = '#6B7280';
-const TEXT_PRIMARY = '#172951';
 const ACTIVE_BG = 'rgba(0,175,173,0.08)';
 const SUCCESS = '#10B981';
 const SUCCESS_BG = 'rgba(16,185,129,0.12)';
@@ -76,8 +68,8 @@ export default function OpsRadarPage() {
   const best = PROPS[avgs.indexOf(topAvg)];
 
   const kpis = [
-    { accent: DEEP, lbl: 'Properties assessed', val: PROPS.length, sub: 'Peninsula Papagayo' },
-    { accent: GREEN_OCEAN, lbl: 'Waldorf Astoria Score', val: ourAvg.toFixed(1) + ' / 5', sub: 'operational average' },
+    { accent: 'var(--primary)', lbl: 'Properties assessed', val: String(PROPS.length), sub: 'Peninsula Papagayo' },
+    { accent: 'var(--accent)', lbl: 'Waldorf Astoria Score', val: ourAvg.toFixed(1) + ' / 5', sub: 'operational average' },
     { accent: SUCCESS, lbl: 'Top rated', val: best.name, sub: topAvg.toFixed(1) + ' / 5 average' },
     { accent: DANGER, lbl: 'Gap vs leader', val: (topAvg - ourAvg).toFixed(1) + ' pts', sub: 'Waldorf vs top comp' },
   ];
@@ -107,10 +99,10 @@ export default function OpsRadarPage() {
     <div className="p-7" style={{ background: 'var(--background)' }}>
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-[1.625rem] font-bold tracking-tight mb-1" style={{ color: DEEP }}>
+          <h1 className="text-[1.625rem] font-bold tracking-tight mb-1" style={{ color: 'var(--primary)' }}>
             Ops Radar — Peninsula Papagayo
           </h1>
-          <p className="text-[0.9375rem]" style={{ color: TEXT_SECONDARY }}>
+          <p className="text-[0.9375rem]" style={{ color: 'var(--text-secondary)' }}>
             Multidimensional operational assessment · Field visit · Scale 1–5
           </p>
         </div>
@@ -119,22 +111,17 @@ export default function OpsRadarPage() {
       {/* KPIs */}
       <div className="grid grid-cols-4 gap-3 mb-5">
         {kpis.map((k, i) => (
-          <div key={i} className="relative overflow-hidden rounded-xl border px-[18px] py-[14px]" style={{ background: '#fff', borderColor: BORDER_LIGHT }}>
-            <div className="text-[0.6875rem] font-semibold uppercase tracking-wider mb-2" style={{ color: TEXT_MUTED }}>{k.lbl}</div>
-            <div className="text-[1.375rem] font-extrabold tracking-tight mb-[3px]" style={{ color: DEEP }}>{k.val}</div>
-            <div className="text-xs" style={{ color: TEXT_SECONDARY }}>{k.sub}</div>
-            <div className="absolute bottom-0 left-0 right-0 h-[3px]" style={{ background: k.accent }} />
-          </div>
+          <KpiCard key={i} label={k.lbl} value={k.val} sub={k.sub} accentColor={k.accent} />
         ))}
       </div>
 
       {/* Radar + Legend */}
       <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: '1fr 280px' }}>
-        <div className="rounded-xl border p-6" style={{ background: '#fff', borderColor: BORDER_LIGHT, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+        <div className="rounded-xl border p-6" style={{ background: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
           <div className="flex items-start justify-between gap-3 mb-4">
             <div>
-              <div className="text-base font-semibold" style={{ color: TEXT_PRIMARY }}>Operational Radar</div>
-              <div className="text-[0.8125rem]" style={{ color: TEXT_MUTED }}>Comparison by dimension · Select properties in the legend</div>
+              <div className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Operational Radar</div>
+              <div className="text-[0.8125rem]" style={{ color: 'var(--text-secondary)' }}>Comparison by dimension · Select properties in the legend</div>
             </div>
           </div>
 
@@ -143,7 +130,7 @@ export default function OpsRadarPage() {
               const r = (ring / 5) * RAD;
               return (
                 <g key={ring}>
-                  <polygon points={poly(r)} fill={ring === 5 ? 'rgba(0,175,173,0.03)' : 'none'} stroke={BORDER_LIGHT} strokeWidth="1" />
+                  <polygon points={poly(r)} fill={ring === 5 ? 'rgba(0,175,173,0.03)' : 'none'} style={{ stroke: 'var(--border)' }} strokeWidth="1" />
                   {(ring === 1 || ring === 3 || ring === 5) && (
                     <text x={CX + 3} y={CY - r + 10} fontFamily="Inter, sans-serif" fontSize="8" fill="#C5C5C5" textAnchor="start">{ring}</text>
                   )}
@@ -161,7 +148,7 @@ export default function OpsRadarPage() {
               const anchor = cos > 0.15 ? 'start' : cos < -0.15 ? 'end' : 'middle';
               return (
                 <text key={i} x={lp.x.toFixed(1)} y={lp.y.toFixed(1)} textAnchor={anchor} dominantBaseline="middle"
-                  fontFamily="Inter, sans-serif" fontSize="10.5" fontWeight="600" fill="#6B7280">
+                  fontFamily="Inter, sans-serif" fontSize="10.5" fontWeight="600" style={{ fill: 'var(--text-secondary)' }}>
                   {label}
                 </text>
               );
@@ -208,8 +195,8 @@ export default function OpsRadarPage() {
         </div>
 
         {/* Legend */}
-        <div className="rounded-xl border p-6 flex flex-col" style={{ background: '#fff', borderColor: BORDER_LIGHT, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-          <div className="text-[0.6875rem] font-semibold uppercase tracking-wider mb-3" style={{ color: TEXT_MUTED }}>Properties</div>
+        <div className="rounded-xl border p-6 flex flex-col" style={{ background: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+          <div className="text-[0.6875rem] font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-secondary)' }}>Properties</div>
           <div>
             {PROPS.map((p, i) => {
               const avg = (p.scores.reduce((s, v) => s + v, 0) / p.scores.length);
@@ -221,7 +208,7 @@ export default function OpsRadarPage() {
                 <div key={i} onClick={() => toggleProp(i)}
                   className="flex items-center gap-[10px] px-[6px] py-[7px] cursor-pointer transition-colors rounded-md"
                   style={{
-                    borderBottom: `1px solid ${BORDER_LIGHT}`,
+                    borderBottom: '1px solid var(--border)',
                     background: isMine ? ACTIVE_BG : undefined,
                   }}>
                   <div className="shrink-0 rounded-full" style={{ width: 28, height: isMine ? 10 : 8, background: p.color, opacity: isActive ? 1 : 0.3 }} />
@@ -229,16 +216,16 @@ export default function OpsRadarPage() {
                     <div className="text-[0.8125rem] truncate" style={{
                       opacity: isActive ? 1 : 0.4,
                       fontWeight: isMine ? 700 : 500,
-                      color: isMine ? DEEP : TEXT_PRIMARY,
+                      color: isMine ? 'var(--primary)' : 'var(--text-primary)',
                     }}>
                       {p.name}
-                      {isMine && <span className="ml-1" style={{ color: GREEN_OCEAN, fontSize: '0.6875rem' }}>★ Mi propiedad</span>}
+                      {isMine && <span className="ml-1" style={{ color: 'var(--accent)', fontSize: '0.6875rem' }}>★ My property</span>}
                     </div>
-                    <div className="text-[0.6875rem] mt-[1px]" style={{ color: TEXT_MUTED }}>{avg.toFixed(1)} avg · TripAdvisor</div>
+                    <div className="text-[0.6875rem] mt-[1px]" style={{ color: 'var(--text-secondary)' }}>{avg.toFixed(1)} avg · TripAdvisor</div>
                   </div>
                   <div className="shrink-0 px-[7px] py-[2px] rounded-full font-bold"
                     style={{
-                      background: isMine ? DEEP : bg,
+                      background: isMine ? 'var(--primary)' : bg,
                       color: isMine ? '#fff' : tc,
                       fontSize: isMine ? '0.8125rem' : '0.6875rem',
                     }}>
@@ -248,20 +235,20 @@ export default function OpsRadarPage() {
               );
             })}
           </div>
-          <div className="mt-4 pt-[14px]" style={{ borderTop: `1px solid ${BORDER_LIGHT}` }}>
-            <div className="text-[0.6875rem] font-semibold uppercase tracking-wider mb-3" style={{ color: TEXT_MUTED }}>Visit Date</div>
-            <div className="text-sm font-semibold" style={{ color: TEXT_PRIMARY }}>Marzo 2026</div>
-            <div className="text-xs mt-[2px]" style={{ color: TEXT_MUTED }}>Visited by: Ray Velasquez</div>
+          <div className="mt-4 pt-[14px]" style={{ borderTop: '1px solid var(--border)' }}>
+            <div className="text-[0.6875rem] font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-secondary)' }}>Visit Date</div>
+            <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>March 2026</div>
+            <div className="text-xs mt-[2px]" style={{ color: 'var(--text-secondary)' }}>Visited by: Ray Velasquez</div>
           </div>
         </div>
       </div>
 
       {/* Heatmap */}
-      <div className="rounded-xl border p-6" style={{ background: '#fff', borderColor: BORDER_LIGHT, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+      <div className="rounded-xl border p-6" style={{ background: 'var(--card)', borderColor: 'var(--border)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
         <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
           <div>
-            <div className="text-base font-semibold" style={{ color: TEXT_PRIMARY }}>Operational Dimension Heatmap</div>
-            <div className="text-[0.8125rem]" style={{ color: TEXT_MUTED }}>Score 1–5 · dark blue = benchmark · red = below standard</div>
+            <div className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Operational Dimension Heatmap</div>
+            <div className="text-[0.8125rem]" style={{ color: 'var(--text-secondary)' }}>Score 1–5 · dark blue = benchmark · red = below standard</div>
           </div>
           <div className="flex gap-[6px] flex-wrap">
             {[null, 0, 1, 2, 3, 4].map((idx, i) => {
@@ -271,9 +258,9 @@ export default function OpsRadarPage() {
                 <button key={i} onClick={() => setCrit(idx)}
                   className="px-3 py-[5px] rounded-full text-[0.8125rem] whitespace-nowrap transition-all cursor-pointer"
                   style={{
-                    border: `1px solid ${isActive ? GREEN_OCEAN : BORDER}`,
-                    background: isActive ? ACTIVE_BG : '#fff',
-                    color: isActive ? GREEN_OCEAN : TEXT_MUTED,
+                    border: isActive ? '1px solid var(--accent)' : '1px solid var(--border)',
+                    background: isActive ? ACTIVE_BG : 'var(--card)',
+                    color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
                     fontWeight: isActive ? 600 : 500,
                   }}>
                   {label}
@@ -287,13 +274,13 @@ export default function OpsRadarPage() {
             <thead>
               <tr>
                 <th className="px-[14px] py-[10px] text-left text-[0.6875rem] font-semibold uppercase tracking-wider whitespace-nowrap"
-                  style={{ color: TEXT_MUTED, borderBottom: `2px solid ${BORDER_LIGHT}`, background: MUTED, minWidth: 180 }}>Property</th>
+                  style={{ color: 'var(--text-secondary)', borderBottom: '2px solid var(--border)', background: 'var(--muted)', minWidth: 180 }}>Property</th>
                 {cols.map(ci => (
                   <th key={ci} className="px-[14px] py-[10px] text-center text-[0.6875rem] font-semibold uppercase tracking-wider whitespace-nowrap"
-                    style={{ color: TEXT_MUTED, borderBottom: `2px solid ${BORDER_LIGHT}`, background: MUTED }}>{DIMS[ci]}</th>
+                    style={{ color: 'var(--text-secondary)', borderBottom: '2px solid var(--border)', background: 'var(--muted)' }}>{DIMS[ci]}</th>
                 ))}
                 <th className="px-[14px] py-[10px] text-center text-[0.6875rem] font-semibold uppercase tracking-wider whitespace-nowrap"
-                  style={{ color: TEXT_MUTED, borderBottom: `2px solid ${BORDER_LIGHT}`, background: MUTED }}>Average</th>
+                  style={{ color: 'var(--text-secondary)', borderBottom: '2px solid var(--border)', background: 'var(--muted)' }}>Average</th>
               </tr>
             </thead>
             <tbody>
@@ -305,8 +292,8 @@ export default function OpsRadarPage() {
                   <tr key={prop.idx} style={{ background: isOurs ? ACTIVE_BG : undefined }}>
                     <td className="px-[14px] py-[10px] font-semibold whitespace-nowrap text-sm"
                       style={{
-                        borderBottom: `1px solid ${BORDER_LIGHT}`,
-                        color: isOurs ? GREEN_OCEAN : TEXT_PRIMARY,
+                        borderBottom: '1px solid var(--border)',
+                        color: isOurs ? 'var(--accent)' : 'var(--text-primary)',
                         fontWeight: isOurs ? 700 : 600,
                       }}>
                       <div className="flex items-center gap-2">
@@ -318,7 +305,7 @@ export default function OpsRadarPage() {
                       const s = prop.scores[ci];
                       const c = heatColor(s);
                       return (
-                        <td key={ci} className="p-0" style={{ borderBottom: `1px solid ${BORDER_LIGHT}` }}>
+                        <td key={ci} className="p-0" style={{ borderBottom: '1px solid var(--border)' }}>
                           <div className="w-full flex flex-col items-center justify-center gap-[2px]"
                             style={{ height: 52, background: c.bg }}>
                             <span className="text-[0.9375rem] font-extrabold tracking-tight" style={{ color: c.text }}>{s.toFixed(1)}</span>
@@ -329,7 +316,7 @@ export default function OpsRadarPage() {
                         </td>
                       );
                     })}
-                    <td className="text-center px-3" style={{ borderBottom: `1px solid ${BORDER_LIGHT}` }}>
+                    <td className="text-center px-3" style={{ borderBottom: '1px solid var(--border)' }}>
                       <div className="inline-flex items-center justify-center font-extrabold rounded-md"
                         style={{ minWidth: 44, height: 28, padding: '0 8px', fontSize: '0.875rem', background: avgC.bg, color: avgC.text }}>
                         {avg.toFixed(1)}
@@ -341,8 +328,8 @@ export default function OpsRadarPage() {
             </tbody>
           </table>
         </div>
-        <div className="flex items-center gap-2 mt-[14px] text-xs flex-wrap" style={{ color: TEXT_MUTED }}>
-          <span>Escala:</span>
+        <div className="flex items-center gap-2 mt-[14px] text-xs flex-wrap" style={{ color: 'var(--text-secondary)' }}>
+          <span>Scale:</span>
           <div className="flex gap-[2px]">
             {scaleSteps.map((bg, i) => (
               <div key={i} className="rounded-sm" style={{ width: 22, height: 10, background: bg, border: '0.5px solid rgba(0,0,0,0.06)' }} />
@@ -356,11 +343,11 @@ export default function OpsRadarPage() {
       {tt && (
         <div className="fixed pointer-events-none z-[300] rounded-md px-4 py-3 shadow-lg min-w-[200px] transition-opacity"
           style={{
-            background: DEEP, color: '#fff', fontSize: '0.8125rem',
+            background: 'var(--primary)', color: '#fff', fontSize: '0.8125rem',
             left: Math.min(tt.x + 16, typeof window !== 'undefined' ? window.innerWidth - 230 : tt.x + 16),
             top: Math.max(tt.y - 10, 8),
           }}>
-          <div className="font-bold text-sm mb-2" style={{ color: LIGHT_GREEN }}>{tt.prop.name}</div>
+          <div className="font-bold text-sm mb-2" style={{ color: 'var(--accent-light)' }}>{tt.prop.name}</div>
           <div className="flex justify-between gap-[14px] text-xs mt-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
             <span>{DIMS[tt.di]}</span>
             <strong style={{ color: '#fff' }}>{tt.prop.scores[tt.di].toFixed(1)} / 5</strong>
