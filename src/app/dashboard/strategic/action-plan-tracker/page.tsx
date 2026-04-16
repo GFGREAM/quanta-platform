@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Eye, X, ListFilter, Layers, GitBranch, ChevronRight } from 'lucide-react';
 import { Table as TableIcon } from 'lucide-react';
 import KpiCard from '@/components/ui/KpiCard';
@@ -47,7 +47,34 @@ function DotBadge({ label, color }: { label: string; color: string }) {
 }
 
 export default function ActionPlanTrackerPage() {
-  const [actions] = useState<Action[]>(SEED_ACTIONS);
+  const [actions, setActions] = useState<Action[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [usingFallback, setUsingFallback] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/action-plans')
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data: { actions: Action[] }) => {
+        if (data.actions.length > 0) {
+          setActions(data.actions);
+          setUsingFallback(false);
+        } else {
+          setActions(SEED_ACTIONS);
+          setUsingFallback(true);
+          console.warn('Action plans API returned empty — using seed data');
+        }
+      })
+      .catch((err) => {
+        console.warn('Action plans API unavailable — using seed data:', err);
+        setActions(SEED_ACTIONS);
+        setUsingFallback(true);
+      })
+      .finally(() => setIsLoading(false));
+  }, []);
+
   const [view, setView] = useState<View>('gantt');
   const [mode, setMode] = useState<Mode>('macro');
   const [filterHotel, setFilterHotel] = useState('');
@@ -134,8 +161,32 @@ export default function ActionPlanTrackerPage() {
 
   const detailAction = detailId !== null ? actions.find((a) => a.id === detailId) : null;
 
+  if (isLoading) {
+    return (
+      <div className="animate-pulse flex flex-col gap-5">
+        <div className="h-5 w-64 rounded" style={{ backgroundColor: 'var(--border)' }} />
+        <div className="h-8 w-80 rounded" style={{ backgroundColor: 'var(--border)' }} />
+        <div className="grid grid-cols-5 gap-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-24 rounded-lg" style={{ backgroundColor: 'var(--muted)' }} />
+          ))}
+        </div>
+        <div className="h-10 w-full rounded" style={{ backgroundColor: 'var(--muted)' }} />
+        <div className="h-96 rounded-lg" style={{ backgroundColor: 'var(--muted)' }} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-5 font-[Inter,-apple-system,BlinkMacSystemFont,sans-serif]" style={{ color: 'var(--text-primary)' }}>
+      {usingFallback && (
+        <div
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[0.8125rem] font-medium"
+          style={{ background: 'var(--warning-bg)', color: 'var(--warning-text)', border: '1px solid var(--warning-border)' }}
+        >
+          ⚠ Showing sample data — database unavailable
+        </div>
+      )}
       {/* Breadcrumb */}
       <div className="flex items-center gap-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
         <span className="hover:underline cursor-pointer">Dashboard</span>

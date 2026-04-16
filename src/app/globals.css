@@ -11,6 +11,9 @@
   --border: #E5E5E5;
   --muted: #F5F5F5;
   --foreground: #172951;
+  --warning-bg: #FEF3C7;
+  --warning-text: #92400E;
+  --warning-border: #FDE68A;
 }
 
 @theme inline {
