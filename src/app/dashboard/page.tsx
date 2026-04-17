@@ -304,7 +304,7 @@ export default function DashboardHome() {
     if (selectedHotels.length > 0) {
       f.push({
         $schema: BASIC_SCHEMA,
-        target: { table: "Hotel Names", column: "Hotel" },
+        target: { table: "AAG", column: "Hotel" },
         operator: "In",
         values: selectedHotels,
       });
