@@ -123,7 +123,7 @@ export async function GET(request: Request) {
     }
 
     const response = await fetch(
-      `https://api.powerbi.com/v1.0/myorg/groups/${WORKSPACE_ID}/datasets/${DATASET_ID}/executeQueries`,
+      `https://api.powerbi.com/v1.0/myorg/datasets/${DATASET_ID}/executeQueries`,
       {
         method: "POST",
         headers: {
