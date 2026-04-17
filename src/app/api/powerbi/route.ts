@@ -98,23 +98,24 @@ async function generateEmbedToken(
 
   console.info(`[PowerBI] Token strategy | workspace=${workspaceId} | report=${reportId} | dataset=${datasetId} | needsRls=${needsRls} | requestedRole=${role} | effectiveRole=${effectiveRole} | availableRoles=[${rlsInfo.roles.join(', ')}]`);
 
-  // ────────────────────────────────────────────────────────────────────────
-  // RLS TEMPORALMENTE NEUTRALIZADO (17 abril 2026)
-  // ────────────────────────────────────────────────────────────────────────
-  // Motivo: Microsoft no permite Service Principal + executeQueries sobre
-  // datasets con RLS. Esto rompe las KPI cards del Home (PowerBINotAuthorizedException).
-  //
-  // Mientras no haya propietarios en producción (Assignment Required en Azure AD
-  // bloquea a todos menos T2BGFGREAM), forzamos tokens sin effective identity.
-  // Los roles RLS siguen definidos en los datasets y se reactivarán cuando se
-  // implemente OBO flow (token del usuario autenticado) antes del piloto.
-  //
-  // Para reactivar: restaurar el bloque if (needsRls && datasetId) { ... } else { ... }
-  // Toda la lógica de apoyo (datasetHasRls, WORKSPACE_ROLE_MAP, VALID_ROLES,
-  // getRoleFromEmail) se mantiene intacta para facilitar la reactivación.
-  // ────────────────────────────────────────────────────────────────────────
   let body: any;
-  body = { accessLevel: "View" };
+
+  if (needsRls && datasetId) {
+    // Dataset requires effective identity — send RLS identity with the correct role
+    body = {
+      accessLevel: "View",
+      identities: [
+        {
+          username: "QuantaViewer",
+          roles: [effectiveRole],
+          datasets: [datasetId],
+        },
+      ],
+    };
+  } else {
+    // No RLS required — simple View token
+    body = { accessLevel: "View" };
+  }
 
   let response = await fetch(url, {
     method: "POST",
