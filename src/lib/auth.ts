@@ -1,6 +1,8 @@
 import type { NextAuthOptions } from "next-auth";
 import AzureADProvider from "next-auth/providers/azure-ad";
 
+const useSecureCookies = (process.env.NEXTAUTH_URL ?? "").startsWith("https://");
+
 export const authOptions: NextAuthOptions = {
   providers: [
     AzureADProvider({
@@ -29,38 +31,46 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   cookies: {
     sessionToken: {
-      name: `__Secure-next-auth.session-token`,
+      name: useSecureCookies
+        ? `__Secure-next-auth.session-token`
+        : `next-auth.session-token`,
       options: {
         httpOnly: true,
-        sameSite: "none" as const,
+        sameSite: useSecureCookies ? ("none" as const) : ("lax" as const),
         path: "/",
-        secure: true,
+        secure: useSecureCookies,
       },
     },
     callbackUrl: {
-      name: `__Secure-next-auth.callback-url`,
+      name: useSecureCookies
+        ? `__Secure-next-auth.callback-url`
+        : `next-auth.callback-url`,
       options: {
-        sameSite: "none" as const,
+        sameSite: useSecureCookies ? ("none" as const) : ("lax" as const),
         path: "/",
-        secure: true,
+        secure: useSecureCookies,
       },
     },
     csrfToken: {
-      name: `__Host-next-auth.csrf-token`,
+      name: useSecureCookies
+        ? `__Host-next-auth.csrf-token`
+        : `next-auth.csrf-token`,
       options: {
         httpOnly: true,
-        sameSite: "none" as const,
+        sameSite: useSecureCookies ? ("none" as const) : ("lax" as const),
         path: "/",
-        secure: true,
+        secure: useSecureCookies,
       },
     },
     state: {
-      name: `__Secure-next-auth.state`,
+      name: useSecureCookies
+        ? `__Secure-next-auth.state`
+        : `next-auth.state`,
       options: {
         httpOnly: true,
-        sameSite: "none" as const,
+        sameSite: useSecureCookies ? ("none" as const) : ("lax" as const),
         path: "/",
-        secure: true,
+        secure: useSecureCookies,
         maxAge: 900,
       },
     },
