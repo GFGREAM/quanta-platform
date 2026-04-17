@@ -17,8 +17,7 @@
       "Bash(wsl bash:*)",
       "Bash(npx tsx:*)",
       "Bash(npx tsc:*)",
-      "Bash(npx next:*)",
-      "Bash(git revert:*)"
+      "Bash(npx next:*)"
     ]
   }
 }

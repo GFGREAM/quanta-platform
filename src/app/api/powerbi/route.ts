@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { ConfidentialClientApplication } from "@azure/msal-node";
 
 function getMsalClient() {
@@ -151,12 +153,16 @@ async function generateEmbedToken(
 
 export async function GET(request: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const reportId = searchParams.get("reportId");
     const workspaceId = searchParams.get("workspaceId") || process.env.POWERBI_WORKSPACE_ID;
 
-    // AUTH NEUTRALIZADO: rol hardcodeado mientras no hay sesión activa
-    const userRole = WORKSPACE_ROLE_MAP[workspaceId!] || "GFGAM";
+    const userRole = WORKSPACE_ROLE_MAP[workspaceId!] || getRoleFromEmail(session.user.email);
 
     if (!reportId) {
       return NextResponse.json({ error: "reportId is required" }, { status: 400 });

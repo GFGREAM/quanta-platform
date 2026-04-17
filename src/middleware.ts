@@ -1,5 +1,18 @@
-// AUTH TEMPORALMENTE NEUTRALIZADO — middleware no protege ninguna ruta.
-// Para reactivar: restaurar getToken + redirect a /login (ver git history).
-import { NextResponse } from "next/server";
-export function middleware() { return NextResponse.next(); }
-export const config = { matcher: [] };
+import { getToken } from "next-auth/jwt";
+import { NextRequest, NextResponse } from "next/server";
+
+export async function middleware(request: NextRequest) {
+  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+
+  if (!token) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("callbackUrl", request.url);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ["/dashboard/:path*"],
+};
