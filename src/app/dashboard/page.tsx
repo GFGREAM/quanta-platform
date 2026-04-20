@@ -65,9 +65,9 @@ function formatValue(value: number | null): string {
 
 type KpiKey = "revenue" | "expenses" | "gop" | "ebitda";
 
-const KPI_CONFIG: { key: KpiKey; label: string; color: string }[] = [
+const KPI_CONFIG: { key: KpiKey; label: string; color: string; invertColor?: boolean }[] = [
   { key: "revenue", label: "Revenue", color: "#00AFAD" },
-  { key: "expenses", label: "Expenses", color: "#EF4444" },
+  { key: "expenses", label: "Expenses", color: "#EF4444", invertColor: true },
   { key: "gop", label: "GOP", color: "#00AFAD" },
   { key: "ebitda", label: "EBITDA", color: "#00AFAD" },
 ];
@@ -78,12 +78,13 @@ function calcVariance(actual: number | null, compare: number | null): { pct: str
   return { pct: `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`, positive: pct >= 0 };
 }
 
-function VarianceBadge({ label, actual, compare, loading }: { label: string; actual: number | null; compare: number | null; loading: boolean }) {
+function VarianceBadge({ label, actual, compare, loading, invert }: { label: string; actual: number | null; compare: number | null; loading: boolean; invert?: boolean }) {
   if (loading) return <div className="h-4 w-20 bg-gray-100 rounded animate-pulse" />;
   const v = calcVariance(actual, compare);
-  if (!v) return <span className="text-sm" style={{ color: "#9CA3AF" }}>N/A <span className="font-normal">{label}</span></span>;
+  if (!v) return <span className="text-base" style={{ color: "#9CA3AF" }}>N/A <span className="font-normal">{label}</span></span>;
+  const isGood = invert ? !v.positive : v.positive;
   return (
-    <span className="text-sm font-medium" style={{ color: v.positive ? "#10B981" : "#EF4444" }}>
+    <span className="text-base font-medium" style={{ color: isGood ? "#10B981" : "#EF4444" }}>
       {v.pct} <span className="font-normal" style={{ color: "var(--text-secondary)" }}>{label}</span>
     </span>
   );
@@ -96,6 +97,7 @@ function KpiCard({
   ly,
   color,
   loading,
+  invertColor,
 }: {
   label: string;
   value: number | null;
@@ -103,10 +105,11 @@ function KpiCard({
   ly: number | null;
   color: string;
   loading: boolean;
+  invertColor?: boolean;
 }) {
   return (
     <div
-      className="bg-white rounded-lg border p-5 transition-shadow hover:shadow-md"
+      className="bg-white rounded-lg border px-6 py-5 transition-shadow hover:shadow-md"
       style={{ borderColor: "var(--border)" }}
     >
       {/* Row 1: Label + Icon */}
@@ -123,16 +126,16 @@ function KpiCard({
       </div>
       {/* Row 2: Value */}
       {loading ? (
-        <div className="h-9 w-32 bg-gray-200 rounded animate-pulse mb-3" />
+        <div className="h-8 w-32 bg-gray-200 rounded animate-pulse mb-3" />
       ) : (
-        <p className="text-3xl font-bold truncate mb-3" style={{ color: "var(--primary)" }}>
+        <p className="text-2xl font-bold truncate mb-3" style={{ color: "var(--primary)" }}>
           {formatValue(value)}
         </p>
       )}
       {/* Row 3: Variances */}
       <div className="flex items-center justify-between pt-3 border-t" style={{ borderColor: "var(--border)" }}>
-        <VarianceBadge label="vs plan" actual={value} compare={budget} loading={loading} />
-        <VarianceBadge label="vs LY" actual={value} compare={ly} loading={loading} />
+        <VarianceBadge label="vs plan" actual={value} compare={budget} loading={loading} invert={invertColor} />
+        <VarianceBadge label="vs LY" actual={value} compare={ly} loading={loading} invert={invertColor} />
       </div>
     </div>
   );
@@ -151,7 +154,7 @@ function FilterSelect({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+      <label className="text-xs font-medium" style={{ color: "#475569" }}>
         {label}
       </label>
       <select
@@ -218,7 +221,7 @@ function MultiSelect({
 
   return (
     <div className="flex flex-col gap-1 relative" ref={ref}>
-      <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+      <label className="text-xs font-medium" style={{ color: "#475569" }}>
         {label}
       </label>
       <button
@@ -363,7 +366,7 @@ export default function DashboardHome() {
         </div>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {KPI_CONFIG.map(({ key, label, color }) => (
+        {KPI_CONFIG.map(({ key, label, color, invertColor }) => (
           <KpiCard
             key={key}
             label={label}
@@ -372,6 +375,7 @@ export default function DashboardHome() {
             ly={kpis[`${key}_ly` as keyof KpiData]}
             color={color}
             loading={kpisLoading}
+            invertColor={invertColor}
           />
         ))}
       </div>
