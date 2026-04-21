@@ -4,15 +4,10 @@ import { ConfidentialClientApplication } from "@azure/msal-node";
 const DATASET_ID = process.env.POWERBI_DATASET_ID || "";
 const WORKSPACE_ID = process.env.POWERBI_WORKSPACE_ID || "";
 
-const REVENUE_USD = "SUM('AAG'[Rooms Revenue]) + SUM('AAG'[Other Revenue])";
-const EXPENSES_USD = "SUM('AAG'[Departmental Expenses]) + SUM('AAG'[Undistributed Expenses])";
-const GOP_USD = `${REVENUE_USD} - ${EXPENSES_USD}`;
-const EBITDA_USD = `${GOP_USD} - SUM('AAG'[Other Expenses]) - SUM('AAG'[Non Operating])`;
-
-const REVENUE_LOCAL = "SUM('AAG'[Rooms Revenue Non Converted]) + SUM('AAG'[Other Revenue Non Converted])";
-const EXPENSES_LOCAL = "SUM('AAG'[Departmental Expenses Non Converted]) + SUM('AAG'[Undistributed Expenses Non Converted])";
-const GOP_LOCAL = `${REVENUE_LOCAL} - ${EXPENSES_LOCAL}`;
-const EBITDA_LOCAL = `${GOP_LOCAL} - SUM('AAG'[Other Expenses Non Converted]) - SUM('AAG'[Non Operating Non Converted])`;
+const REVENUE = "[Total Rev$]";
+const EXPENSES = "[Total Exp$]";
+const GOP = "[GOP$]";
+const EBITDA = "[EBITDA$]";
 
 const NULL_RESPONSE = {
   revenue: null, expenses: null, gop: null, ebitda: null,
@@ -61,13 +56,14 @@ function buildBaseFiltersMultiMonth(hotels: string[], months: string[]): string[
   return filters;
 }
 
-function joinFilters(base: string[], year: string | null, data: string): string {
+function joinFilters(base: string[], year: string | null, data: string, metric: string): string {
   const filters = [...base];
   if (year && year !== "All") {
     filters.push(`'Date Table'[Year] = ${year}`);
   }
   filters.push(`'AAG'[Data] = "${data}"`);
   filters.push(`'AAG'[Week Rank] = 1`);
+  filters.push(`'Currency Slicer'[Currency] = "${metric}"`);
   return filters.join(", ");
 }
 
@@ -82,21 +78,12 @@ export async function GET(request: Request) {
     const hotels = hotelParam ? hotelParam.split(",").filter(Boolean) : [];
     const months = month ? month.split(",").filter(Boolean) : [];
 
-    if (metric === "Local" && hotels.length === 0) {
-      return NextResponse.json(NULL_RESPONSE);
-    }
-
-    const REVENUE = metric === "Local" ? REVENUE_LOCAL : REVENUE_USD;
-    const EXPENSES = metric === "Local" ? EXPENSES_LOCAL : EXPENSES_USD;
-    const GOP = metric === "Local" ? GOP_LOCAL : GOP_USD;
-    const EBITDA = metric === "Local" ? EBITDA_LOCAL : EBITDA_USD;
-
     const base = buildBaseFiltersMultiMonth(hotels, months);
-    const outlookFilters = joinFilters(base, year, "Outlook");
-    const budgetFilters = joinFilters(base, year, "Budget");
+    const outlookFilters = joinFilters(base, year, "Outlook", metric);
+    const budgetFilters = joinFilters(base, year, "Budget", metric);
 
     const lyYear = year && year !== "All" ? String(Number(year) - 1) : null;
-    const lyFilters = joinFilters(base, lyYear, "Outlook");
+    const lyFilters = joinFilters(base, lyYear, "Outlook", metric);
 
     const query = `EVALUATE ROW(
   "Revenue", CALCULATE(${REVENUE}, ${outlookFilters}),

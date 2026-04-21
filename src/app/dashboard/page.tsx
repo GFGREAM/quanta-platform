@@ -11,25 +11,25 @@ const PowerBIEmbed = dynamic(
 );
 
 const HOTELS = [
+  "Almare Isla Mujeres",
   "Casa Dorada",
   "Dreams Aventuras",
   "Dreams Karibana",
   "Dreams Vista",
   "Grand Hyatt",
+  "Hacienda del Mar Club",
+  "Hacienda del Mar Hotel",
   "HP Bogota",
+  "Hyatt House Santa Fe",
+  "Izla Hotel",
   "JW Cancun",
+  "LC Solaz Club",
+  "LC Solaz Hotel",
   "MI Cancun",
   "Secrets & Dreams BM",
   "St Regis Mexico",
-  "Zoetry Marigot Bay",
-  "Almare Isla Mujeres",
-  "Hyatt House Santa Fe",
   "Waldorf Astoria Costa Rica",
-  "Izla Hotel",
-  "Hacienda del Mar Hotel",
-  "LC Solaz Hotel",
-  "Hacienda del Mar Club",
-  "LC Solaz Club",
+  "Zoetry Marigot Bay",
 ];
 
 const YEARS = [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026, 2027] as const;
