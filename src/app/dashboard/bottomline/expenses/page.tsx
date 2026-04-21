@@ -174,11 +174,6 @@ const NON_DISTRIBUTED: MonthlyLineItem[] = [
   },
 ];
 
-const GROUP_META: { key: string; label: string; items: MonthlyLineItem[] }[] = [
-  { key: 'dept', label: 'Grand Total Dept Costs', items: DEPT_COSTS },
-  { key: 'nondist', label: 'Grand Total Non-Distributed', items: NON_DISTRIBUTED },
-];
-
 // Data-viz palette for composition segments. Mixes CSS tokens with a few data-only
 // hues. Kept small on purpose — one segment per expense line in order.
 const SEGMENT_COLORS = [
@@ -244,6 +239,11 @@ function fmtVarDollar(v: number) {
 function fmtPct(v: number) {
   const sign = v > 0 ? '+' : '';
   return `${sign}${v.toFixed(1)}%`;
+}
+
+// Guard against divide-by-zero when a base (e.g. Budget or LY actual) is 0.
+function safePct(diff: number, base: number) {
+  return base !== 0 ? (diff / base) * 100 : 0;
 }
 
 // Expense semantics: ACT > BUD is UNFAVORABLE (over budget → red).
@@ -754,8 +754,8 @@ function DataRow({
 }) {
   const diffBud = act - bud;
   const diffLy = act - actLy;
-  const pctBud = (diffBud / bud) * 100;
-  const pctLy = (diffLy / actLy) * 100;
+  const pctBud = safePct(diffBud, bud);
+  const pctLy = safePct(diffLy, actLy);
   const budColor = varColor(act, bud);
   const budBg = varBg(act, bud);
   const lyColor = varColor(act, actLy);
@@ -840,8 +840,8 @@ function SubtotalRow({
 }) {
   const diffBud = act - bud;
   const diffLy = act - actLy;
-  const pctBud = (diffBud / bud) * 100;
-  const pctLy = (diffLy / actLy) * 100;
+  const pctBud = safePct(diffBud, bud);
+  const pctLy = safePct(diffLy, actLy);
   const budColor = varColor(act, bud);
   const lyColor = varColor(act, actLy);
 
@@ -878,8 +878,8 @@ function SubtotalRow({
 function GrandTotalRow({ act, bud, actLy }: { act: number; bud: number; actLy: number }) {
   const diffBud = act - bud;
   const diffLy = act - actLy;
-  const pctBud = (diffBud / bud) * 100;
-  const pctLy = (diffLy / actLy) * 100;
+  const pctBud = safePct(diffBud, bud);
+  const pctLy = safePct(diffLy, actLy);
   const budColor = varColor(act, bud);
   const lyColor = varColor(act, actLy);
 
