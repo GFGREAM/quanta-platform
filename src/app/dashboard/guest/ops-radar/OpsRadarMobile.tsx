@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo, useState } from 'react';
 import {
   DIMS, PROPS,
   DEEP, GREEN_OCEAN, BORDER_LIGHT, BORDER, TEXT_MUTED, TEXT_PRIMARY,
@@ -8,6 +7,7 @@ import {
   heatColor, heatLabel, SCALE_STEPS,
   ANG_FOR, pointAt, polyAt,
 } from './data';
+import { useOpsRadar } from './useOpsRadar';
 
 // Smaller canvas for mobile — still square-ish so the radar stays legible.
 const CX = 170, CY = 155, RAD = 118;
@@ -16,14 +16,12 @@ const pt = (a: number, r: number) => pointAt(CX, CY, a, r);
 const poly = (r: number) => polyAt(CX, CY, ANG, r);
 
 export default function OpsRadarMobile() {
-  const [active, setActive] = useState<Set<number>>(new Set([0, 1, 2, 3, 4, 5, 6]));
-  const [crit, setCrit] = useState<number | null>(null);
-
-  const avgs = useMemo(() => PROPS.map(p => p.scores.reduce((s, v) => s + v, 0) / p.scores.length), []);
-  const myProp = PROPS.find(p => p.mine)!;
-  const ourAvg = myProp.scores.reduce((s, v) => s + v, 0) / myProp.scores.length;
-  const topAvg = Math.max(...avgs);
-  const best = PROPS[avgs.indexOf(topAvg)];
+  const {
+    active, toggleProp,
+    crit, setCrit,
+    ourAvg, topAvg, best,
+    sortedForRadar, cols, sortedForHeatmap,
+  } = useOpsRadar();
 
   const kpis = [
     { accent: 'var(--primary)', lbl: 'Properties', val: String(PROPS.length), sub: 'Peninsula Papagayo' },
@@ -31,20 +29,6 @@ export default function OpsRadarMobile() {
     { accent: SUCCESS, lbl: 'Top rated', val: best.name, sub: topAvg.toFixed(1) + ' / 5' },
     { accent: DANGER, lbl: 'Gap vs leader', val: (topAvg - ourAvg).toFixed(1) + ' pts', sub: 'Waldorf vs top' },
   ];
-
-  const toggleProp = (i: number) => {
-    setActive(prev => {
-      const n = new Set(prev);
-      if (n.has(i)) { if (n.size > 1) n.delete(i); }
-      else n.add(i);
-      return n;
-    });
-  };
-
-  const sortedForRadar = [...PROPS.entries()].sort(([, a], [, b]) => (a.mine ? 1 : 0) - (b.mine ? 1 : 0));
-  const cols = crit !== null ? [crit] : DIMS.map((_, i) => i);
-  const sortedForHeatmap = PROPS.map((p, i) => ({ ...p, idx: i }))
-    .sort((a, b) => b.scores.reduce((s, v) => s + v, 0) - a.scores.reduce((s, v) => s + v, 0));
 
   return (
     <div className="flex flex-col gap-4 p-4" style={{ background: 'var(--background)' }}>

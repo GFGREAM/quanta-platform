@@ -24,10 +24,8 @@ export const PROPS: Prop[] = [
 // ── Styling tokens used by both views ────────────────────────
 export const DEEP = 'var(--primary)';
 export const GREEN_OCEAN = 'var(--accent)';
-export const LIGHT_GREEN = 'var(--accent-light)';
 export const BORDER_LIGHT = 'var(--border-light)';
 export const BORDER = 'var(--border)';
-export const MUTED = 'var(--muted)';
 export const TEXT_MUTED = 'var(--text-muted)';
 export const TEXT_SECONDARY = 'var(--text-secondary)';
 export const TEXT_PRIMARY = 'var(--primary)';

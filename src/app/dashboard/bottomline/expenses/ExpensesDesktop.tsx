@@ -3,6 +3,7 @@
 import { Fragment, useMemo, useState } from 'react';
 import { ChevronRight, ChevronDown, TrendingUp, TrendingDown } from 'lucide-react';
 import KpiCard from '@/components/ui/KpiCard';
+import { selectStyle } from '@/lib/selectStyle';
 import {
   DEPT_COSTS,
   NON_DISTRIBUTED,
@@ -12,10 +13,7 @@ import {
   MONTHS_SHORT,
   SCOPE_LABEL,
   SEGMENT_COLORS,
-  selectStyle,
-  viewItem,
   sumMonthlySeries,
-  sumScalar,
   fmtMoneyShort,
   fmtVarDollar,
   fmtPct,
@@ -27,6 +25,7 @@ import {
   type MonthlyLineItem,
   type Group,
 } from './data';
+import { useExpensesData } from './useExpensesData';
 
 type Props = {
   hotel: string; setHotel: (v: string) => void;
@@ -49,17 +48,8 @@ export default function ExpensesDesktop({
     });
   };
 
-  const monthIdx = MONTHS.indexOf(month as typeof MONTHS[number]);
-
-  const viewedDept = useMemo(
-    () => DEPT_COSTS.map((it) => viewItem(it, monthIdx, timeframe)),
-    [monthIdx, timeframe],
-  );
-  const viewedNonDist = useMemo(
-    () => NON_DISTRIBUTED.map((it) => viewItem(it, monthIdx, timeframe)),
-    [monthIdx, timeframe],
-  );
-  const allItems = useMemo(() => [...viewedDept, ...viewedNonDist], [viewedDept, viewedNonDist]);
+  const { monthIdx, viewedDept, viewedNonDist, allItems, totals, drivers, netVar } =
+    useExpensesData(month, timeframe);
 
   const viewedGroups = useMemo<Group[]>(
     () => [
@@ -68,32 +58,6 @@ export default function ExpensesDesktop({
     ],
     [viewedDept, viewedNonDist],
   );
-
-  const totals = useMemo(() => {
-    const deptAct = sumScalar(viewedDept, 'act');
-    const deptBud = sumScalar(viewedDept, 'bud');
-    const deptLy = sumScalar(viewedDept, 'actLy');
-    const ndAct = sumScalar(viewedNonDist, 'act');
-    const ndBud = sumScalar(viewedNonDist, 'bud');
-    const ndLy = sumScalar(viewedNonDist, 'actLy');
-    const gtAct = deptAct + ndAct;
-    const gtBud = deptBud + ndBud;
-    const gtLy = deptLy + ndLy;
-    return { deptAct, deptBud, deptLy, ndAct, ndBud, ndLy, gtAct, gtBud, gtLy };
-  }, [viewedDept, viewedNonDist]);
-
-  const drivers = useMemo(() => {
-    const withVar = allItems.map((it) => ({
-      name: it.name.replace(/^Total /, ''),
-      diff: it.act - it.bud,
-      pct: it.bud !== 0 ? ((it.act - it.bud) / it.bud) * 100 : 0,
-    }));
-    const overruns = withVar.filter((d) => d.diff > 0).sort((a, b) => b.diff - a.diff).slice(0, 5);
-    const savings = withVar.filter((d) => d.diff < 0).sort((a, b) => a.diff - b.diff).slice(0, 5);
-    return { overruns, savings };
-  }, [allItems]);
-
-  const netVar = totals.gtAct - totals.gtBud;
 
   return (
     <div className="flex flex-col gap-5" style={{ color: 'var(--text-primary)' }}>
