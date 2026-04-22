@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { DollarSign, Info } from "lucide-react";
 import type { PowerBIFilter } from "@/components/powerbi/PowerBIEmbed";
+import { POWERBI_REPORTS } from "@/lib/powerbi-config";
 
 const PowerBIEmbed = dynamic(
   () => import("@/components/powerbi/PowerBIEmbed"),
@@ -391,8 +392,8 @@ export default function DashboardHome() {
       </div>
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <PowerBIEmbed
-          workspaceId="3eabf576-cb9c-4f2e-970d-b29d851d31b3"
-          reportId="f05be719-0c0a-43a8-8498-c42d2fa6b8ea"
+          workspaceId={POWERBI_REPORTS.home.workspaceId}
+          reportId={POWERBI_REPORTS.home.reportId}
           filters={filters}
         />
       </div>
