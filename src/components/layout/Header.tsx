@@ -56,7 +56,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   return (
     <header className="fixed top-0 left-0 right-0 h-32 bg-white border-b flex items-center justify-between px-4 z-50" style={{ borderColor: 'var(--border)' }}>
       <div className="flex items-center gap-3">
-        <button onClick={onMenuClick} className="p-2 rounded-lg hover:bg-[#F3F4F6] transition-colors md:hidden"><Menu size={20} style={{ color: 'var(--primary)' }} /></button>
+        <button onClick={onMenuClick} className="p-2 rounded-lg hover:bg-[var(--bg-hover)] transition-colors md:hidden"><Menu size={20} style={{ color: 'var(--primary)' }} /></button>
         <Link href="/dashboard" className="flex items-center gap-3">
           <Image src="/quanta_logo.png" alt="Quanta" width={112} height={28} className="w-28 h-auto" />
         </Link>
@@ -68,7 +68,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           {searchOpen && searchQuery.trim() && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border py-1" style={{ borderColor: 'var(--border)' }}>
               {filteredDashboards.length > 0 ? filteredDashboards.map((d) => (
-                <button key={d.href} onClick={() => { router.push(d.href); setSearchQuery(''); setSearchOpen(false); }} className="w-full text-left px-4 py-2 text-sm hover:bg-[#F3F4F6] transition-colors" style={{ color: 'var(--primary)' }}>{d.label}</button>
+                <button key={d.href} onClick={() => { router.push(d.href); setSearchQuery(''); setSearchOpen(false); }} className="w-full text-left px-4 py-2 text-sm hover:bg-[var(--bg-hover)] transition-colors" style={{ color: 'var(--primary)' }}>{d.label}</button>
               )) : (
                 <p className="px-4 py-2 text-sm" style={{ color: 'var(--text-secondary)' }}>No se encontraron dashboards</p>
               )}
@@ -77,7 +77,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         </div>
       </div>
       <div className="relative">
-        <button onClick={() => setMenuOpen(!menuOpen)} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[#F3F4F6] transition-colors">
+        <button onClick={() => setMenuOpen(!menuOpen)} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[var(--bg-hover)] transition-colors">
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium" style={{ backgroundColor: 'var(--accent)' }}>{initials}</div>
           <span className="text-sm font-medium hidden md:inline" style={{ color: 'var(--primary)' }}>{userName}</span>
           <ChevronDown size={16} className="text-[var(--text-secondary)] hidden md:inline" />
@@ -87,7 +87,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             <p className="px-4 py-2 text-sm font-medium" style={{ color: 'var(--primary)' }}>{userName}</p>
             <p className="px-4 pb-2 text-xs" style={{ color: 'var(--text-secondary)' }}>{userEmail}</p>
             <div className="border-t" style={{ borderColor: 'var(--border)' }} />
-            <button onClick={() => signOut({ callbackUrl: '/login' })} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-[#F3F4F6] transition-colors"><LogOut size={16} />Cerrar sesion</button>
+            <button onClick={() => signOut({ callbackUrl: '/login' })} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-[var(--bg-hover)] transition-colors"><LogOut size={16} />Cerrar sesion</button>
           </div>
         )}
       </div>

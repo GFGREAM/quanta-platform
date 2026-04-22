@@ -45,7 +45,7 @@ export function heatColor(score: number) {
   if (score >= 3.5) return { bg: '#E0F7FF', text: '#0E4D6B' };
   if (score >= 3.0) return { bg: '#F0FFFE', text: '#0E7490' };
   if (score >= 2.5) return { bg: '#FFFBEB', text: '#92400E' };
-  if (score >= 2.0) return { bg: '#FEF2F2', text: '#EF4444' };
+  if (score >= 2.0) return { bg: '#FEF2F2', text: 'var(--danger)' };
   return { bg: '#FEE2E2', text: '#991B1B' };
 }
 

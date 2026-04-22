@@ -5,10 +5,9 @@ import { useState } from 'react';
 interface DashboardPlaceholderProps {
   title: string;
   category: string;
-  categoryPath: string;
 }
 
-export default function DashboardPlaceholder({ title, category, categoryPath }: DashboardPlaceholderProps) {
+export default function DashboardPlaceholder({ title, category }: DashboardPlaceholderProps) {
   const [isFavorite, setIsFavorite] = useState(false);
   return (
     <div>
@@ -22,9 +21,9 @@ export default function DashboardPlaceholder({ title, category, categoryPath }: 
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-semibold" style={{ color: 'var(--primary)' }}>{title}</h1>
         <div className="flex items-center gap-2">
-          <button onClick={() => setIsFavorite(!isFavorite)} className="p-2 rounded-lg hover:bg-[#F3F4F6] transition-colors"><Star size={18} fill={isFavorite ? '#00AFAD' : 'none'} color={isFavorite ? '#00AFAD' : 'var(--text-secondary)'} /></button>
-          <button className="p-2 rounded-lg hover:bg-[#F3F4F6] transition-colors"><RefreshCw size={18} style={{ color: 'var(--text-secondary)' }} /></button>
-          <button className="p-2 rounded-lg hover:bg-[#F3F4F6] transition-colors"><Maximize2 size={18} style={{ color: 'var(--text-secondary)' }} /></button>
+          <button onClick={() => setIsFavorite(!isFavorite)} className="p-2 rounded-lg hover:bg-[var(--bg-hover)] transition-colors"><Star size={18} fill={isFavorite ? 'var(--accent)' : 'none'} color={isFavorite ? 'var(--accent)' : 'var(--text-secondary)'} /></button>
+          <button className="p-2 rounded-lg hover:bg-[var(--bg-hover)] transition-colors"><RefreshCw size={18} style={{ color: 'var(--text-secondary)' }} /></button>
+          <button className="p-2 rounded-lg hover:bg-[var(--bg-hover)] transition-colors"><Maximize2 size={18} style={{ color: 'var(--text-secondary)' }} /></button>
         </div>
       </div>
       <div className="bg-white rounded-xl border flex items-center justify-center" style={{ borderColor: 'var(--border)', minHeight: 'calc(100vh - 220px)' }}>

@@ -3,6 +3,7 @@
 import { Fragment, useMemo, useState } from 'react';
 import { ChevronRight, ChevronDown, TrendingUp, TrendingDown } from 'lucide-react';
 import KpiCard from '@/components/ui/KpiCard';
+import { selectStyle } from '@/lib/selectStyle';
 
 type Timeframe = 'MTD' | 'YTD';
 type TrendScope = 'dept' | 'nondist' | 'total';
@@ -65,14 +66,6 @@ const SEASONALITY = [
 ];
 const expandMonthly = (marchValue: number): MonthlySeries =>
   SEASONALITY.map((f) => Math.round(marchValue * f));
-
-const selectStyle = {
-  borderColor: 'var(--border)',
-  color: 'var(--primary)',
-  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23172951' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
-  backgroundRepeat: 'no-repeat',
-  backgroundPosition: 'right 8px center',
-} as const;
 
 const DEPT_COSTS: MonthlyLineItem[] = [
   {
@@ -763,7 +756,7 @@ function DataRow({
 
   return (
     <tr
-      className={`border-b transition-colors ${expandable ? 'cursor-pointer hover:bg-[#F3F4F6]' : ''}`}
+      className={`border-b transition-colors ${expandable ? 'cursor-pointer hover:bg-[var(--bg-hover)]' : ''}`}
       style={{ borderColor: 'var(--border)', background: indent ? 'rgba(245,245,245,0.6)' : undefined }}
       onClick={expandable ? onToggle : undefined}
     >
@@ -880,8 +873,6 @@ function GrandTotalRow({ act, bud, actLy }: { act: number; bud: number; actLy: n
   const diffLy = act - actLy;
   const pctBud = safePct(diffBud, bud);
   const pctLy = safePct(diffLy, actLy);
-  const budColor = varColor(act, bud);
-  const lyColor = varColor(act, actLy);
 
   return (
     <tr style={{ background: 'var(--primary)' }}>

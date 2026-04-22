@@ -154,6 +154,7 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
         setLoading(false);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- filters are applied in a dedicated effect below; including them here would cause the entire embed to re-initialize on every filter change
   }, [reportId, workspaceId]);
 
   useEffect(() => {
@@ -176,7 +177,7 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#FAFAFA]">
           <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-[#00AFAD] border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
             <p className="text-sm text-gray-500">Loading dashboard...</p>
           </div>
         </div>
@@ -192,7 +193,7 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
                   setPermanentError(false);
                   embedReport();
                 }}
-                className="px-4 py-2 text-sm bg-[#00AFAD] text-white rounded-md hover:bg-[#009490] transition-colors"
+                className="px-4 py-2 text-sm bg-[var(--accent)] text-white rounded-md hover:opacity-90 transition-colors"
               >
                 Retry
               </button>

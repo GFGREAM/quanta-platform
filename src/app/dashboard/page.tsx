@@ -87,13 +87,13 @@ function VarianceBadge({ label, actual, compare, loading, invert }: { label: str
   if (!v) return <span className="text-base" style={{ color: "#9CA3AF" }}>N/A <span className="font-normal">{label}</span></span>;
   const isGood = invert ? !v.positive : v.positive;
   return (
-    <span className="text-base font-medium" style={{ color: isGood ? "#10B981" : "#EF4444" }}>
+    <span className="text-base font-medium" style={{ color: isGood ? "var(--success)" : "var(--danger)" }}>
       {v.pct} <span className="font-normal" style={{ color: "var(--text-secondary)" }}>{label}</span>
     </span>
   );
 }
 
-function KpiCard({
+function HomeKpiCard({
   label,
   value,
   budget,
@@ -379,7 +379,7 @@ export default function DashboardHome() {
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {KPI_CONFIG.map(({ key, label, color, invertColor }) => (
-          <KpiCard
+          <HomeKpiCard
             key={key}
             label={label}
             value={kpis[key]}
