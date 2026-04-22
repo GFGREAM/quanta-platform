@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Action, SEED_ACTIONS } from './data';
 
 type Mode = 'macro' | 'detail';
@@ -32,17 +32,20 @@ export function useActionPlan() {
     [actions, mode],
   );
 
-  const filtered = useMemo(() => {
-    return baseList.filter((a) => {
-      if (filterHotel && a.hotelProperty !== filterHotel) return false;
-      if (filterProject && a.project !== filterProject) return false;
-      if (filterArea && a.area !== filterArea) return false;
-      if (filterStatus && a.status !== filterStatus) return false;
-      if (filterPriority && a.priority !== filterPriority) return false;
-      if (filterOwner && a.owner !== filterOwner) return false;
-      return true;
-    });
-  }, [baseList, filterHotel, filterProject, filterArea, filterStatus, filterPriority, filterOwner]);
+  // Shared filter predicate — used by both the mode-scoped list and the
+  // KPI aggregation (which always spans all actions).
+  const matchesFilters = useCallback((a: Action) => {
+    if (filterHotel && a.hotelProperty !== filterHotel) return false;
+    if (filterProject && a.project !== filterProject) return false;
+    if (filterArea && a.area !== filterArea) return false;
+    if (filterStatus && a.status !== filterStatus) return false;
+    if (filterPriority && a.priority !== filterPriority) return false;
+    if (filterOwner && a.owner !== filterOwner) return false;
+    return true;
+  }, [filterHotel, filterProject, filterArea, filterStatus, filterPriority, filterOwner]);
+
+  const filtered = useMemo(() => baseList.filter(matchesFilters),
+    [baseList, matchesFilters]);
 
   const displayed = useMemo(() => {
     if (mode === 'macro') {
@@ -68,25 +71,22 @@ export function useActionPlan() {
     });
   }, [filtered, mode]);
 
+  // KPIs aggregate across ALL actions that pass the filter bar, regardless of
+  // Macro/Detail mode. Reason: sub-actions often carry the actual investment
+  // and return amounts — limiting the sum to macro rows (subProjectId === 1)
+  // would undercount. This mirrors the filter bar but bypasses the mode scope.
+  const filteredAll = useMemo(() => actions.filter(matchesFilters),
+    [actions, matchesFilters]);
+
   const stats = useMemo(() => {
-    const projectKeys = new Set<string>();
-    filtered.forEach((a) => {
-      if (a.projectId != null) projectKeys.add(`${a.hotelId ?? 'x'}::${a.projectId}`);
-    });
-    const macro = actions.filter(
-      (a) =>
-        a.subProjectId === 1 &&
-        a.projectId != null &&
-        projectKeys.has(`${a.hotelId ?? 'x'}::${a.projectId}`),
-    );
-    const totalInv = macro.reduce((sum, a) => sum + a.investmentUsd, 0);
-    const totalRet = macro.reduce((sum, a) => sum + a.expectedReturnUsd, 0);
+    const totalInv = filteredAll.reduce((sum, a) => sum + a.investmentUsd, 0);
+    const totalRet = filteredAll.reduce((sum, a) => sum + a.expectedReturnUsd, 0);
     const roiGlobal = totalInv > 0 ? Math.round(((totalRet - totalInv) / totalInv) * 100) : 0;
-    const inProgress = macro.filter((a) => a.status === 'In progress').length;
-    const completed = macro.filter((a) => a.status === 'Completed').length;
-    const pctComp = macro.length ? Math.round((completed / macro.length) * 100) : 0;
-    return { count: macro.length, totalInv, totalRet, roiGlobal, inProgress, completed, pctComp };
-  }, [actions, filtered]);
+    const inProgress = filteredAll.filter((a) => a.status === 'In progress').length;
+    const completed = filteredAll.filter((a) => a.status === 'Completed').length;
+    const pctComp = filteredAll.length ? Math.round((completed / filteredAll.length) * 100) : 0;
+    return { count: filteredAll.length, totalInv, totalRet, roiGlobal, inProgress, completed, pctComp };
+  }, [filteredAll]);
 
   const detailAction = detailId !== null ? actions.find((a) => a.id === detailId) ?? null : null;
 

@@ -131,27 +131,27 @@ export default function ActionPlanTrackerDesktop() {
       {/* Filters bar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
-          <select className="h-9 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterHotel} onChange={(e) => setFilterHotel(e.target.value)}>
+          <select className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterHotel} onChange={(e) => setFilterHotel(e.target.value)}>
             <option value="">All hotels</option>
             {hotelOptions.map((h) => <option key={h} value={h}>{h}</option>)}
           </select>
-          <select className="h-9 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterProject} onChange={(e) => setFilterProject(e.target.value)}>
+          <select className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterProject} onChange={(e) => setFilterProject(e.target.value)}>
             <option value="">All projects</option>
             {projectOptions.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
-          <select className="h-9 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterArea} onChange={(e) => setFilterArea(e.target.value)}>
+          <select className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterArea} onChange={(e) => setFilterArea(e.target.value)}>
             <option value="">All areas</option>
             {areaOptions.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
-          <select className="h-9 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+          <select className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
             <option value="">All statuses</option>
             {STATUS_LIST.filter((s) => statusOptions.includes(s)).map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
-          <select className="h-9 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
+          <select className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
             <option value="">All priorities</option>
             {PRIORITIES.filter((p) => priorityOptions.includes(p)).map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
-          <select className="h-9 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
+          <select className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
             <option value="">All owners</option>
             {ownerOptions.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
