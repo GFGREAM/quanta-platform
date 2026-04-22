@@ -58,6 +58,12 @@ export const PRIORITY_COLORS: Record<Priority, string> = {
   'Low': '#10B981',
 };
 
+// Evaluated once at module load. Both views anchor today's position in the
+// Gantt/timeline visualizations off these two — keep them here so the two
+// views can't drift.
+export const TODAY = new Date();
+export const CURRENT_MONTH = TODAY.getMonth();
+
 export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 export const AREAS = ['Marketing', 'Operations', 'Maintenance', 'Technology', 'Revenue', 'HR', 'F&B', 'Sales', 'PR / Communications', 'Other'];
 export const STATUS_LIST: Status[] = ['Pending', 'In progress', 'Completed', 'On hold', 'Cancelled'];
