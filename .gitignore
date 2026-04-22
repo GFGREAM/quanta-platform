@@ -25,6 +25,7 @@
 *.tar.gz
 _del_node_modules/
 oryx-manifest.toml
+deploy-manual/
 
 # misc
 .DS_Store
