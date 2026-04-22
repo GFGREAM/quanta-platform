@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { WORKSPACE_ROLE_MAP } from "@/lib/powerbi-config";
 import { ConfidentialClientApplication } from "@azure/msal-node";
 
 function getMsalClient() {
@@ -19,10 +20,6 @@ const VALID_ROLES = new Set([
 ]);
 
 const DEFAULT_ROLE = "GFGAM";
-
-const WORKSPACE_ROLE_MAP: Record<string, string> = {
-  "8926167c-fb2b-44ff-8aa2-bcff7fcf9339": "WACCR", // Guest Satisfaction
-};
 
 function getRoleFromEmail(email: string): string {
   const prefix = email.split("@")[0].toUpperCase();

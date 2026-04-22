@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { POWERBI_REPORTS } from "@/lib/powerbi-config";
 
 const PowerBIEmbed = dynamic(
   () => import("@/components/powerbi/PowerBIEmbed"),
@@ -15,8 +16,8 @@ export default function AirportPassengersPage() {
       </h1>
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <PowerBIEmbed
-          reportId="86b1f391-cafd-4752-8cde-a2e38aa4bfde"
-          workspaceId="8c4b04ea-258e-415f-a8cc-cc5533ddb07e"
+          reportId={POWERBI_REPORTS.airportPassengers.reportId}
+          workspaceId={POWERBI_REPORTS.airportPassengers.workspaceId}
         />
       </div>
     </div>

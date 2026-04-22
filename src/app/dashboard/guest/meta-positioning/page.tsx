@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { POWERBI_REPORTS } from "@/lib/powerbi-config";
 
 const PowerBIEmbed = dynamic(
   () => import("@/components/powerbi/PowerBIEmbed"),
@@ -15,8 +16,8 @@ export default function MetaPositioningPage() {
       </h1>
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <PowerBIEmbed
-          reportId="78093172-4f5c-4d8b-b644-f3a09351b147"
-          workspaceId="41e9f90d-3c73-42ea-a4f3-a805c7b90f1b"
+          reportId={POWERBI_REPORTS.metaPositioning.reportId}
+          workspaceId={POWERBI_REPORTS.metaPositioning.workspaceId}
         />
       </div>
     </div>
