@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { DollarSign, TrendingUp, TrendingDown, BarChart3, Info } from "lucide-react";
+import { DollarSign, Info } from "lucide-react";
 import type { PowerBIFilter } from "@/components/powerbi/PowerBIEmbed";
 
 const PowerBIEmbed = dynamic(
@@ -11,25 +11,25 @@ const PowerBIEmbed = dynamic(
 );
 
 const HOTELS = [
+  "Almare Isla Mujeres",
   "Casa Dorada",
   "Dreams Aventuras",
   "Dreams Karibana",
   "Dreams Vista",
   "Grand Hyatt",
+  "Hacienda del Mar Club",
+  "Hacienda del Mar Hotel",
   "HP Bogota",
+  "Hyatt House Santa Fe",
+  "Izla Hotel",
   "JW Cancun",
+  "LC Solaz Club",
+  "LC Solaz Hotel",
   "MI Cancun",
   "Secrets & Dreams BM",
   "St Regis Mexico",
-  "Zoetry Marigot Bay",
-  "Almare Isla Mujeres",
-  "Hyatt House Santa Fe",
   "Waldorf Astoria Costa Rica",
-  "Izla Hotel",
-  "Hacienda del Mar Hotel",
-  "LC Solaz Hotel",
-  "Hacienda del Mar Club",
-  "LC Solaz Club",
+  "Zoetry Marigot Bay",
 ];
 
 const YEARS = [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026, 2027] as const;
@@ -65,11 +65,11 @@ function formatValue(value: number | null): string {
 
 type KpiKey = "revenue" | "expenses" | "gop" | "ebitda";
 
-const KPI_CONFIG: { key: KpiKey; label: string; icon: typeof DollarSign; color: string }[] = [
-  { key: "revenue", label: "Revenue", icon: DollarSign, color: "#10B981" },
-  { key: "expenses", label: "Expenses", icon: TrendingDown, color: "#F59E0B" },
-  { key: "gop", label: "GOP", icon: TrendingUp, color: "#10B981" },
-  { key: "ebitda", label: "EBITDA", icon: BarChart3, color: "#00AFAD" },
+const KPI_CONFIG: { key: KpiKey; label: string; color: string; invertColor?: boolean }[] = [
+  { key: "revenue", label: "Revenue", color: "#00AFAD" },
+  { key: "expenses", label: "Expenses", color: "#EF4444", invertColor: true },
+  { key: "gop", label: "GOP", color: "#00AFAD" },
+  { key: "ebitda", label: "EBITDA", color: "#00AFAD" },
 ];
 
 function calcVariance(actual: number | null, compare: number | null): { pct: string; positive: boolean } | null {
@@ -78,12 +78,13 @@ function calcVariance(actual: number | null, compare: number | null): { pct: str
   return { pct: `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`, positive: pct >= 0 };
 }
 
-function VarianceBadge({ label, actual, compare, loading }: { label: string; actual: number | null; compare: number | null; loading: boolean }) {
+function VarianceBadge({ label, actual, compare, loading, invert }: { label: string; actual: number | null; compare: number | null; loading: boolean; invert?: boolean }) {
   if (loading) return <div className="h-4 w-20 bg-gray-100 rounded animate-pulse" />;
   const v = calcVariance(actual, compare);
-  if (!v) return <span className="text-[10px]" style={{ color: "#9CA3AF" }}>N/A <span className="font-normal">{label}</span></span>;
+  if (!v) return <span className="text-base" style={{ color: "#9CA3AF" }}>N/A <span className="font-normal">{label}</span></span>;
+  const isGood = invert ? !v.positive : v.positive;
   return (
-    <span className="text-[11px] font-medium" style={{ color: v.positive ? "#10B981" : "#EF4444" }}>
+    <span className="text-base font-medium" style={{ color: isGood ? "#10B981" : "#EF4444" }}>
       {v.pct} <span className="font-normal" style={{ color: "var(--text-secondary)" }}>{label}</span>
     </span>
   );
@@ -94,46 +95,47 @@ function KpiCard({
   value,
   budget,
   ly,
-  icon: Icon,
   color,
   loading,
+  invertColor,
 }: {
   label: string;
   value: number | null;
   budget: number | null;
   ly: number | null;
-  icon: React.ComponentType<{ size?: number | string; color?: string }>;
   color: string;
   loading: boolean;
+  invertColor?: boolean;
 }) {
   return (
     <div
-      className="bg-white rounded-lg border p-4 transition-shadow hover:shadow-md"
+      className="bg-white rounded-lg border px-6 py-5 transition-shadow hover:shadow-md"
       style={{ borderColor: "var(--border)" }}
     >
-      <div className="flex items-center gap-3">
+      {/* Row 1: Label + Icon */}
+      <div className="flex justify-between items-center mb-3">
+        <p className="text-base font-medium" style={{ color: "var(--text-secondary)" }}>
+          {label}
+        </p>
         <div
-          className="flex items-center justify-center w-10 h-10 rounded-lg shrink-0"
-          style={{ backgroundColor: `${color}15` }}
+          className="flex items-center justify-center w-8 h-8 rounded-full shrink-0"
+          style={{ backgroundColor: `${color}1A` }}
         >
-          <Icon size={20} color={color} />
-        </div>
-        <div className="min-w-0">
-          <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-            {label}
-          </p>
-          {loading ? (
-            <div className="h-6 w-24 bg-gray-200 rounded animate-pulse mt-1" />
-          ) : (
-            <p className="text-lg font-semibold truncate" style={{ color: "var(--primary)" }}>
-              {formatValue(value)}
-            </p>
-          )}
+          <DollarSign size={16} color={color} />
         </div>
       </div>
-      <div className="flex items-center justify-between mt-3 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
-        <VarianceBadge label="vs plan" actual={value} compare={budget} loading={loading} />
-        <VarianceBadge label="vs LY" actual={value} compare={ly} loading={loading} />
+      {/* Row 2: Value */}
+      {loading ? (
+        <div className="h-8 w-32 bg-gray-200 rounded animate-pulse mb-3" />
+      ) : (
+        <p className="text-2xl font-bold truncate mb-3" style={{ color: "var(--primary)" }}>
+          {formatValue(value)}
+        </p>
+      )}
+      {/* Row 3: Variances */}
+      <div className="flex items-center justify-between pt-3 border-t" style={{ borderColor: "var(--border)" }}>
+        <VarianceBadge label="vs plan" actual={value} compare={budget} loading={loading} invert={invertColor} />
+        <VarianceBadge label="vs LY" actual={value} compare={ly} loading={loading} invert={invertColor} />
       </div>
     </div>
   );
@@ -152,7 +154,7 @@ function FilterSelect({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+      <label className="text-xs font-medium" style={{ color: "#475569" }}>
         {label}
       </label>
       <select
@@ -219,7 +221,7 @@ function MultiSelect({
 
   return (
     <div className="flex flex-col gap-1 relative" ref={ref}>
-      <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+      <label className="text-xs font-medium" style={{ color: "#475569" }}>
         {label}
       </label>
       <button
@@ -338,27 +340,22 @@ export default function DashboardHome() {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold mb-1" style={{ color: "var(--primary)" }}>
-          Dashboard
-        </h1>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          Resumen general de propiedades
-        </p>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        {KPI_CONFIG.map(({ key, label, icon, color }) => (
-          <KpiCard
-            key={key}
-            label={label}
-            value={kpis[key]}
-            budget={kpis[`${key}_budget` as keyof KpiData]}
-            ly={kpis[`${key}_ly` as keyof KpiData]}
-            icon={icon}
-            color={color}
-            loading={kpisLoading}
-          />
-        ))}
+      {/* Header + Filters row */}
+      <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-semibold mb-1" style={{ color: "var(--primary)" }}>
+            At a Glance
+          </h1>
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            Performance Dashboard Summary
+          </p>
+        </div>
+        <div className="grid grid-cols-2 md:flex md:flex-wrap items-end gap-3">
+          <MultiSelect label="Hotel" options={HOTELS} selected={selectedHotels} onChange={setSelectedHotels} />
+          <FilterSelect label="Year" value={year} options={YEARS} onChange={setYear} />
+          <MultiSelect label="Month" options={MONTHS} selected={selectedMonths} onChange={setSelectedMonths} />
+          <FilterSelect label="Metric" value={metric} options={METRICS} onChange={setMetric} />
+        </div>
       </div>
       {showLocalNote && (
         <div className="flex items-center gap-1.5 mb-4">
@@ -368,11 +365,19 @@ export default function DashboardHome() {
           </p>
         </div>
       )}
-      <div className="flex flex-wrap items-end gap-3 mb-6">
-        <MultiSelect label="Hotel" options={HOTELS} selected={selectedHotels} onChange={setSelectedHotels} />
-        <FilterSelect label="Year" value={year} options={YEARS} onChange={setYear} />
-        <MultiSelect label="Month" options={MONTHS} selected={selectedMonths} onChange={setSelectedMonths} />
-        <FilterSelect label="Metric" value={metric} options={METRICS} onChange={setMetric} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {KPI_CONFIG.map(({ key, label, color, invertColor }) => (
+          <KpiCard
+            key={key}
+            label={label}
+            value={kpis[key]}
+            budget={kpis[`${key}_budget` as keyof KpiData]}
+            ly={kpis[`${key}_ly` as keyof KpiData]}
+            color={color}
+            loading={kpisLoading}
+            invertColor={invertColor}
+          />
+        ))}
       </div>
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <PowerBIEmbed
