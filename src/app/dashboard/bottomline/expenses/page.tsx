@@ -1212,9 +1212,9 @@ function LineChart({
           const budV = bud[activeIdx];
           const lyV = ly[activeIdx];
           const budDeltaV = cyV - budV;
-          const budPctV = (budDeltaV / budV) * 100;
+          const budPctV = safePct(budDeltaV, budV);
           const lyDeltaV = cyV - lyV;
-          const lyPctV = (lyDeltaV / lyV) * 100;
+          const lyPctV = safePct(lyDeltaV, lyV);
           const tx = x(activeIdx);
           const ty = Math.min(y(cyV), y(budV), y(lyV)) - 12;
           const boxW = 148;
