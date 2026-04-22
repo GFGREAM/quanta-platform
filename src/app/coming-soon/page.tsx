@@ -35,11 +35,14 @@ export default function Home() {
           transition: 'opacity 1.5s ease, transform 1.5s ease'
         }}
       >
-        <img
+        <Image
           id="logo"
           src="/quanta_logo.png"
           alt="QUANTA by GFG AM Logo"
+          width={480}
+          height={120}
           className="w-full h-auto"
+          priority
         />
       </div>
 

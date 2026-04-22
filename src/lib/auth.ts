@@ -14,7 +14,7 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, profile }) {
       if (profile) {
-        token.email = (profile as any).preferred_username || profile.email;
+        token.email = (profile as Record<string, unknown>).preferred_username as string || profile.email;
       }
       return token;
     },

@@ -54,7 +54,7 @@ async function getDatasetRlsInfo(
     if (rolesDirectRes.ok) {
       const rolesData = await rolesDirectRes.json();
       if (rolesData.value) {
-        rolesData.value.forEach((r: any) => {
+        rolesData.value.forEach((r: { name?: string }) => {
           if (r.name) roles.push(r.name);
         });
       }
@@ -98,7 +98,7 @@ async function generateEmbedToken(
 
   console.info(`[PowerBI] Token strategy | workspace=${workspaceId} | report=${reportId} | dataset=${datasetId} | needsRls=${needsRls} | requestedRole=${role} | effectiveRole=${effectiveRole} | availableRoles=[${rlsInfo.roles.join(', ')}]`);
 
-  let body: any;
+  let body: Record<string, unknown>;
 
   if (needsRls && datasetId) {
     // Dataset requires effective identity — send RLS identity with the correct role
@@ -205,7 +205,7 @@ export async function GET(request: Request) {
         if (datasets?.length === 1) {
           datasetId = datasets[0].id;
         } else if (datasets?.length > 1) {
-          const match = datasets.find((ds: any) => ds.name === report.name);
+          const match = datasets.find((ds: { id: string; name: string }) => ds.name === report.name);
           if (match) datasetId = match.id;
           else datasetId = datasets[0].id;
         }
