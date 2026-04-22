@@ -11,7 +11,7 @@ const PowerBIEmbed = dynamic(
 export default function AirportPassengersPage() {
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-semibold text-[#172951] mb-4">
+      <h1 className="text-2xl font-semibold mb-4" style={{ color: 'var(--primary)' }}>
         Airport Passengers
       </h1>
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">

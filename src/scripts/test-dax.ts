@@ -54,7 +54,7 @@ async function main() {
     }
 
     const result = await response.json();
-    const rows = result.results[0].tables[0].rows as Record<string, any>[];
+    const rows = result.results[0].tables[0].rows as Record<string, unknown>[];
     for (const row of rows) {
       for (const [key, value] of Object.entries(row)) {
         console.log(`  ${key}: ${value}`);
