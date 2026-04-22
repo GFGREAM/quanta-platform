@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { ChevronRight, SlidersHorizontal, X, Layers, GitBranch } from 'lucide-react';
 import { selectStyle } from '@/lib/selectStyle';
+import KpiCard from '@/components/ui/KpiCard';
 import {
   Action,
   AREA_COLORS, STATUS_COLORS, PRIORITY_COLORS,
@@ -93,11 +94,11 @@ export default function ActionPlanTrackerMobile() {
       {/* KPI carousel */}
       <div className="overflow-x-auto -mx-1 px-1">
         <div className="flex gap-2.5 min-w-min">
-          <MobileKpi label="Total actions" value={String(stats.count)} sub={`${stats.inProgress} in progress`} color="var(--primary)" />
-          <MobileKpi label="Total investment" value={fmtMoney(stats.totalInv)} sub="Committed" color="var(--primary)" />
-          <MobileKpi label="Expected return" value={fmtMoney(stats.totalRet)} sub="Projected" color="var(--accent)" />
-          <MobileKpi label="Average ROI" value={`${stats.roiGlobal}%`} sub="(Ret - Inv) / Inv" color="var(--accent)" />
-          <MobileKpi label="Completed" value={`${stats.pctComp}%`} sub={`${stats.completed} of ${stats.count}`} color="var(--accent-light)" />
+          <KpiCard label="Total actions" value={String(stats.count)} sub={`${stats.inProgress} in progress`} color="var(--primary)" compact />
+          <KpiCard label="Total investment" value={fmtMoney(stats.totalInv)} sub="Committed" color="var(--primary)" compact />
+          <KpiCard label="Expected return" value={fmtMoney(stats.totalRet)} sub="Projected" color="var(--accent)" compact />
+          <KpiCard label="Average ROI" value={`${stats.roiGlobal}%`} sub="(Ret - Inv) / Inv" color="var(--accent)" compact />
+          <KpiCard label="Completed" value={`${stats.pctComp}%`} sub={`${stats.completed} of ${stats.count}`} color="var(--accent-light)" compact />
         </div>
       </div>
 
@@ -139,35 +140,13 @@ export default function ActionPlanTrackerMobile() {
   );
 }
 
-// ─── KPI (mobile carousel card) ──────────────────────────────
-function MobileKpi({
-  label, value, sub, color,
-}: {
-  label: string; value: string; sub: string; color: string;
-}) {
-  return (
-    <div
-      className="shrink-0 w-[180px] rounded-lg border bg-white p-3 flex flex-col gap-1.5"
-      style={{ borderColor: 'var(--border)' }}
-    >
-      <div className="text-[0.625rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-        {label}
-      </div>
-      <div className="text-lg font-bold leading-tight tracking-tight" style={{ color }}>
-        {value}
-      </div>
-      <div className="text-[0.6875rem]" style={{ color: 'var(--text-secondary)' }}>{sub}</div>
-    </div>
-  );
-}
-
 // ─── Action card (replaces Gantt row / table row) ────────────
 function MobileActionCard({ action, onTap }: { action: Action; onTap: () => void }) {
   const color = AREA_COLORS[action.area] || '#9CA3AF';
   const sColor = STATUS_COLORS[action.status];
   const pColor = PRIORITY_COLORS[action.priority];
   const r = getRoi(action);
-  const roiColor = r > 0 ? '#10B981' : r < 0 ? '#EF4444' : 'var(--text-secondary)';
+  const roiColor = r > 0 ? 'var(--success)' : r < 0 ? 'var(--danger)' : 'var(--text-secondary)';
   const isChild = (action.subProjectId ?? 1) > 1;
 
   const left = dayPct(action.startDate);
@@ -217,7 +196,7 @@ function MobileActionCard({ action, onTap }: { action: Action; onTap: () => void
           />
           <div
             className="absolute top-0 h-full w-0.5 pointer-events-none"
-            style={{ left: `${todayPct.toFixed(2)}%`, background: '#EF4444' }}
+            style={{ left: `${todayPct.toFixed(2)}%`, background: 'var(--danger)' }}
           />
         </div>
         <div className="flex items-center justify-between text-[0.6875rem]" style={{ color: 'var(--text-muted)' }}>
@@ -232,7 +211,7 @@ function MobileActionCard({ action, onTap }: { action: Action; onTap: () => void
           <span className="text-[0.625rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
             Investment
           </span>
-          <span className="text-[0.8125rem] font-semibold" style={{ color: '#EF4444' }}>
+          <span className="text-[0.8125rem] font-semibold" style={{ color: 'var(--danger)' }}>
             {fmtMoney(action.investmentUsd)}
           </span>
         </div>

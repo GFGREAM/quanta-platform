@@ -4,10 +4,11 @@ import {
   DIMS, PROPS,
   DEEP, GREEN_OCEAN, BORDER_LIGHT, BORDER, TEXT_MUTED, TEXT_PRIMARY,
   ACTIVE_BG, SUCCESS, SUCCESS_BG, INFO, INFO_BG, WARNING, WARNING_BG, DANGER,
-  heatColor, heatLabel, SCALE_STEPS,
+  heatColor, SCALE_STEPS,
   ANG_FOR, pointAt, polyAt,
 } from './data';
 import { useOpsRadar } from './useOpsRadar';
+import KpiCard from '@/components/ui/KpiCard';
 
 // Smaller canvas for mobile — still square-ish so the radar stays legible.
 const CX = 170, CY = 155, RAD = 118;
@@ -45,7 +46,7 @@ export default function OpsRadarMobile() {
       {/* KPIs 2x2 */}
       <div className="grid grid-cols-2 gap-2.5">
         {kpis.map((k, i) => (
-          <MobileKpi key={i} label={k.lbl} value={String(k.val)} sub={k.sub} accent={k.accent} />
+          <KpiCard key={i} label={k.lbl} value={String(k.val)} sub={k.sub} accent={k.accent} compact />
         ))}
       </div>
 
@@ -277,24 +278,3 @@ export default function OpsRadarMobile() {
   );
 }
 
-function MobileKpi({
-  label, value, sub, accent,
-}: {
-  label: string; value: string; sub: string; accent: string;
-}) {
-  return (
-    <div
-      className="relative overflow-hidden rounded-lg border bg-white p-3 flex flex-col gap-1"
-      style={{ borderColor: 'var(--border)' }}
-    >
-      <div className="text-[0.625rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-        {label}
-      </div>
-      <div className="text-[0.9375rem] font-bold leading-tight tracking-tight" style={{ color: 'var(--primary)' }}>
-        {value}
-      </div>
-      <div className="text-[0.625rem]" style={{ color: 'var(--text-secondary)' }}>{sub}</div>
-      <div className="absolute bottom-0 left-0 right-0 h-[3px]" style={{ background: accent }} />
-    </div>
-  );
-}

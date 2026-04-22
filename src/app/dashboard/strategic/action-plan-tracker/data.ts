@@ -32,11 +32,11 @@ export interface Action {
 }
 
 export const AREA_COLORS: Record<string, string> = {
-  'Marketing': '#00AFAD',
+  'Marketing': 'var(--accent)',
   'Operations': '#3B82F6',
   'Maintenance': '#F59E0B',
   'Technology': '#8B5CF6',
-  'Revenue': '#10B981',
+  'Revenue': 'var(--success)',
   'HR': '#EC4899',
   'F&B': '#F97316',
   'Sales': '#172951',
@@ -45,17 +45,17 @@ export const AREA_COLORS: Record<string, string> = {
 };
 
 export const STATUS_COLORS: Record<Status, string> = {
-  'Completed': '#10B981',
-  'In progress': '#00AFAD',
+  'Completed': 'var(--success)',
+  'In progress': 'var(--accent)',
   'Pending': '#F59E0B',
   'On hold': '#9CA3AF',
-  'Cancelled': '#EF4444',
+  'Cancelled': 'var(--danger)',
 };
 
 export const PRIORITY_COLORS: Record<Priority, string> = {
-  'High': '#EF4444',
+  'High': 'var(--danger)',
   'Medium': '#F59E0B',
-  'Low': '#10B981',
+  'Low': 'var(--success)',
 };
 
 // Evaluated once at module load. Both views anchor today's position in the

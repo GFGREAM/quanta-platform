@@ -74,7 +74,7 @@ export function ActionDetailPanel({
                 {action.actionTitle}
               </h3>
               <button
-                className="w-8 h-8 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0 transition-colors hover:bg-[#F3F4F6]"
+                className="w-8 h-8 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--bg-hover)]"
                 style={{ color: 'var(--text-secondary)' }}
                 onClick={onClose}
               >
@@ -111,7 +111,7 @@ export function ActionDetailPanel({
                 <DetailRow label="Expected return" value={fmtMoney(action.expectedReturnUsd)} valueColor="#10B981" />
                 {(() => {
                   const r = getRoi(action);
-                  const c = r > 0 ? '#10B981' : '#EF4444';
+                  const c = r > 0 ? 'var(--success)' : 'var(--danger)';
                   return (
                     <>
                       <DetailRow

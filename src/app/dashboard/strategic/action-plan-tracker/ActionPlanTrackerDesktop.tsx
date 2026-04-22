@@ -215,7 +215,7 @@ function GanttView({ filtered, onShowDetail }: { filtered: Action[]; onShowDetai
         return (
           <div
             key={a.id}
-            className="flex border-b last:border-b-0 cursor-pointer transition-colors hover:bg-[#F3F4F6]"
+            className="flex border-b last:border-b-0 cursor-pointer transition-colors hover:bg-[var(--bg-hover)]"
             style={{ borderColor: 'var(--border)' }}
           >
             <div
@@ -251,9 +251,9 @@ function GanttView({ filtered, onShowDetail }: { filtered: Action[]; onShowDetai
               ))}
               <div
                 className="absolute top-0 bottom-0 w-0.5 z-10 pointer-events-none"
-                style={{ left: `${todayPct.toFixed(2)}%`, background: '#EF4444' }}
+                style={{ left: `${todayPct.toFixed(2)}%`, background: 'var(--danger)' }}
               >
-                <span className="absolute top-0.5 left-1 text-[0.5625rem] font-bold tracking-wider" style={{ color: '#EF4444' }}>
+                <span className="absolute top-0.5 left-1 text-[0.5625rem] font-bold tracking-wider" style={{ color: 'var(--danger)' }}>
                   TODAY
                 </span>
               </div>
@@ -321,12 +321,12 @@ function TableView({ filtered, onShowDetail }: { filtered: Action[]; onShowDetai
             const eColor = STATUS_COLORS[a.status];
             const pColor = PRIORITY_COLORS[a.priority];
             const r = getRoi(a);
-            const roiColor = r > 0 ? '#10B981' : r < 0 ? '#EF4444' : 'var(--text-secondary)';
+            const roiColor = r > 0 ? 'var(--success)' : r < 0 ? 'var(--danger)' : 'var(--text-secondary)';
             const isChild = (a.subProjectId ?? 1) > 1;
             return (
               <tr
                 key={a.id}
-                className="border-b last:border-b-0 cursor-pointer transition-colors hover:bg-[#F3F4F6]"
+                className="border-b last:border-b-0 cursor-pointer transition-colors hover:bg-[var(--bg-hover)]"
                 style={{ borderColor: 'var(--border)' }}
                 onClick={() => onShowDetail(a.id)}
               >
@@ -350,7 +350,7 @@ function TableView({ filtered, onShowDetail }: { filtered: Action[]; onShowDetai
                   {fmtDate(a.startDate)}<br />
                   <span style={{ color: 'var(--text-secondary)' }}>→ {fmtDate(a.endDate)}</span>
                 </td>
-                <td className="px-3.5 py-3 text-sm font-semibold whitespace-nowrap" style={{ color: '#EF4444' }}>
+                <td className="px-3.5 py-3 text-sm font-semibold whitespace-nowrap" style={{ color: 'var(--danger)' }}>
                   {fmtMoney(a.investmentUsd)}
                 </td>
                 <td className="px-3.5 py-3 font-bold" style={{ color: roiColor }}>
@@ -360,7 +360,7 @@ function TableView({ filtered, onShowDetail }: { filtered: Action[]; onShowDetai
                 <td className="px-3.5 py-3"><Badge label={a.priority} color={pColor} /></td>
                 <td className="px-3.5 py-3">
                   <button
-                    className="w-7 h-7 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center transition-colors hover:bg-[#F3F4F6]"
+                    className="w-7 h-7 rounded-md border-none bg-transparent cursor-pointer flex items-center justify-center transition-colors hover:bg-[var(--bg-hover)]"
                     style={{ color: 'var(--text-secondary)' }}
                     title="View details"
                     onClick={(e) => { e.stopPropagation(); onShowDetail(a.id); }}

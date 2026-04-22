@@ -60,7 +60,7 @@ export default function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: bo
     const Icon = item.icon;
     const isActive = pathname === item.href;
     return (
-      <Link key={key} href={item.href} onClick={onMobileClose} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all duration-200 mb-0.5 ${isActive ? 'text-[var(--primary)] bg-[#F0FFFE] border-l-[3px] border-[var(--accent)]' : 'text-[var(--text-secondary)] hover:text-[var(--primary)] hover:bg-[#F3F4F6]'}`}>
+      <Link key={key} href={item.href} onClick={onMobileClose} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all duration-200 mb-0.5 ${isActive ? 'text-[var(--primary)] bg-[#F0FFFE] border-l-[3px] border-[var(--accent)]' : 'text-[var(--text-secondary)] hover:text-[var(--primary)] hover:bg-[var(--bg-hover)]'}`}>
         <Icon size={20} />{!(collapsed && !mobileOpen) && <span>{item.label}</span>}
       </Link>
     );
@@ -91,7 +91,7 @@ export default function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: bo
       {mobileOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={onMobileClose} />}
       <aside className={`fixed top-32 left-0 h-[calc(100vh-128px)] bg-white border-r transition-all duration-300 z-50 ${mobileOpen ? 'w-60 translate-x-0' : '-translate-x-full'} md:translate-x-0 ${collapsed ? 'md:w-16' : 'md:w-60'}`} style={{ borderColor: 'var(--border)' }}>
         {mobileOpen && (
-          <button onClick={onMobileClose} className="absolute top-2 right-2 p-1 rounded-md hover:bg-[#F3F4F6] md:hidden"><X size={20} style={{ color: 'var(--text-secondary)' }} /></button>
+          <button onClick={onMobileClose} className="absolute top-2 right-2 p-1 rounded-md hover:bg-[var(--bg-hover)] md:hidden"><X size={20} style={{ color: 'var(--text-secondary)' }} /></button>
         )}
         {sidebarContent}
       </aside>
