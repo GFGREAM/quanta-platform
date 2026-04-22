@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Eye, X, ListFilter, Layers, GitBranch, ChevronRight } from 'lucide-react';
 import { Table as TableIcon } from 'lucide-react';
 import KpiCard from '@/components/ui/KpiCard';
@@ -64,18 +64,21 @@ export default function ActionPlanTrackerPage() {
     [actions, mode],
   );
 
+  // Shared filter predicate — used by both the mode-scoped list and the
+  // KPI aggregation (which always spans all actions).
+  const matchesFilters = useCallback((a: Action) => {
+    if (filterHotel && a.hotelProperty !== filterHotel) return false;
+    if (filterProject && a.project !== filterProject) return false;
+    if (filterArea && a.area !== filterArea) return false;
+    if (filterStatus && a.status !== filterStatus) return false;
+    if (filterPriority && a.priority !== filterPriority) return false;
+    if (filterOwner && a.owner !== filterOwner) return false;
+    return true;
+  }, [filterHotel, filterProject, filterArea, filterStatus, filterPriority, filterOwner]);
+
   // Filtering
-  const filtered = useMemo(() => {
-    return baseList.filter((a) => {
-      if (filterHotel && a.hotelProperty !== filterHotel) return false;
-      if (filterProject && a.project !== filterProject) return false;
-      if (filterArea && a.area !== filterArea) return false;
-      if (filterStatus && a.status !== filterStatus) return false;
-      if (filterPriority && a.priority !== filterPriority) return false;
-      if (filterOwner && a.owner !== filterOwner) return false;
-      return true;
-    });
-  }, [baseList, filterHotel, filterProject, filterArea, filterStatus, filterPriority, filterOwner]);
+  const filtered = useMemo(() => baseList.filter(matchesFilters),
+    [baseList, matchesFilters]);
 
   // Gantt staircase sort by start date; in Detail mode children grouped under parent
   const displayed = useMemo(() => {
@@ -106,17 +109,8 @@ export default function ActionPlanTrackerPage() {
   // Macro/Detail mode. Reason: sub-actions often carry the actual investment
   // and return amounts — limiting the sum to macro rows (subProjectId === 1)
   // would undercount. This mirrors the filter bar but bypasses the mode scope.
-  const filteredAll = useMemo(() => {
-    return actions.filter((a) => {
-      if (filterHotel && a.hotelProperty !== filterHotel) return false;
-      if (filterProject && a.project !== filterProject) return false;
-      if (filterArea && a.area !== filterArea) return false;
-      if (filterStatus && a.status !== filterStatus) return false;
-      if (filterPriority && a.priority !== filterPriority) return false;
-      if (filterOwner && a.owner !== filterOwner) return false;
-      return true;
-    });
-  }, [actions, filterHotel, filterProject, filterArea, filterStatus, filterPriority, filterOwner]);
+  const filteredAll = useMemo(() => actions.filter(matchesFilters),
+    [actions, matchesFilters]);
 
   const stats = useMemo(() => {
     const totalInv = filteredAll.reduce((sum, a) => sum + a.investmentUsd, 0);

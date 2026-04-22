@@ -586,7 +586,7 @@ export const SEED_ACTIONS: Action[] = [
     actionTitle: 'Crear un área para mejorar tiempo de espera en llegada y salida de huéspedes',
     contextDescription: 'De acuerdo a los brand standards, este es un servicio para mejorar la experiencia en tiempos de espera o un área de tranquilidad para huéspedes. Se deja como pendiente pues por el momento no se tiene un área adecuada para establecer esta experiencia. Se revisará en un futuro',
     owner: 'Jorge Castañeda', status: 'On hold',
-    startDate: '', endDate: '2026-06-30',
+    startDate: '2026-06-30', endDate: '2026-06-30',
     investmentUsd: 0, expectedReturnUsd: 0, roiPct: null,
     startMonth: null, endMonth: 6, durationDays: null,
     priority: 'Medium', kpiMetric: '',
