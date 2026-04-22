@@ -102,28 +102,31 @@ export default function ActionPlanTrackerPage() {
     });
   }, [filtered, mode]);
 
-  // KPI Strip stats — reflects active filters. A project is "in scope" if ANY of its rows
-  // (main subProjectId === 1 or any sub-action) pass the filters. KPIs are then computed
-  // on the main rows of those projects, so sub-actions never double-count investment/return.
-  const stats = useMemo(() => {
-    const projectKeys = new Set<string>();
-    filtered.forEach((a) => {
-      if (a.projectId != null) projectKeys.add(`${a.hotelId ?? 'x'}::${a.projectId}`);
+  // KPIs aggregate across ALL actions that pass the filter bar, regardless of
+  // Macro/Detail mode. Reason: sub-actions often carry the actual investment
+  // and return amounts — limiting the sum to macro rows (subProjectId === 1)
+  // would undercount. This mirrors the filter bar but bypasses the mode scope.
+  const filteredAll = useMemo(() => {
+    return actions.filter((a) => {
+      if (filterHotel && a.hotelProperty !== filterHotel) return false;
+      if (filterProject && a.project !== filterProject) return false;
+      if (filterArea && a.area !== filterArea) return false;
+      if (filterStatus && a.status !== filterStatus) return false;
+      if (filterPriority && a.priority !== filterPriority) return false;
+      if (filterOwner && a.owner !== filterOwner) return false;
+      return true;
     });
-    const macro = actions.filter(
-      (a) =>
-        a.subProjectId === 1 &&
-        a.projectId != null &&
-        projectKeys.has(`${a.hotelId ?? 'x'}::${a.projectId}`),
-    );
-    const totalInv = macro.reduce((sum, a) => sum + a.investmentUsd, 0);
-    const totalRet = macro.reduce((sum, a) => sum + a.expectedReturnUsd, 0);
+  }, [actions, filterHotel, filterProject, filterArea, filterStatus, filterPriority, filterOwner]);
+
+  const stats = useMemo(() => {
+    const totalInv = filteredAll.reduce((sum, a) => sum + a.investmentUsd, 0);
+    const totalRet = filteredAll.reduce((sum, a) => sum + a.expectedReturnUsd, 0);
     const roiGlobal = totalInv > 0 ? Math.round(((totalRet - totalInv) / totalInv) * 100) : 0;
-    const inProgress = macro.filter((a) => a.status === 'In progress').length;
-    const completed = macro.filter((a) => a.status === 'Completed').length;
-    const pctComp = macro.length ? Math.round((completed / macro.length) * 100) : 0;
-    return { count: macro.length, totalInv, totalRet, roiGlobal, inProgress, completed, pctComp };
-  }, [actions, filtered]);
+    const inProgress = filteredAll.filter((a) => a.status === 'In progress').length;
+    const completed = filteredAll.filter((a) => a.status === 'Completed').length;
+    const pctComp = filteredAll.length ? Math.round((completed / filteredAll.length) * 100) : 0;
+    return { count: filteredAll.length, totalInv, totalRet, roiGlobal, inProgress, completed, pctComp };
+  }, [filteredAll]);
 
   // Cascading options: each dropdown shows only values compatible with the OTHER active filters.
   const optionsFor = (exclude: 'hotel' | 'project' | 'area' | 'status' | 'priority' | 'owner') =>
@@ -233,27 +236,27 @@ export default function ActionPlanTrackerPage() {
       {/* Filters bar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
-          <select className="h-9 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterHotel} onChange={(e) => setFilterHotel(e.target.value)}>
+          <select className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] truncate" style={selectStyle} value={filterHotel} onChange={(e) => setFilterHotel(e.target.value)}>
             <option value="">All hotels</option>
             {hotelOptions.map((h) => <option key={h} value={h}>{h}</option>)}
           </select>
-          <select className="h-9 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterProject} onChange={(e) => setFilterProject(e.target.value)}>
+          <select className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] truncate" style={selectStyle} value={filterProject} onChange={(e) => setFilterProject(e.target.value)}>
             <option value="">All projects</option>
             {projectOptions.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
-          <select className="h-9 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterArea} onChange={(e) => setFilterArea(e.target.value)}>
+          <select className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] truncate" style={selectStyle} value={filterArea} onChange={(e) => setFilterArea(e.target.value)}>
             <option value="">All areas</option>
             {areaOptions.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
-          <select className="h-9 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+          <select className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] truncate" style={selectStyle} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
             <option value="">All statuses</option>
             {STATUS_LIST.filter((s) => statusOptions.includes(s)).map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
-          <select className="h-9 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
+          <select className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] truncate" style={selectStyle} value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
             <option value="">All priorities</option>
             {PRIORITIES.filter((p) => priorityOptions.includes(p)).map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
-          <select className="h-9 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]" style={selectStyle} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
+          <select className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] truncate" style={selectStyle} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
             <option value="">All owners</option>
             {ownerOptions.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
