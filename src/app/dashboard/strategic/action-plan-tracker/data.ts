@@ -65,7 +65,6 @@ export const TODAY = new Date();
 export const CURRENT_MONTH = TODAY.getMonth();
 
 export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-export const AREAS = ['Marketing', 'Operations', 'Maintenance', 'Technology', 'Revenue', 'HR', 'F&B', 'Sales', 'PR / Communications', 'Other'];
 export const STATUS_LIST: Status[] = ['Pending', 'In progress', 'Completed', 'On hold', 'Cancelled'];
 export const PRIORITIES: Priority[] = ['High', 'Medium', 'Low'];
 

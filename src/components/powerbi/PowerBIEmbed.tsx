@@ -104,7 +104,7 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
           revealReport();
         }, 4000);
         if (filters && filters.length > 0) {
-          report.setFilters(filters as any[]).catch(() => {});
+          report.setFilters(filters as unknown as pbi.models.IFilter[]).catch(() => {});
         }
       });
 
@@ -112,11 +112,11 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
         revealReport();
         try {
           const pages = await report.getPages();
-          const activePage = pages.find((p: any) => p.isActive);
-          if (activePage && (activePage as any).defaultSize) {
-            const { width, height } = (activePage as any).defaultSize;
-            if (width && height && containerRef.current) {
-              containerRef.current.style.aspectRatio = String(width / height);
+          const activePage = pages.find((p) => p.isActive);
+          if (activePage) {
+            const size = (activePage as pbi.Page & { defaultSize?: { width: number; height: number } }).defaultSize;
+            if (size?.width && size?.height && containerRef.current) {
+              containerRef.current.style.aspectRatio = String(size.width / size.height);
             }
           }
         } catch {}
@@ -126,7 +126,7 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
         revealReport();
       });
 
-      report.on("error", (event: any) => {
+      report.on("error", (event: pbi.service.ICustomEvent<pbi.models.IError>) => {
         const errorMsg = event?.detail?.message || "";
         console.error("[PowerBI] Embed error event:", JSON.stringify(event?.detail));
 
@@ -165,7 +165,7 @@ export default function PowerBIEmbed({ reportId, workspaceId, filters }: PowerBI
   useEffect(() => {
     if (!reportRef.current || loading) return;
     if (filters && filters.length > 0) {
-      reportRef.current.setFilters(filters as any[]).catch(() => {});
+      reportRef.current.setFilters(filters as unknown as pbi.models.IFilter[]).catch(() => {});
     } else {
       reportRef.current.removeFilters().catch(() => {});
     }

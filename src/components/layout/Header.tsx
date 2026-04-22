@@ -1,4 +1,5 @@
 'use client';
+import Image from 'next/image';
 import { Search, ChevronDown, LogOut, Menu } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
@@ -57,7 +58,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
       <div className="flex items-center gap-3">
         <button onClick={onMenuClick} className="p-2 rounded-lg hover:bg-[#F3F4F6] transition-colors md:hidden"><Menu size={20} style={{ color: 'var(--primary)' }} /></button>
         <Link href="/dashboard" className="flex items-center gap-3">
-          <img src="/quanta_logo.png" alt="Quanta" className="w-28" />
+          <Image src="/quanta_logo.png" alt="Quanta" width={112} height={28} className="w-28 h-auto" />
         </Link>
       </div>
       <div className="flex-1 max-w-md mx-4 md:mx-8 hidden sm:block" ref={searchRef}>

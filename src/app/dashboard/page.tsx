@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { DollarSign, Info } from "lucide-react";
 import type { PowerBIFilter } from "@/components/powerbi/PowerBIEmbed";
@@ -285,20 +285,30 @@ export default function DashboardHome() {
   const showLocalNote = metric === "Local" && selectedHotels.length === 0;
   const effectiveMetric = metric === "Local" && selectedHotels.length > 0 ? "Local" : "USD";
 
-  useEffect(() => {
+  const fetchKpis = useCallback(async (signal: AbortSignal) => {
     const params = new URLSearchParams();
     if (selectedHotels.length > 0) params.set("hotel", selectedHotels.join(","));
     params.set("year", year);
     if (selectedMonths.length > 0) params.set("month", selectedMonths.join(","));
     params.set("metric", effectiveMetric);
 
-    setKpisLoading(true);
-    fetch(`/api/kpis?${params.toString()}`)
-      .then((res) => res.json())
-      .then((data) => setKpis(data))
-      .catch(() => setKpis(emptyKpis))
-      .finally(() => setKpisLoading(false));
+    try {
+      const res = await fetch(`/api/kpis?${params.toString()}`, { signal });
+      const data = await res.json();
+      if (!signal.aborted) setKpis(data);
+    } catch {
+      if (!signal.aborted) setKpis(emptyKpis);
+    }
   }, [selectedHotels, year, selectedMonths, effectiveMetric]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setKpisLoading(true);
+    fetchKpis(controller.signal).finally(() => {
+      if (!controller.signal.aborted) setKpisLoading(false);
+    });
+    return () => controller.abort();
+  }, [fetchKpis]);
 
   const filters = useMemo(() => {
     const f: PowerBIFilter[] = [];
