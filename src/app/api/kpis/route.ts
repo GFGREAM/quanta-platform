@@ -2,18 +2,11 @@ import { NextResponse } from "next/server";
 import { ConfidentialClientApplication } from "@azure/msal-node";
 
 const DATASET_ID = process.env.POWERBI_DATASET_ID || "";
-const WORKSPACE_ID = process.env.POWERBI_WORKSPACE_ID || "";
 
 const REVENUE = "[Total Rev$]";
 const EXPENSES = "[Total Exp$]";
 const GOP = "[GOP$]";
 const EBITDA = "[EBITDA$]";
-
-const NULL_RESPONSE = {
-  revenue: null, expenses: null, gop: null, ebitda: null,
-  revenue_budget: null, expenses_budget: null, gop_budget: null, ebitda_budget: null,
-  revenue_ly: null, expenses_ly: null, gop_ly: null, ebitda_ly: null,
-};
 
 function getMsalClient() {
   return new ConfidentialClientApplication({
@@ -23,20 +16,6 @@ function getMsalClient() {
       authority: `https://login.microsoftonline.com/${process.env.POWERBI_TENANT_ID || ""}`,
     },
   });
-}
-
-function buildBaseFilters(hotels: string[], month: string | null): string[] {
-  const filters: string[] = [];
-  if (hotels.length === 1) {
-    filters.push(`'AAG'[Hotel] = "${hotels[0]}"`);
-  } else if (hotels.length > 1) {
-    const quoted = hotels.map((h) => `"${h}"`).join(", ");
-    filters.push(`'AAG'[Hotel] IN {${quoted}}`);
-  }
-  if (month && month !== "All") {
-    filters.push(`'Date Table'[Month Name] = "${month}"`);
-  }
-  return filters;
 }
 
 function buildBaseFiltersMultiMonth(hotels: string[], months: string[]): string[] {

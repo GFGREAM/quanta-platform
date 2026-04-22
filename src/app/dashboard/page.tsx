@@ -59,6 +59,8 @@ interface KpiData {
   ebitda_ly: number | null;
 }
 
+const EMPTY_KPIS: KpiData = { revenue: null, expenses: null, gop: null, ebitda: null, revenue_budget: null, expenses_budget: null, gop_budget: null, ebitda_budget: null, revenue_ly: null, expenses_ly: null, gop_ly: null, ebitda_ly: null };
+
 function formatValue(value: number | null): string {
   if (value === null || value === undefined) return "—";
   return `$${Math.round(value).toLocaleString("en-US")}`;
@@ -279,14 +281,14 @@ export default function DashboardHome() {
   const [year, setYear] = useState("2026");
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [metric, setMetric] = useState("USD");
-  const emptyKpis: KpiData = { revenue: null, expenses: null, gop: null, ebitda: null, revenue_budget: null, expenses_budget: null, gop_budget: null, ebitda_budget: null, revenue_ly: null, expenses_ly: null, gop_ly: null, ebitda_ly: null };
-  const [kpis, setKpis] = useState<KpiData>(emptyKpis);
+  const [kpis, setKpis] = useState<KpiData>(EMPTY_KPIS);
   const [kpisLoading, setKpisLoading] = useState(false);
 
   const showLocalNote = metric === "Local" && selectedHotels.length === 0;
   const effectiveMetric = metric === "Local" && selectedHotels.length > 0 ? "Local" : "USD";
 
   const fetchKpis = useCallback(async (signal: AbortSignal) => {
+    setKpisLoading(true);
     const params = new URLSearchParams();
     if (selectedHotels.length > 0) params.set("hotel", selectedHotels.join(","));
     params.set("year", year);
@@ -298,16 +300,15 @@ export default function DashboardHome() {
       const data = await res.json();
       if (!signal.aborted) setKpis(data);
     } catch {
-      if (!signal.aborted) setKpis(emptyKpis);
+      if (!signal.aborted) setKpis(EMPTY_KPIS);
+    } finally {
+      if (!signal.aborted) setKpisLoading(false);
     }
   }, [selectedHotels, year, selectedMonths, effectiveMetric]);
 
   useEffect(() => {
     const controller = new AbortController();
-    setKpisLoading(true);
-    fetchKpis(controller.signal).finally(() => {
-      if (!controller.signal.aborted) setKpisLoading(false);
-    });
+    fetchKpis(controller.signal);
     return () => controller.abort();
   }, [fetchKpis]);
 
