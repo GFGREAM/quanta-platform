@@ -42,6 +42,8 @@ const MONTHS = [
 
 const METRICS = ["USD", "Local"] as const;
 
+const COMP_SETS = ["CS1", "CS2", "CS3", "CS4", "CS5"] as const;
+
 const BASIC_SCHEMA = "http://powerbi.com/product/schema#basic";
 
 interface KpiData {
@@ -278,6 +280,7 @@ function MultiSelect({
 
 export default function DashboardHome() {
   const [selectedHotels, setSelectedHotels] = useState<string[]>([]);
+  const [compSet, setCompSet] = useState("CS1");
   const [year, setYear] = useState("2026");
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [metric, setMetric] = useState("USD");
@@ -326,6 +329,13 @@ export default function DashboardHome() {
 
     f.push({
       $schema: BASIC_SCHEMA,
+      target: { table: "Market Share", column: "Comp Set" },
+      operator: "In",
+      values: [compSet],
+    });
+
+    f.push({
+      $schema: BASIC_SCHEMA,
       target: { table: "Date Table", column: "Year" },
       operator: "In",
       values: [Number(year)],
@@ -348,7 +358,7 @@ export default function DashboardHome() {
     });
 
     return f;
-  }, [selectedHotels, year, selectedMonths, metric]);
+  }, [selectedHotels, compSet, year, selectedMonths, metric]);
 
   return (
     <div className="p-6">
@@ -364,6 +374,7 @@ export default function DashboardHome() {
         </div>
         <div className="grid grid-cols-2 md:flex md:flex-wrap items-end gap-3">
           <MultiSelect label="Hotel" options={HOTELS} selected={selectedHotels} onChange={setSelectedHotels} />
+          <FilterSelect label="Comp Set" value={compSet} options={COMP_SETS} onChange={setCompSet} />
           <FilterSelect label="Year" value={year} options={YEARS} onChange={setYear} />
           <MultiSelect label="Month" options={MONTHS} selected={selectedMonths} onChange={setSelectedMonths} />
           <FilterSelect label="Metric" value={metric} options={METRICS} onChange={setMetric} />
