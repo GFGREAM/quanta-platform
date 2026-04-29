@@ -1,0 +1,305 @@
+'use client';
+
+import {
+  currencyLabel,
+  scenarioAbbrev,
+  scopeLabel,
+  type Currency,
+  type Month,
+  type Scenario,
+  type Scope,
+} from './data';
+import {
+  TABLE_ROWS,
+  fmtValue,
+  fmtVar,
+  flattenRows,
+  flowThruPct,
+  varianceStyle,
+  type TableRow,
+} from './tableConfig';
+import type { PortfolioData } from './useStatement';
+
+interface Props {
+  scope: Scope;
+  periodMonth: Month;
+  year: number;
+  scenario: Scenario;
+  currency: Currency;
+  portfolio: PortfolioData;
+  compact?: boolean;
+}
+
+export default function StatementPortfolioTable({
+  scope, periodMonth, year, scenario, currency, portfolio, compact,
+}: Props) {
+  const curAbbr = scenarioAbbrev(scenario);
+  const periodTitle = scopeLabel(scope, periodMonth, year);
+  const numHotels = portfolio.groups.length;
+  const colsPerGroup = numHotels + 1; // hotels + TOTAL
+
+  const padCell = compact ? 'px-1.5 py-1' : 'px-2.5 py-1.5';
+  const padLabel = compact ? 'px-2 py-1' : 'px-3 py-1.5';
+  const fontMain = compact ? 'text-[0.6875rem]' : 'text-[0.75rem]';
+  const fontHeader = compact ? 'text-[0.625rem]' : 'text-[0.6875rem]';
+
+  return (
+    <div
+      className="bg-white border rounded-lg shadow-sm overflow-hidden"
+      style={{ borderColor: 'var(--border)' }}
+    >
+      {/* Title strip */}
+      <div
+        className="flex items-center justify-between px-4 py-3 border-b"
+        style={{ borderColor: 'var(--border)', background: 'var(--muted)' }}
+      >
+        <div>
+          <div className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+            Portfolio
+          </div>
+          <div className="text-base font-bold" style={{ color: 'var(--primary)' }}>
+            {periodTitle}
+          </div>
+        </div>
+        <div className="text-[0.6875rem] font-medium" style={{ color: 'var(--text-secondary)' }}>
+          {currencyLabel(currency)} · values in thousands where marked
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className={`w-full border-collapse ${fontMain}`} style={{ color: 'var(--text-primary)' }}>
+          {/* Group headers (3 spans) */}
+          <thead>
+            <tr style={{ background: '#FAFAFA', borderBottom: '1px solid var(--border)' }}>
+              <th className={`${padLabel} text-left ${fontHeader} font-semibold uppercase tracking-wider`} style={{ color: 'var(--text-secondary)' }} />
+              <th
+                colSpan={colsPerGroup}
+                className={`${padCell} text-center ${fontHeader} font-semibold uppercase tracking-wider border-l`}
+                style={{ color: 'var(--text-secondary)', borderColor: 'var(--border)' }}
+              >
+                {curAbbr} {year}
+              </th>
+              <th
+                colSpan={colsPerGroup}
+                className={`${padCell} text-center ${fontHeader} font-semibold uppercase tracking-wider border-l`}
+                style={{ color: 'var(--text-secondary)', borderColor: 'var(--border)' }}
+              >
+                {curAbbr} {year} vs Budget {year} ($)
+              </th>
+              <th
+                colSpan={colsPerGroup}
+                className={`${padCell} text-center ${fontHeader} font-semibold uppercase tracking-wider border-l`}
+                style={{ color: 'var(--text-secondary)', borderColor: 'var(--border)' }}
+              >
+                {curAbbr} {year} vs Last Year ($)
+              </th>
+            </tr>
+            {/* Hotel codes sub-header */}
+            <tr style={{ background: '#FAFAFA', borderBottom: '1px solid var(--border)' }}>
+              <th className={`${padLabel} text-left ${fontHeader} font-semibold uppercase tracking-wider`} style={{ color: 'var(--text-secondary)' }} />
+              {[0, 1, 2].map((groupIdx) => (
+                <GroupHeaderCells
+                  key={groupIdx}
+                  hotelCodes={portfolio.groups.map((g) => g.code)}
+                  padCell={padCell}
+                  fontHeader={fontHeader}
+                />
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {flattenRows(TABLE_ROWS).map((row, i) => (
+              <PortfolioRow
+                key={row.label ?? `spacer-${i}`}
+                row={row}
+                portfolio={portfolio}
+                padCell={padCell}
+                padLabel={padLabel}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function GroupHeaderCells({
+  hotelCodes, padCell, fontHeader,
+}: { hotelCodes: string[]; padCell: string; fontHeader: string }) {
+  return (
+    <>
+      {hotelCodes.map((code, idx) => (
+        <th
+          key={code}
+          className={`${padCell} text-right ${fontHeader} font-semibold tracking-wider ${idx === 0 ? 'border-l' : ''}`}
+          style={{ color: 'var(--text-secondary)', borderColor: 'var(--border)' }}
+        >
+          {code}
+        </th>
+      ))}
+      <th
+        className={`${padCell} text-right ${fontHeader} font-bold tracking-wider`}
+        style={{ color: 'var(--primary)' }}
+      >
+        TOTAL
+      </th>
+    </>
+  );
+}
+
+function PortfolioRow({
+  row, portfolio, padCell, padLabel,
+}: {
+  row: TableRow;
+  portfolio: PortfolioData;
+  padCell: string;
+  padLabel: string;
+}) {
+  const numHotels = portfolio.groups.length;
+  const totalCols = 1 + 3 * (numHotels + 1);
+
+  if (row.kind === 'spacer') {
+    return (
+      <tr aria-hidden="true">
+        <td colSpan={totalCols} className="h-2" />
+      </tr>
+    );
+  }
+
+  // Each hotel group carries its own noXR row sets (current and LY restated
+  // at the matching month's Budget FX). When useNoXR is on, swap them in.
+  const pickCur = (g: PortfolioData['groups'][number]) => row.useNoXR ? g.currentNoXR : g.current;
+  const pickLy = (g: PortfolioData['groups'][number]) => row.useNoXR ? g.lyNoXR : g.ly;
+  const totalCurRows = row.useNoXR ? portfolio.total.currentNoXR : portfolio.total.current;
+  const totalLyRows = row.useNoXR ? portfolio.total.lyNoXR : portfolio.total.ly;
+
+  if (row.kind === 'flow_thru') {
+    return (
+      <tr className="border-t" style={{ borderColor: 'var(--border-light)' }}>
+        <td className={`${padLabel} font-normal`} style={{ color: 'var(--text-secondary)' }}>
+          {row.label}
+        </td>
+        {/* Group 1 (current values) — blanks for Flow Thru */}
+        {portfolio.groups.map((g) => (
+          <td key={`v-${g.code}`} className={`${padCell} text-right ${g === portfolio.groups[0] ? 'border-l' : ''}`} style={{ color: 'var(--text-muted)', borderColor: 'var(--border)' }}>—</td>
+        ))}
+        <td className={`${padCell} text-right`} style={{ color: 'var(--text-muted)' }}>—</td>
+        {/* Group 2 (vs Budget) — flow thru per hotel + total */}
+        {portfolio.groups.map((g, i) => {
+          const pct = flowThruPct(pickCur(g), g.budget);
+          return (
+            <td
+              key={`b-${g.code}`}
+              className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''}`}
+              style={{ ...varianceStyle(pct, row.higherIsBetter), borderColor: 'var(--border)' }}
+            >
+              {fmtFlowThru(pct)}
+            </td>
+          );
+        })}
+        <td className={`${padCell} text-right tabular-nums font-semibold`} style={varianceStyle(flowThruPct(totalCurRows, portfolio.total.budget), row.higherIsBetter)}>
+          {fmtFlowThru(flowThruPct(totalCurRows, portfolio.total.budget))}
+        </td>
+        {/* Group 3 (vs LY) */}
+        {portfolio.groups.map((g, i) => {
+          const pct = flowThruPct(pickCur(g), pickLy(g));
+          return (
+            <td
+              key={`l-${g.code}`}
+              className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''}`}
+              style={{ ...varianceStyle(pct, row.higherIsBetter), borderColor: 'var(--border)' }}
+            >
+              {fmtFlowThru(pct)}
+            </td>
+          );
+        })}
+        <td className={`${padCell} text-right tabular-nums font-semibold`} style={varianceStyle(flowThruPct(totalCurRows, totalLyRows), row.higherIsBetter)}>
+          {fmtFlowThru(flowThruPct(totalCurRows, totalLyRows))}
+        </td>
+      </tr>
+    );
+  }
+
+  const format = row.format ?? 'integer';
+  const calc = row.calc ?? (() => 0);
+  const labelClass = row.bold ? 'font-bold' : 'font-normal';
+  const labelColor = row.bold ? 'var(--primary)' : 'var(--text-primary)';
+  const isPercentRow = format === 'pct';
+
+  // Compute per-hotel + TOTAL for each group
+  const cur = portfolio.groups.map((g) => calc(pickCur(g)));
+  const bud = portfolio.groups.map((g) => calc(g.budget));
+  const ly = portfolio.groups.map((g) => calc(pickLy(g)));
+  const totalCur = calc(totalCurRows);
+  const totalBud = calc(portfolio.total.budget);
+  const totalLy = calc(totalLyRows);
+
+  // Variance vs reference is `current - reference`. For pct rows this becomes
+  // a delta in percentage points.
+  const varBud = cur.map((v, i) => v - bud[i]);
+  const varLy = cur.map((v, i) => v - ly[i]);
+  const totalVarBud = totalCur - totalBud;
+  const totalVarLy = totalCur - totalLy;
+
+  return (
+    <tr className="border-t hover:bg-[var(--bg-hover)]" style={{ borderColor: 'var(--border-light)' }}>
+      <td className={`${padLabel} ${labelClass}`} style={{ color: labelColor }}>
+        {row.label}
+      </td>
+      {/* Group 1: current values per hotel + TOTAL */}
+      {cur.map((v, i) => (
+        <td key={`v-${i}`} className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''} ${row.bold ? 'font-semibold' : ''}`} style={{ color: 'var(--primary)', borderColor: 'var(--border)' }}>
+          {fmtValue(v, format)}
+        </td>
+      ))}
+      <td className={`${padCell} text-right tabular-nums font-bold`} style={{ color: 'var(--primary)' }}>
+        {fmtValue(totalCur, format)}
+      </td>
+      {/* Group 2: vs Budget */}
+      {varBud.map((v, i) => (
+        <td
+          key={`b-${i}`}
+          className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''}`}
+          style={{ ...varianceStyle(v, row.higherIsBetter), borderColor: 'var(--border)' }}
+        >
+          {isPercentRow ? fmtPctDelta(v) : fmtVar(v, format)}
+        </td>
+      ))}
+      <td
+        className={`${padCell} text-right tabular-nums font-semibold`}
+        style={varianceStyle(totalVarBud, row.higherIsBetter)}
+      >
+        {isPercentRow ? fmtPctDelta(totalVarBud) : fmtVar(totalVarBud, format)}
+      </td>
+      {/* Group 3: vs LY */}
+      {varLy.map((v, i) => (
+        <td
+          key={`l-${i}`}
+          className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''}`}
+          style={{ ...varianceStyle(v, row.higherIsBetter), borderColor: 'var(--border)' }}
+        >
+          {isPercentRow ? fmtPctDelta(v) : fmtVar(v, format)}
+        </td>
+      ))}
+      <td
+        className={`${padCell} text-right tabular-nums font-semibold`}
+        style={varianceStyle(totalVarLy, row.higherIsBetter)}
+      >
+        {isPercentRow ? fmtPctDelta(totalVarLy) : fmtVar(totalVarLy, format)}
+      </td>
+    </tr>
+  );
+}
+
+function fmtPctDelta(deltaPp: number): string {
+  if (!Number.isFinite(deltaPp)) return '—';
+  if (deltaPp === 0) return '-';
+  return `${deltaPp >= 0 ? '' : '-'}${Math.abs(deltaPp).toFixed(1)}%`;
+}
+
+function fmtFlowThru(pct: number | null): string {
+  if (pct === null || !Number.isFinite(pct)) return '—';
+  return `${pct >= 0 ? '' : '-'}${Math.abs(pct).toFixed(1)}%`;
+}
+
