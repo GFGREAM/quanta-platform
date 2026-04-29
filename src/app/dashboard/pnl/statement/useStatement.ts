@@ -1,8 +1,7 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  FORECAST_ROWS,
   HOTELS,
   HOTEL_CODES,
   PORTFOLIO_HOTELS,
@@ -13,7 +12,6 @@ import {
   COMPARISON_SCENARIOS,
   CURRENCIES,
   WEEKLY_OUTLOOK_DRIFTS,
-  convertRow,
   filterByPeriod,
   type Currency,
   type ForecastRow,
@@ -102,13 +100,65 @@ export function useStatement() {
   // Hotels selected for the portfolio table. Default = all available hotels,
   // displayed in the canonical PORTFOLIO_HOTELS order.
   const [portfolioHotels, setPortfolioHotels] = useState<string[]>(() => [...PORTFOLIO_HOTELS]);
+  const [forecastRows, setForecastRows] = useState<ForecastRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [dynamicHotels, setDynamicHotels] = useState<string[]>([]);
+  const [dynamicYears, setDynamicYears] = useState<number[]>([]);
 
-  // Restate every row in the active currency once. Downstream filtering and
-  // aggregation works on already-converted rows.
-  const convertedRows = useMemo(
-    () => FORECAST_ROWS.map((r) => convertRow(r, currency)),
-    [currency],
-  );
+  useEffect(() => {
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch("/api/aag/dimensions", { signal: controller.signal });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (controller.signal.aborted) return;
+        setDynamicHotels(data.hotels ?? []);
+        setDynamicYears(data.years ?? []);
+      } catch {
+        // dejamos vacios; el hook seguira con los defaults estaticos como fallback
+      }
+    })();
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    (async () => {
+      try {
+        const params = new URLSearchParams({
+          year: String(year),
+          currency,
+        });
+        const res = await fetch(`/api/aag/forecast-rows?${params}`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          if (!controller.signal.aborted) {
+            setForecastRows([]);
+            setLoading(false);
+          }
+          return;
+        }
+        const data: ForecastRow[] = await res.json();
+        if (!controller.signal.aborted) {
+          setForecastRows(data);
+          setLoading(false);
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setForecastRows([]);
+          setLoading(false);
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, [year, currency]);
+
+  // The server already returns rows in the requested currency, so no
+  // client-side conversion is needed.
+  const convertedRows = useMemo(() => forecastRows, [forecastRows]);
 
   const currentYearRows = useMemo(
     () =>
@@ -292,9 +342,10 @@ export function useStatement() {
     periodLyNoXR,
     portfolio,
     weeklyOutlookSeries,
-    hotelOptions: HOTELS,
-    portfolioHotelOptions: PORTFOLIO_HOTELS,
-    yearOptions: YEARS,
+    loading,
+    hotelOptions: dynamicHotels.length > 0 ? dynamicHotels : HOTELS,
+    portfolioHotelOptions: dynamicHotels.length > 0 ? dynamicHotels : PORTFOLIO_HOTELS,
+    yearOptions: dynamicYears.length > 0 ? dynamicYears : YEARS,
     scenarioOptions: COMPARISON_SCENARIOS,
     monthOptions: MONTHS,
     currencyOptions: CURRENCIES,
