@@ -5,22 +5,17 @@ import {
   CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { selectStyle } from '@/lib/selectStyle';
-import { fmtMetric, fmtMoney, METRIC_DEFS, SCOPES, scopeLabel, type Currency, type MetricKey, type Month, type Scope } from './data';
+import { fmtMetric, METRIC_DEFS, SCOPES, scopeLabel, type MetricKey, type Month } from './data';
 import { useStatement, type ComparisonScenario, type KpiSummary, type ViewMode } from './useStatement';
 import StatementTable from './StatementTable';
 import StatementPortfolioTable from './StatementPortfolioTable';
 import StatementSummaryTable from './StatementSummaryTable';
-import { MultiSelect } from './ui';
-
-const VIEW_ORDER: ViewMode[] = ['summary', 'single', 'portfolio'];
-const VIEW_LABELS: Record<ViewMode, string> = { summary: 'Summary', single: 'Overview', portfolio: 'Portfolio' };
-
-const SCOPE_LABELS: Record<Scope, string> = { mtd: 'MTD', ytd: 'YTD', fy: 'FY' };
-const CURRENCY_LABELS: Record<Currency, string> = { USD: 'USD', Local: 'Local' };
-
-const COLOR_COMPARISON = '#00AFAD';
-const COLOR_BUDGET = '#172951';
-const COLOR_LY = '#9CA3AF';
+import {
+  MultiSelect,
+  COLOR_COMPARISON, COLOR_BUDGET, COLOR_LY,
+  VIEW_ORDER, VIEW_LABELS, SCOPE_LABELS, CURRENCY_LABELS,
+  LegendDot, VarianceBadge, formatAxis,
+} from './ui';
 
 export default function StatementMobile() {
   const {
@@ -63,18 +58,7 @@ export default function StatementMobile() {
             {scenario} vs Budget vs LY
           </p>
         </div>
-        <div className="flex rounded-lg p-[3px] gap-0.5" style={{ background: 'var(--muted)' }}>
-          {VIEW_ORDER.map((v) => (
-            <button
-              key={v}
-              onClick={() => setViewMode(v)}
-              className={`px-2.5 py-1 rounded-md text-[0.75rem] font-medium border-none cursor-pointer ${viewMode === v ? 'bg-white shadow-sm' : 'bg-transparent'}`}
-              style={{ color: viewMode === v ? 'var(--primary)' : 'var(--text-secondary)' }}
-            >
-              {VIEW_LABELS[v]}
-            </button>
-          ))}
-        </div>
+        <ViewToggleMobile viewMode={viewMode} setViewMode={setViewMode} />
       </div>
 
       {/* Filters — stacked native selects */}
@@ -238,14 +222,14 @@ export default function StatementMobile() {
         <div className="flex items-center gap-2 text-[0.6875rem] mb-2 justify-end" style={{ color: 'var(--text-secondary)' }}>
           {viewMode === 'portfolio' ? (
             <>
-              <LegendDot color={COLOR_COMPARISON} label="Outlook" />
-              <LegendDot color={COLOR_BUDGET} label="Budget" />
+              <LegendDot color={COLOR_COMPARISON} label="Outlook" size="sm" />
+              <LegendDot color={COLOR_BUDGET} label="Budget" size="sm" />
             </>
           ) : (
             <>
-              <LegendDot color={COLOR_COMPARISON} label={scenario} />
-              <LegendDot color={COLOR_BUDGET} label="Budget" />
-              <LegendDot color={COLOR_LY} label="LY" />
+              <LegendDot color={COLOR_COMPARISON} label={scenario} size="sm" />
+              <LegendDot color={COLOR_BUDGET} label="Budget" size="sm" />
+              <LegendDot color={COLOR_LY} label="LY" size="sm" />
             </>
           )}
         </div>
@@ -369,6 +353,23 @@ export default function StatementMobile() {
   );
 }
 
+function ViewToggleMobile({ viewMode, setViewMode }: { viewMode: ViewMode; setViewMode: (v: ViewMode) => void }) {
+  return (
+    <div className="flex rounded-lg p-[3px] gap-0.5" style={{ background: 'var(--muted)' }}>
+      {VIEW_ORDER.map((v) => (
+        <button
+          key={v}
+          onClick={() => setViewMode(v)}
+          className={`px-2.5 py-1 rounded-md text-[0.75rem] font-medium border-none cursor-pointer ${viewMode === v ? 'bg-white shadow-sm' : 'bg-transparent'}`}
+          style={{ color: viewMode === v ? 'var(--primary)' : 'var(--text-secondary)' }}
+        >
+          {VIEW_LABELS[v]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function StatementKpiCardMobile({ kpi, scenario }: { kpi: KpiSummary; scenario: ComparisonScenario }) {
   const def = METRIC_DEFS.find((m) => m.key === kpi.key)!;
   const value = fmtMetric(kpi.comparison, def.format);
@@ -384,43 +385,9 @@ function StatementKpiCardMobile({ kpi, scenario }: { kpi: KpiSummary; scenario: 
         {value}
       </div>
       <div className="flex items-center justify-between gap-2 pt-1.5 border-t" style={{ borderColor: 'var(--border)' }}>
-        <VarianceBadgeSmall label="vs Budget" variance={kpi.varianceVsBudget} higherIsBetter={kpi.higherIsBetter} />
-        <VarianceBadgeSmall label="vs LY" variance={kpi.varianceVsLy} higherIsBetter={kpi.higherIsBetter} />
+        <VarianceBadge label="vs Budget" variance={kpi.varianceVsBudget} higherIsBetter={kpi.higherIsBetter} size="sm" />
+        <VarianceBadge label="vs LY" variance={kpi.varianceVsLy} higherIsBetter={kpi.higherIsBetter} size="sm" />
       </div>
     </div>
   );
-}
-
-function VarianceBadgeSmall({
-  label, variance, higherIsBetter,
-}: {
-  label: string;
-  variance: { pct: number; label: string } | null;
-  higherIsBetter: boolean;
-}) {
-  if (!variance) {
-    return <span className="text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>N/A {label}</span>;
-  }
-  const isGood = higherIsBetter ? variance.pct >= 0 : variance.pct < 0;
-  const color = isGood ? 'var(--success)' : 'var(--danger)';
-  return (
-    <span className="text-[0.625rem] font-medium" style={{ color }}>
-      {variance.label} <span className="font-normal" style={{ color: 'var(--text-secondary)' }}>{label}</span>
-    </span>
-  );
-}
-
-function LegendDot({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1">
-      <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: color }} />
-      {label}
-    </span>
-  );
-}
-
-function formatAxis(value: number, format: 'money' | 'percent' | 'integer'): string {
-  if (format === 'percent') return `${value.toFixed(0)}%`;
-  if (format === 'integer') return Math.round(value).toLocaleString('en-US');
-  return fmtMoney(value);
 }

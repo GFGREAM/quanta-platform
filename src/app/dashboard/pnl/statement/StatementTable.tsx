@@ -18,6 +18,7 @@ import {
   fmtVar,
   fmtVarPct,
   flowThruPct,
+  varianceStyle,
   type TableRow,
 } from './tableConfig';
 
@@ -124,7 +125,7 @@ export default function StatementTable({
           <tbody>
             {TABLE_ROWS.map((row, i) => (
               <Row
-                key={i}
+                key={row.label ?? `spacer-${i}`}
                 row={row}
                 current={current}
                 budget={budget}
@@ -283,17 +284,3 @@ function Row(props: RowProps) {
   );
 }
 
-// Subtle tinted backgrounds (~10% alpha) for variance cells.
-const BG_GOOD = 'rgba(16, 185, 129, 0.10)';  // success @ 10%
-const BG_BAD = 'rgba(239, 68, 68, 0.10)';    // danger @ 10%
-
-function varianceStyle(varValue: number, higherIsBetter?: boolean): React.CSSProperties {
-  // Neutral rows (Rooms count, Comps, FX) — no coloring.
-  if (higherIsBetter === undefined) return { color: 'var(--text-primary)' };
-  if (varValue === 0 || !Number.isFinite(varValue)) return { color: 'var(--text-secondary)' };
-  const isPositive = varValue > 0;
-  const isGood = higherIsBetter ? isPositive : !isPositive;
-  return isGood
-    ? { color: 'var(--success)', background: BG_GOOD }
-    : { color: 'var(--danger)', background: BG_BAD };
-}

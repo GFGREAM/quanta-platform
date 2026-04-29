@@ -1,96 +1,67 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { selectStyle } from '@/lib/selectStyle';
+import { fmtMoney, type Currency, type MetricFormat, type Scope } from './data';
+import type { ViewMode } from './useStatement';
 
-interface Props {
-  options: readonly string[];
-  selected: string[];
-  onChange: (vals: string[]) => void;
-  width?: string;
-  placeholder?: string;
-  /** Word used in the "all" / "N selected" summary. */
-  noun?: string;
-  /** Smaller height + font for mobile filter rows. */
-  compact?: boolean;
+// Re-export MultiSelect from its promoted location so existing imports still work.
+export { MultiSelect } from '@/components/ui/MultiSelect';
+
+// ─── Chart color constants ──────────────────────────────────────
+// Recharts strokes need literal hex (no CSS-var resolution inside SVG attributes).
+export const COLOR_COMPARISON = '#00AFAD'; // var(--accent) — Actual/Outlook/Forecast line
+export const COLOR_BUDGET = '#172951';     // var(--primary) — Budget reference line
+export const COLOR_LY = '#9CA3AF';         // var(--text-muted) — Last Year reference line
+
+// ─── Label maps ─────────────────────────────────────────────────
+
+export const VIEW_ORDER: ViewMode[] = ['summary', 'single', 'portfolio'];
+export const VIEW_LABELS: Record<ViewMode, string> = { summary: 'Summary', single: 'Overview', portfolio: 'Portfolio' };
+export const SCOPE_LABELS: Record<Scope, string> = { mtd: 'MTD', ytd: 'YTD', fy: 'FY' };
+export const CURRENCY_LABELS: Record<Currency, string> = { USD: 'USD', Local: 'Local' };
+
+// ─── Shared small components ────────────────────────────────────
+
+export function LegendDot({ color, label, size = 'md' }: { color: string; label: string; size?: 'sm' | 'md' }) {
+  const dotClass = size === 'sm' ? 'w-1.5 h-1.5' : 'w-2 h-2';
+  const gapClass = size === 'sm' ? 'gap-1' : 'gap-1.5';
+  return (
+    <span className={`inline-flex items-center ${gapClass}`}>
+      <span className={`${dotClass} rounded-full inline-block`} style={{ background: color }} />
+      {label}
+    </span>
+  );
 }
 
-export function MultiSelect({
-  options, selected, onChange, width = '14rem', placeholder = 'Select…', noun = 'hotels', compact,
-}: Props) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function onDoc(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, []);
-
-  const allSelected = options.length > 0 && selected.length === options.length;
-
-  function toggleAll() {
-    onChange(allSelected ? [] : [...options]);
+export function VarianceBadge({
+  label, variance, higherIsBetter, size = 'md',
+}: {
+  label: string;
+  variance: { pct: number; label: string } | null;
+  higherIsBetter: boolean;
+  size?: 'sm' | 'md';
+}) {
+  const textClass = size === 'sm' ? 'text-[0.625rem]' : 'text-[0.75rem]';
+  if (!variance) {
+    return (
+      <span className={textClass} style={{ color: 'var(--text-muted)' }}>
+        N/A {size === 'md' && <span className="font-normal" style={{ color: 'var(--text-secondary)' }}>{label}</span>}
+        {size === 'sm' && label}
+      </span>
+    );
   }
-  function toggle(opt: string) {
-    if (selected.includes(opt)) onChange(selected.filter((s) => s !== opt));
-    else onChange([...selected, opt]);
-  }
-
-  const display =
-    selected.length === 0 ? placeholder
-      : allSelected ? `All ${noun}`
-      : selected.length === 1 ? selected[0]
-      : `${selected.length} ${noun} selected`;
-
-  const heightClass = compact ? 'h-10 text-sm' : 'h-9 text-[0.8125rem]';
-
+  const isGood = higherIsBetter ? variance.pct >= 0 : variance.pct < 0;
+  const color = isGood ? 'var(--success)' : 'var(--danger)';
   return (
-    <div ref={ref} className="relative" style={{ width }}>
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className={`${heightClass} w-full px-3 pr-8 rounded-md border bg-white text-left cursor-pointer outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] truncate`}
-        style={selectStyle}
-      >
-        {display}
-      </button>
-      {open && (
-        <div
-          className="absolute top-full left-0 mt-1 bg-white border rounded-md shadow-lg z-50 w-full max-h-60 overflow-y-auto"
-          style={{ borderColor: 'var(--border)' }}
-        >
-          <label
-            className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 border-b"
-            style={{ borderColor: 'var(--border)', color: 'var(--primary)' }}
-          >
-            <input
-              type="checkbox"
-              checked={allSelected}
-              onChange={toggleAll}
-              className="accent-[var(--accent)]"
-            />
-            {allSelected ? 'Clear all' : 'Select all'}
-          </label>
-          {options.map((opt) => (
-            <label
-              key={opt}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-gray-50"
-              style={{ color: 'var(--primary)' }}
-            >
-              <input
-                type="checkbox"
-                checked={selected.includes(opt)}
-                onChange={() => toggle(opt)}
-                className="accent-[var(--accent)]"
-              />
-              {opt}
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
+    <span className={`${textClass} font-medium`} style={{ color }}>
+      {variance.label} <span className="font-normal" style={{ color: 'var(--text-secondary)' }}>{label}</span>
+    </span>
   );
+}
+
+// ─── Chart axis formatter ───────────────────────────────────────
+
+export function formatAxis(value: number, format: MetricFormat): string {
+  if (format === 'percent') return `${value.toFixed(0)}%`;
+  if (format === 'integer') return Math.round(value).toLocaleString('en-US');
+  return fmtMoney(value);
 }

@@ -5,23 +5,17 @@ import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { selectStyle } from '@/lib/selectStyle';
-import { fmtMetric, fmtMoney, METRIC_DEFS, SCOPES, scopeLabel, type Currency, type MetricKey, type Month, type Scope } from './data';
+import { fmtMetric, METRIC_DEFS, SCOPES, scopeLabel, type MetricKey, type Month } from './data';
 import { useStatement, type ComparisonScenario, type KpiSummary, type ViewMode } from './useStatement';
 import StatementTable from './StatementTable';
 import StatementPortfolioTable from './StatementPortfolioTable';
 import StatementSummaryTable from './StatementSummaryTable';
-import { MultiSelect } from './ui';
-
-const VIEW_ORDER: ViewMode[] = ['summary', 'single', 'portfolio'];
-const VIEW_LABELS: Record<ViewMode, string> = { summary: 'Summary', single: 'Overview', portfolio: 'Portfolio' };
-
-const SCOPE_LABELS: Record<Scope, string> = { mtd: 'MTD', ytd: 'YTD', fy: 'FY' };
-const CURRENCY_LABELS: Record<Currency, string> = { USD: 'USD', Local: 'Local' };
-
-// Recharts strokes need literal hex (no CSS-var resolution inside SVG attributes).
-const COLOR_COMPARISON = '#00AFAD'; // var(--accent) — Actual/Outlook/Forecast line
-const COLOR_BUDGET = '#172951';     // var(--primary) — Budget reference line
-const COLOR_LY = '#9CA3AF';         // var(--text-muted) — Last Year reference line
+import {
+  MultiSelect,
+  COLOR_COMPARISON, COLOR_BUDGET, COLOR_LY,
+  VIEW_ORDER, VIEW_LABELS, SCOPE_LABELS, CURRENCY_LABELS,
+  LegendDot, VarianceBadge, formatAxis,
+} from './ui';
 
 export default function StatementDesktop() {
   const {
@@ -67,18 +61,7 @@ export default function StatementDesktop() {
           </p>
         </div>
         {/* Summary ↔ Overview ↔ Portfolio toggle */}
-        <div className="flex rounded-lg p-[3px] gap-0.5" style={{ background: 'var(--muted)' }}>
-          {VIEW_ORDER.map((v) => (
-            <button
-              key={v}
-              onClick={() => setViewMode(v)}
-              className={`px-3.5 py-1.5 rounded-md text-[0.8125rem] font-medium border-none cursor-pointer transition-all whitespace-nowrap ${viewMode === v ? 'bg-white shadow-sm' : 'bg-transparent'}`}
-              style={{ color: viewMode === v ? 'var(--primary)' : 'var(--text-secondary)' }}
-            >
-              {VIEW_LABELS[v]}
-            </button>
-          ))}
-        </div>
+        <ViewToggle viewMode={viewMode} setViewMode={setViewMode} />
       </div>
 
       {/* KPI Strip */}
@@ -370,6 +353,23 @@ export default function StatementDesktop() {
   );
 }
 
+function ViewToggle({ viewMode, setViewMode }: { viewMode: ViewMode; setViewMode: (v: ViewMode) => void }) {
+  return (
+    <div className="flex rounded-lg p-[3px] gap-0.5" style={{ background: 'var(--muted)' }}>
+      {VIEW_ORDER.map((v) => (
+        <button
+          key={v}
+          onClick={() => setViewMode(v)}
+          className={`px-3.5 py-1.5 rounded-md text-[0.8125rem] font-medium border-none cursor-pointer transition-all whitespace-nowrap ${viewMode === v ? 'bg-white shadow-sm' : 'bg-transparent'}`}
+          style={{ color: viewMode === v ? 'var(--primary)' : 'var(--text-secondary)' }}
+        >
+          {VIEW_LABELS[v]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function StatementKpiCard({ kpi, scenario }: { kpi: KpiSummary; scenario: ComparisonScenario }) {
   const def = METRIC_DEFS.find((m) => m.key === kpi.key)!;
   const value = fmtMetric(kpi.comparison, def.format);
@@ -390,38 +390,4 @@ function StatementKpiCard({ kpi, scenario }: { kpi: KpiSummary; scenario: Compar
       </div>
     </div>
   );
-}
-
-function VarianceBadge({
-  label, variance, higherIsBetter,
-}: {
-  label: string;
-  variance: { pct: number; label: string } | null;
-  higherIsBetter: boolean;
-}) {
-  if (!variance) {
-    return <span className="text-[0.75rem]" style={{ color: 'var(--text-muted)' }}>N/A <span className="font-normal" style={{ color: 'var(--text-secondary)' }}>{label}</span></span>;
-  }
-  const isGood = higherIsBetter ? variance.pct >= 0 : variance.pct < 0;
-  const color = isGood ? 'var(--success)' : 'var(--danger)';
-  return (
-    <span className="text-[0.75rem] font-medium" style={{ color }}>
-      {variance.label} <span className="font-normal" style={{ color: 'var(--text-secondary)' }}>{label}</span>
-    </span>
-  );
-}
-
-function LegendDot({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className="w-2 h-2 rounded-full inline-block" style={{ background: color }} />
-      {label}
-    </span>
-  );
-}
-
-function formatAxis(value: number, format: 'money' | 'percent' | 'integer'): string {
-  if (format === 'percent') return `${value.toFixed(0)}%`;
-  if (format === 'integer') return Math.round(value).toLocaleString('en-US');
-  return fmtMoney(value);
 }

@@ -2,6 +2,7 @@
 // Each row's `calc` aggregates a set of period-filtered ForecastRows into a
 // single number; the renderer then formats it according to `format`.
 
+import type React from 'react';
 import type { ForecastRow } from './data';
 
 export type RowFormat = 'integer' | 'k' | 'pct' | 'rate' | 'fx' | 'x_room' | 'ratio';
@@ -365,4 +366,23 @@ export function flowThruPct(current: ForecastRow[], reference: ForecastRow[]): n
   }
   const dGop = dRev - dExp;
   return (dGop / dRev) * 100;
+}
+
+// ─── Variance cell styling ──────────────────────────────────────
+// Shared across all three table components.
+
+export const BG_GOOD = 'rgba(16, 185, 129, 0.10)';  // success @ 10%
+export const BG_BAD = 'rgba(239, 68, 68, 0.10)';    // danger @ 10%
+
+/** Green/red tinted style for variance cells.
+ *  Accepts `number | null` so callers don't need to guard. */
+export function varianceStyle(varValue: number | null, higherIsBetter?: boolean): React.CSSProperties {
+  if (higherIsBetter === undefined) return { color: 'var(--text-primary)' };
+  if (varValue === null || varValue === 0 || !Number.isFinite(varValue)) {
+    return { color: 'var(--text-secondary)' };
+  }
+  const isGood = higherIsBetter ? varValue > 0 : varValue < 0;
+  return isGood
+    ? { color: 'var(--success)', background: BG_GOOD }
+    : { color: 'var(--danger)', background: BG_BAD };
 }

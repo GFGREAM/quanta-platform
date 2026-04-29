@@ -14,6 +14,7 @@ import {
   fmtValue,
   fmtVar,
   flowThruPct,
+  varianceStyle,
   type TableRow,
 } from './tableConfig';
 
@@ -33,9 +34,6 @@ interface Props {
   lyNoXR: ForecastRow[];
   compact?: boolean;
 }
-
-const BG_GOOD = 'rgba(16, 185, 129, 0.10)';
-const BG_BAD = 'rgba(239, 68, 68, 0.10)';
 
 export default function StatementSummaryTable({
   hotel, scope, periodMonth, year, scenario, currency,
@@ -101,7 +99,7 @@ export default function StatementSummaryTable({
           <tbody>
             {SUMMARY_ROWS.map((row, i) => (
               <Row
-                key={i}
+                key={row.label ?? `spacer-${i}`}
                 row={row}
                 current={current}
                 budget={budget}
@@ -251,13 +249,3 @@ function fmtVarPctRel(current: number, ref: number): string {
   return `${pct >= 0 ? '' : '-'}${Math.abs(pct).toFixed(1)}%`;
 }
 
-function varianceStyle(varValue: number | null, higherIsBetter?: boolean): React.CSSProperties {
-  if (higherIsBetter === undefined) return { color: 'var(--text-primary)' };
-  if (varValue === null || !Number.isFinite(varValue) || varValue === 0) {
-    return { color: 'var(--text-secondary)' };
-  }
-  const isGood = higherIsBetter ? varValue > 0 : varValue < 0;
-  return isGood
-    ? { color: 'var(--success)', background: BG_GOOD }
-    : { color: 'var(--danger)', background: BG_BAD };
-}

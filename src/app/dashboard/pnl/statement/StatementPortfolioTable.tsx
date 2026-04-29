@@ -15,6 +15,7 @@ import {
   fmtVar,
   flattenRows,
   flowThruPct,
+  varianceStyle,
   type TableRow,
 } from './tableConfig';
 import type { PortfolioData } from './useStatement';
@@ -28,9 +29,6 @@ interface Props {
   portfolio: PortfolioData;
   compact?: boolean;
 }
-
-const BG_GOOD = 'rgba(16, 185, 129, 0.10)';
-const BG_BAD = 'rgba(239, 68, 68, 0.10)';
 
 export default function StatementPortfolioTable({
   scope, periodMonth, year, scenario, currency, portfolio, compact,
@@ -102,7 +100,6 @@ export default function StatementPortfolioTable({
               {[0, 1, 2].map((groupIdx) => (
                 <GroupHeaderCells
                   key={groupIdx}
-                  isFirst={groupIdx === 0}
                   hotelCodes={portfolio.groups.map((g) => g.code)}
                   padCell={padCell}
                   fontHeader={fontHeader}
@@ -113,7 +110,7 @@ export default function StatementPortfolioTable({
           <tbody>
             {flattenRows(TABLE_ROWS).map((row, i) => (
               <PortfolioRow
-                key={i}
+                key={row.label ?? `spacer-${i}`}
                 row={row}
                 portfolio={portfolio}
                 padCell={padCell}
@@ -128,8 +125,8 @@ export default function StatementPortfolioTable({
 }
 
 function GroupHeaderCells({
-  isFirst, hotelCodes, padCell, fontHeader,
-}: { isFirst: boolean; hotelCodes: string[]; padCell: string; fontHeader: string }) {
+  hotelCodes, padCell, fontHeader,
+}: { hotelCodes: string[]; padCell: string; fontHeader: string }) {
   return (
     <>
       {hotelCodes.map((code, idx) => (
@@ -147,8 +144,6 @@ function GroupHeaderCells({
       >
         TOTAL
       </th>
-      {/* spacer to keep border on next group */}
-      <span className="hidden">{isFirst ? '' : ''}</span>
     </>
   );
 }
@@ -308,13 +303,3 @@ function fmtFlowThru(pct: number | null): string {
   return `${pct >= 0 ? '' : '-'}${Math.abs(pct).toFixed(1)}%`;
 }
 
-function varianceStyle(varValue: number | null, higherIsBetter?: boolean): React.CSSProperties {
-  if (higherIsBetter === undefined) return { color: 'var(--text-primary)' };
-  if (varValue === null || varValue === 0 || !Number.isFinite(varValue)) {
-    return { color: 'var(--text-secondary)' };
-  }
-  const isGood = higherIsBetter ? varValue > 0 : varValue < 0;
-  return isGood
-    ? { color: 'var(--success)', background: BG_GOOD }
-    : { color: 'var(--danger)', background: BG_BAD };
-}
