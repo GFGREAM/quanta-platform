@@ -51,25 +51,17 @@ export default function StatementDesktop() {
       </div>
 
       {/* Title row */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight m-0" style={{ color: 'var(--primary)' }}>
-            P&amp;L Statement
-          </h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-            {scenario} vs Budget vs LY — full-year view
-          </p>
-        </div>
-        {/* Summary ↔ Overview ↔ Portfolio toggle */}
-        <ViewToggle viewMode={viewMode} setViewMode={setViewMode} />
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight m-0" style={{ color: 'var(--primary)' }}>
+          P&amp;L Statement
+        </h1>
+        <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+          {scenario} vs Budget vs LY — full-year view
+        </p>
       </div>
 
-      {/* KPI Strip */}
-      <div className="grid grid-cols-4 gap-3 max-[1100px]:grid-cols-2">
-        {kpis.map((k) => (
-          <StatementKpiCard key={k.key} kpi={k} scenario={scenario} />
-        ))}
-      </div>
+      {/* Summary ↔ Overview ↔ Portfolio toggle */}
+      <ViewToggle viewMode={viewMode} setViewMode={setViewMode} />
 
       {/* Filters bar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -155,6 +147,13 @@ export default function StatementDesktop() {
           <LegendDot color={COLOR_BUDGET} label="Budget" />
           <LegendDot color={COLOR_LY} label="LY" />
         </div>
+      </div>
+
+      {/* KPI Strip */}
+      <div className="grid grid-cols-4 gap-3 max-[1100px]:grid-cols-2">
+        {kpis.map((k) => (
+          <StatementKpiCard key={k.key} kpi={k} scenario={scenario} />
+        ))}
       </div>
 
       {/* Comparison table — summary, overview (single), or portfolio */}
