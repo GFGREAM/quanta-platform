@@ -6,15 +6,17 @@ import {
 } from 'recharts';
 import { selectStyle } from '@/lib/selectStyle';
 import { fmtMetric, METRIC_DEFS, SCOPES, scopeLabel, type MetricKey, type Month } from './data';
-import { useStatement, type ComparisonScenario, type KpiSummary, type ViewMode } from './useStatement';
+import { useStatement, type ViewMode } from './useStatement';
 import StatementTable from './StatementTable';
 import StatementPortfolioTable from './StatementPortfolioTable';
 import StatementSummaryTable from './StatementSummaryTable';
+import StatementMonthlyTable from './StatementMonthlyTable';
+import StatementYearlyTable from './StatementYearlyTable';
 import {
   MultiSelect,
   COLOR_COMPARISON, COLOR_BUDGET, COLOR_LY,
   VIEW_ORDER, VIEW_LABELS, SCOPE_LABELS, CURRENCY_LABELS,
-  LegendDot, VarianceBadge, formatAxis,
+  LegendDot, formatAxis,
 } from './ui';
 
 export default function StatementMobile() {
@@ -31,9 +33,11 @@ export default function StatementMobile() {
     metricDef,
     monthlySeries,
     weeklyOutlookSeries,
-    kpis,
     periodCurrent, periodBudget, periodLy,
     periodCurrentNoXR, periodBudgetNoXR, periodLyNoXR,
+    currentScenarioRows, currentBudgetRows, lyActualRows,
+    currentScenarioRowsNoXR, currentBudgetRowsNoXR, lyActualRowsNoXR,
+    allYearsHotelRows, allYearsHotelRowsNoXR, availableYears,
     portfolio,
     hotelOptions, yearOptions, scenarioOptions, monthOptions,
     portfolioHotelOptions, currencyOptions,
@@ -87,23 +91,32 @@ export default function StatementMobile() {
         <select
           className="h-10 px-3 pr-8 rounded-md border text-sm bg-white appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
           style={selectStyle}
-          value={year}
-          onChange={(e) => setYear(Number(e.target.value))}
-        >
-          {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-        </select>
-        <select
-          className="h-10 px-3 pr-8 rounded-md border text-sm bg-white appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
-          style={selectStyle}
           value={scenario}
           onChange={(e) => setScenario(e.target.value as ComparisonScenario)}
         >
           {scenarioOptions.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
+        <select
+          className="h-10 px-3 pr-8 rounded-md border text-sm bg-white appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
+          style={selectStyle}
+          value={year}
+          onChange={(e) => setYear(Number(e.target.value))}
+        >
+          {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
       </div>
 
-      {/* Scope toggle + month select + currency toggle (table-only) */}
+      {/* Month select + scope toggle + currency toggle (table-only) */}
       <div className="flex items-center gap-2 flex-wrap">
+        <select
+          className="h-9 flex-1 min-w-[6rem] px-3 pr-8 rounded-md border text-sm bg-white appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] disabled:opacity-50"
+          style={selectStyle}
+          value={periodMonth}
+          onChange={(e) => setPeriodMonth(e.target.value as Month)}
+          disabled={scope === 'fy'}
+        >
+          {monthOptions.map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
         <div className="flex rounded-lg p-[3px] gap-0.5" style={{ background: 'var(--muted)' }}>
           {SCOPES.map((s) => (
             <button
@@ -116,15 +129,6 @@ export default function StatementMobile() {
             </button>
           ))}
         </div>
-        <select
-          className="h-9 flex-1 min-w-[6rem] px-3 pr-8 rounded-md border text-sm bg-white appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] disabled:opacity-50"
-          style={selectStyle}
-          value={periodMonth}
-          onChange={(e) => setPeriodMonth(e.target.value as Month)}
-          disabled={scope === 'fy'}
-        >
-          {monthOptions.map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
         <div className="flex rounded-lg p-[3px] gap-0.5" style={{ background: 'var(--muted)' }}>
           {currencyOptions.map((c) => (
             <button
@@ -172,6 +176,28 @@ export default function StatementMobile() {
           lyNoXR={periodLyNoXR}
           compact
         />
+      ) : viewMode === 'monthly' ? (
+        <StatementMonthlyTable
+          hotel={hotel}
+          year={year}
+          scenario={scenario}
+          currency={currency}
+          current={currentScenarioRows}
+          budget={currentBudgetRows}
+          ly={lyActualRows}
+          currentNoXR={currentScenarioRowsNoXR}
+          budgetNoXR={currentBudgetRowsNoXR}
+          lyNoXR={lyActualRowsNoXR}
+        />
+      ) : viewMode === 'yearly' ? (
+        <StatementYearlyTable
+          hotel={hotel}
+          scenario={scenario}
+          currency={currency}
+          allRows={allYearsHotelRows}
+          allRowsNoXR={allYearsHotelRowsNoXR}
+          years={availableYears}
+        />
       ) : portfolio.groups.length === 0 ? (
         <div className="bg-white border rounded-lg p-6 text-center text-xs" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
           Select at least one hotel to build the portfolio view.
@@ -188,18 +214,9 @@ export default function StatementMobile() {
         />
       )}
 
-      {/* KPI carousel */}
-      <div className="overflow-x-auto -mx-1 px-1">
-        <div className="flex gap-2.5 min-w-min">
-          {kpis.map((k) => (
-            <div key={k.key} className="min-w-[200px]">
-              <StatementKpiCardMobile kpi={k} scenario={scenario} />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Chart — monthly trend (summary/overview) or WoW Outlook (portfolio) */}
+      {/* Chart — Monthly trend (single/monthly) or WoW Outlook (portfolio).
+          Hidden in Summary because the same view exists in Detailed/Monthly. */}
+      {viewMode !== 'summary' && (
       <div className="bg-white border rounded-lg p-3" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-start justify-between mb-2 gap-2">
           <div className="min-w-0">
@@ -349,6 +366,7 @@ export default function StatementMobile() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -370,24 +388,3 @@ function ViewToggleMobile({ viewMode, setViewMode }: { viewMode: ViewMode; setVi
   );
 }
 
-function StatementKpiCardMobile({ kpi, scenario }: { kpi: KpiSummary; scenario: ComparisonScenario }) {
-  const def = METRIC_DEFS.find((m) => m.key === kpi.key)!;
-  const value = fmtMetric(kpi.comparison, def.format);
-  return (
-    <div
-      className="bg-white rounded-lg border px-3 py-2.5 flex flex-col gap-1.5"
-      style={{ borderColor: 'var(--border)' }}
-    >
-      <div className="text-[0.625rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-        {kpi.label} <span style={{ color: 'var(--text-secondary)' }}>({scenario})</span>
-      </div>
-      <div className="text-[0.9375rem] font-bold leading-tight tracking-tight" style={{ color: 'var(--primary)' }}>
-        {value}
-      </div>
-      <div className="flex items-center justify-between gap-2 pt-1.5 border-t" style={{ borderColor: 'var(--border)' }}>
-        <VarianceBadge label="vs Budget" variance={kpi.varianceVsBudget} higherIsBetter={kpi.higherIsBetter} size="sm" />
-        <VarianceBadge label="vs LY" variance={kpi.varianceVsLy} higherIsBetter={kpi.higherIsBetter} size="sm" />
-      </div>
-    </div>
-  );
-}

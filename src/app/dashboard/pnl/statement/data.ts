@@ -321,9 +321,6 @@ export const METRICS_BY_KEY = METRIC_DEFS.reduce<Record<MetricKey, MetricDef>>((
   return acc;
 }, {} as Record<MetricKey, MetricDef>);
 
-// KPI strip mirrors the Home dashboard layout: Revenue / Expenses / GOP / EBITDA.
-export const KPI_METRICS: readonly MetricKey[] = ['totalRevenue', 'totalExpenses', 'gop', 'ebitda'];
-
 // ─── Formatters ─────────────────────────────────────────────────
 
 export function fmtMoney(value: number): string {

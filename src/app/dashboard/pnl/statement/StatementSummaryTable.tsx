@@ -2,6 +2,7 @@
 
 import {
   currencyLabel,
+  scenarioAbbrev,
   scopeLabel,
   type Currency,
   type ForecastRow,
@@ -10,13 +11,16 @@ import {
   type Scope,
 } from './data';
 import {
+  FLOW_THRU_FORMULA,
   SUMMARY_ROWS,
   fmtValue,
   fmtVar,
+  fmtVarPct,
   flowThruPct,
   varianceStyle,
   type TableRow,
 } from './tableConfig';
+import { FormulaInfo } from './ui';
 
 interface Props {
   hotel: string;
@@ -41,8 +45,6 @@ export default function StatementSummaryTable({
   currentNoXR, budgetNoXR, lyNoXR,
   compact,
 }: Props) {
-  void scenario; // header reflects period only — scenario is implied by current
-
   const periodTitle = scopeLabel(scope, periodMonth, year);
   const heading = hotel || 'All hotels';
 
@@ -50,6 +52,11 @@ export default function StatementSummaryTable({
   const padLabel = compact ? 'px-2 py-1' : 'px-3 py-1.5';
   const fontMain = compact ? 'text-[0.6875rem]' : 'text-[0.8125rem]';
   const fontHeader = compact ? 'text-[0.625rem]' : 'text-[0.6875rem]';
+
+  const curAbbr = scenarioAbbrev(scenario);
+  const refAbbr = scenarioAbbrev('Budget');
+  const lyAbbr = scenarioAbbrev('Actual'); // LY is always closed Actual
+  const colSpanAll = compact ? 6 : 8;
 
   return (
     <div
@@ -79,27 +86,31 @@ export default function StatementSummaryTable({
           <thead>
             <tr style={{ background: '#FAFAFA', borderBottom: '1px solid var(--border)' }}>
               <th className={`${padLabel} text-left ${fontHeader} font-semibold uppercase tracking-wider`} style={{ color: 'var(--text-secondary)' }} />
-              <th className={`${padCell} text-right ${fontHeader} font-semibold uppercase tracking-wider`} style={{ color: 'var(--text-secondary)' }}>
-                This Year
-              </th>
-              <th className={`${padCell} text-right ${fontHeader} font-semibold uppercase tracking-wider`} style={{ color: 'var(--text-secondary)' }}>
-                vs Bud
-              </th>
-              <th className={`${padCell} text-right ${fontHeader} font-semibold uppercase tracking-wider`} style={{ color: 'var(--text-secondary)' }}>
-                vs LY
-              </th>
-              <th className={`${padCell} text-right ${fontHeader} font-semibold uppercase tracking-wider`} style={{ color: 'var(--text-secondary)' }}>
-                vs Bud%
-              </th>
-              <th className={`${padCell} text-right ${fontHeader} font-semibold uppercase tracking-wider`} style={{ color: 'var(--text-secondary)' }}>
-                vs LY%
-              </th>
+              {compact ? (
+                <>
+                  <Th padCell={padCell} fontHeader={fontHeader}>This Year</Th>
+                  <Th padCell={padCell} fontHeader={fontHeader}>vs Bud</Th>
+                  <Th padCell={padCell} fontHeader={fontHeader}>vs Bud%</Th>
+                  <Th padCell={padCell} fontHeader={fontHeader}>vs LY</Th>
+                  <Th padCell={padCell} fontHeader={fontHeader}>vs LY%</Th>
+                </>
+              ) : (
+                <>
+                  <Th padCell={padCell} fontHeader={fontHeader}>{curAbbr} {year}</Th>
+                  <Th padCell={padCell} fontHeader={fontHeader}>{refAbbr} {year}</Th>
+                  <Th padCell={padCell} fontHeader={fontHeader}>Var</Th>
+                  <Th padCell={padCell} fontHeader={fontHeader}>Var%</Th>
+                  <Th padCell={padCell} fontHeader={fontHeader} borderLeft>{lyAbbr} {year - 1}</Th>
+                  <Th padCell={padCell} fontHeader={fontHeader}>Var</Th>
+                  <Th padCell={padCell} fontHeader={fontHeader}>Var%</Th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
             {SUMMARY_ROWS.map((row, i) => (
               <Row
-                key={row.label ?? `spacer-${i}`}
+                key={`${i}-${row.label ?? 'spacer'}`}
                 row={row}
                 current={current}
                 budget={budget}
@@ -109,6 +120,8 @@ export default function StatementSummaryTable({
                 lyNoXR={lyNoXR}
                 padCell={padCell}
                 padLabel={padLabel}
+                colSpanAll={colSpanAll}
+                compact={!!compact}
               />
             ))}
           </tbody>
@@ -118,8 +131,27 @@ export default function StatementSummaryTable({
   );
 }
 
+function Th({
+  children, padCell, fontHeader, borderLeft,
+}: {
+  children: React.ReactNode;
+  padCell: string;
+  fontHeader: string;
+  borderLeft?: boolean;
+}) {
+  return (
+    <th
+      className={`${padCell} text-right ${fontHeader} font-semibold uppercase tracking-wider${borderLeft ? ' border-l' : ''}`}
+      style={{ color: 'var(--text-secondary)', ...(borderLeft ? { borderColor: 'var(--border)' } : {}) }}
+    >
+      {children}
+    </th>
+  );
+}
+
 function Row({
-  row, current, budget, ly, currentNoXR, budgetNoXR, lyNoXR, padCell, padLabel,
+  row, current, budget, ly, currentNoXR, budgetNoXR, lyNoXR,
+  padCell, padLabel, colSpanAll, compact,
 }: {
   row: TableRow;
   current: ForecastRow[];
@@ -130,11 +162,13 @@ function Row({
   lyNoXR: ForecastRow[];
   padCell: string;
   padLabel: string;
+  colSpanAll: number;
+  compact: boolean;
 }) {
   if (row.kind === 'spacer') {
     return (
       <tr aria-hidden="true">
-        <td colSpan={6} className="h-2" />
+        <td colSpan={colSpanAll} className="h-2" />
       </tr>
     );
   }
@@ -143,7 +177,7 @@ function Row({
     return (
       <tr style={{ background: '#FAFAFA' }}>
         <td
-          colSpan={6}
+          colSpan={colSpanAll}
           className={`${padLabel} text-[0.6875rem] font-semibold uppercase tracking-wider border-t border-b`}
           style={{ color: 'var(--text-secondary)', borderColor: 'var(--border)' }}
         >
@@ -161,18 +195,44 @@ function Row({
   if (row.kind === 'flow_thru') {
     const vsBud = flowThruPct(curRows, budRows);
     const vsLy = flowThruPct(curRows, lyRows);
+    if (compact) {
+      return (
+        <tr className="border-t" style={{ borderColor: 'var(--border-light)' }}>
+          <td className={`${padLabel} font-normal`} style={{ color: 'var(--text-secondary)' }}>
+            <span className="inline-flex items-center gap-1.5">
+              {row.label}
+              <FormulaInfo text={FLOW_THRU_FORMULA} />
+            </span>
+          </td>
+          <td className={`${padCell} text-right`} style={{ color: 'var(--text-muted)' }}>—</td>
+          <td className={`${padCell} text-right`} style={{ color: 'var(--text-muted)' }}>—</td>
+          <td className={`${padCell} text-right tabular-nums font-medium`} style={vsBud === null ? undefined : varianceStyle(vsBud, row.higherIsBetter)}>
+            {vsBud === null ? '—' : `${vsBud >= 0 ? '' : '-'}${Math.abs(vsBud).toFixed(1)}%`}
+          </td>
+          <td className={`${padCell} text-right`} style={{ color: 'var(--text-muted)' }}>—</td>
+          <td className={`${padCell} text-right tabular-nums font-medium`} style={vsLy === null ? undefined : varianceStyle(vsLy, row.higherIsBetter)}>
+            {vsLy === null ? '—' : `${vsLy >= 0 ? '' : '-'}${Math.abs(vsLy).toFixed(1)}%`}
+          </td>
+        </tr>
+      );
+    }
     return (
       <tr className="border-t" style={{ borderColor: 'var(--border-light)' }}>
         <td className={`${padLabel} font-normal`} style={{ color: 'var(--text-secondary)' }}>
-          {row.label}
+          <span className="inline-flex items-center gap-1.5">
+            {row.label}
+            <FormulaInfo text={FLOW_THRU_FORMULA} />
+          </span>
         </td>
         <td className={`${padCell} text-right`} style={{ color: 'var(--text-muted)' }}>—</td>
         <td className={`${padCell} text-right`} style={{ color: 'var(--text-muted)' }}>—</td>
         <td className={`${padCell} text-right`} style={{ color: 'var(--text-muted)' }}>—</td>
-        <td className={`${padCell} text-right tabular-nums font-medium`} style={vsBud === null ? undefined : varianceStyle(vsBud, row.higherIsBetter)}>
+        <td className={`${padCell} text-right font-medium`} style={vsBud === null ? undefined : varianceStyle(vsBud, row.higherIsBetter)}>
           {vsBud === null ? '—' : `${vsBud >= 0 ? '' : '-'}${Math.abs(vsBud).toFixed(1)}%`}
         </td>
-        <td className={`${padCell} text-right tabular-nums font-medium`} style={vsLy === null ? undefined : varianceStyle(vsLy, row.higherIsBetter)}>
+        <td className={`${padCell} text-right border-l`} style={{ color: 'var(--text-muted)', borderColor: 'var(--border)' }}>—</td>
+        <td className={`${padCell} text-right`} style={{ color: 'var(--text-muted)' }}>—</td>
+        <td className={`${padCell} text-right font-medium`} style={vsLy === null ? undefined : varianceStyle(vsLy, row.higherIsBetter)}>
           {vsLy === null ? '—' : `${vsLy >= 0 ? '' : '-'}${Math.abs(vsLy).toFixed(1)}%`}
         </td>
       </tr>
@@ -185,53 +245,81 @@ function Row({
   const cur = calc(curRows);
   const bud = calc(budRows);
   const lyVal = calc(lyRows);
-  const isPercentRow = format === 'pct';
   const labelClass = row.bold ? 'font-bold' : 'font-normal';
   const valueClass = row.bold ? 'font-bold' : 'font-normal';
   const labelColor = row.bold ? 'var(--primary)' : 'var(--text-primary)';
 
-  // For % rows the absolute Var $ columns stay blank; only Var% (pp delta)
-  // is meaningful. Otherwise show the delta in the row's own format.
-  const varBudCell = isPercentRow ? null : cur - bud;
-  const varLyCell = isPercentRow ? null : cur - lyVal;
-  const varBudPct = isPercentRow ? cur - bud : undefined;
-  const varLyPct = isPercentRow ? cur - lyVal : undefined;
+  if (compact) {
+    const isPercentRow = format === 'pct';
+    const varBudCell = isPercentRow ? null : cur - bud;
+    const varLyCell = isPercentRow ? null : cur - lyVal;
+    const varBudPct = isPercentRow ? cur - bud : undefined;
+    const varLyPct = isPercentRow ? cur - lyVal : undefined;
+    return (
+      <tr className="border-t hover:bg-[var(--bg-hover)]" style={{ borderColor: 'var(--border-light)' }}>
+        <td className={`${padLabel} ${labelClass}`} style={{ color: labelColor }}>{row.label}</td>
+        <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={{ color: 'var(--primary)' }}>
+          {fmtValue(cur, format)}
+        </td>
+        <td
+          className={`${padCell} text-right tabular-nums ${valueClass}`}
+          style={varBudCell === null ? { color: 'var(--text-muted)' } : varianceStyle(varBudCell, row.higherIsBetter)}
+        >
+          {varBudCell === null ? '' : fmtVar(varBudCell, format)}
+        </td>
+        <td
+          className={`${padCell} text-right tabular-nums ${valueClass}`}
+          style={isPercentRow
+            ? varianceStyle(varBudPct ?? 0, row.higherIsBetter)
+            : varianceStyle(cur - bud, row.higherIsBetter)}
+        >
+          {isPercentRow ? fmtPctDelta(varBudPct) : fmtVarPct(cur, bud)}
+        </td>
+        <td
+          className={`${padCell} text-right tabular-nums ${valueClass}`}
+          style={varLyCell === null ? { color: 'var(--text-muted)' } : varianceStyle(varLyCell, row.higherIsBetter)}
+        >
+          {varLyCell === null ? '' : fmtVar(varLyCell, format)}
+        </td>
+        <td
+          className={`${padCell} text-right tabular-nums ${valueClass}`}
+          style={isPercentRow
+            ? varianceStyle(varLyPct ?? 0, row.higherIsBetter)
+            : varianceStyle(cur - lyVal, row.higherIsBetter)}
+        >
+          {isPercentRow ? fmtPctDelta(varLyPct) : fmtVarPct(cur, lyVal)}
+        </td>
+      </tr>
+    );
+  }
 
+  // Desktop layout — mirrors StatementTable (Detailed view):
+  // label · Outlook · Budget · Var · Var% · LY · Var · Var%
+  const varBud = cur - bud;
+  const varLy = cur - lyVal;
   return (
     <tr className="border-t hover:bg-[var(--bg-hover)]" style={{ borderColor: 'var(--border-light)' }}>
-      <td className={`${padLabel} ${labelClass}`} style={{ color: labelColor }}>
-        {row.label}
-      </td>
+      <td className={`${padLabel} ${labelClass}`} style={{ color: labelColor }}>{row.label}</td>
       <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={{ color: 'var(--primary)' }}>
         {fmtValue(cur, format)}
       </td>
-      <td
-        className={`${padCell} text-right tabular-nums`}
-        style={varBudCell === null ? { color: 'var(--text-muted)' } : varianceStyle(varBudCell, row.higherIsBetter)}
-      >
-        {varBudCell === null ? '' : fmtVar(varBudCell, format)}
+      <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={{ color: 'var(--text-secondary)' }}>
+        {fmtValue(bud, format)}
       </td>
-      <td
-        className={`${padCell} text-right tabular-nums`}
-        style={varLyCell === null ? { color: 'var(--text-muted)' } : varianceStyle(varLyCell, row.higherIsBetter)}
-      >
-        {varLyCell === null ? '' : fmtVar(varLyCell, format)}
+      <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={varianceStyle(varBud, row.higherIsBetter)}>
+        {fmtVar(format === 'pct' ? cur - bud : varBud, format)}
       </td>
-      <td
-        className={`${padCell} text-right tabular-nums`}
-        style={isPercentRow
-          ? varianceStyle(varBudPct ?? 0, row.higherIsBetter)
-          : varianceStyle(cur - bud, row.higherIsBetter)}
-      >
-        {isPercentRow ? fmtPctDelta(varBudPct) : fmtVarPctRel(cur, bud)}
+      <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={varianceStyle(varBud, row.higherIsBetter)}>
+        {fmtVarPct(cur, bud)}
       </td>
-      <td
-        className={`${padCell} text-right tabular-nums`}
-        style={isPercentRow
-          ? varianceStyle(varLyPct ?? 0, row.higherIsBetter)
-          : varianceStyle(cur - lyVal, row.higherIsBetter)}
-      >
-        {isPercentRow ? fmtPctDelta(varLyPct) : fmtVarPctRel(cur, lyVal)}
+      <td className={`${padCell} text-right tabular-nums border-l ${valueClass}`} style={{ color: 'var(--text-secondary)', borderColor: 'var(--border)' }}>
+        {fmtValue(lyVal, format)}
+      </td>
+      <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={varianceStyle(varLy, row.higherIsBetter)}>
+        {fmtVar(format === 'pct' ? cur - lyVal : varLy, format)}
+      </td>
+      <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={varianceStyle(varLy, row.higherIsBetter)}>
+        {fmtVarPct(cur, lyVal)}
       </td>
     </tr>
   );
@@ -242,10 +330,3 @@ function fmtPctDelta(deltaPp: number | undefined): string {
   if (deltaPp === 0) return '-';
   return `${deltaPp >= 0 ? '' : '-'}${Math.abs(deltaPp).toFixed(1)}%`;
 }
-
-function fmtVarPctRel(current: number, ref: number): string {
-  if (!Number.isFinite(current) || !Number.isFinite(ref) || ref === 0) return '—';
-  const pct = ((current - ref) / Math.abs(ref)) * 100;
-  return `${pct >= 0 ? '' : '-'}${Math.abs(pct).toFixed(1)}%`;
-}
-
