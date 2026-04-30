@@ -1,5 +1,8 @@
 'use client';
 
+import { useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Info } from 'lucide-react';
 import { fmtMoney, type Currency, type MetricFormat, type Scope } from './data';
 import type { ViewMode } from './useStatement';
 
@@ -14,8 +17,8 @@ export const COLOR_LY = '#9CA3AF';         // var(--text-muted) — Last Year re
 
 // ─── Label maps ─────────────────────────────────────────────────
 
-export const VIEW_ORDER: ViewMode[] = ['summary', 'single', 'portfolio'];
-export const VIEW_LABELS: Record<ViewMode, string> = { summary: 'Summary', single: 'Overview', portfolio: 'Portfolio' };
+export const VIEW_ORDER: ViewMode[] = ['summary', 'single', 'monthly', 'yearly', 'portfolio'];
+export const VIEW_LABELS: Record<ViewMode, string> = { summary: 'Summary', single: 'Detailed', monthly: 'Monthly', yearly: 'Yearly', portfolio: 'Portfolio' };
 export const SCOPE_LABELS: Record<Scope, string> = { mtd: 'MTD', ytd: 'YTD', fy: 'FY' };
 export const CURRENCY_LABELS: Record<Currency, string> = { USD: 'USD', Local: 'Local' };
 
@@ -32,29 +35,39 @@ export function LegendDot({ color, label, size = 'md' }: { color: string; label:
   );
 }
 
-export function VarianceBadge({
-  label, variance, higherIsBetter, size = 'md',
-}: {
-  label: string;
-  variance: { pct: number; label: string } | null;
-  higherIsBetter: boolean;
-  size?: 'sm' | 'md';
-}) {
-  const textClass = size === 'sm' ? 'text-[0.625rem]' : 'text-[0.75rem]';
-  if (!variance) {
-    return (
-      <span className={textClass} style={{ color: 'var(--text-muted)' }}>
-        N/A {size === 'md' && <span className="font-normal" style={{ color: 'var(--text-secondary)' }}>{label}</span>}
-        {size === 'sm' && label}
-      </span>
-    );
-  }
-  const isGood = higherIsBetter ? variance.pct >= 0 : variance.pct < 0;
-  const color = isGood ? 'var(--success)' : 'var(--danger)';
+/** Info icon with a hover tooltip. Renders into document.body via a portal so
+ *  it escapes ancestor `overflow-hidden` containers (the P&L cards have one
+ *  for rounded corners, which would otherwise clip the bubble). */
+export function FormulaInfo({ text }: { text: string }) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
+  const handleEnter = (e: React.MouseEvent<HTMLSpanElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setPos({ x: r.left + r.width / 2, y: r.top });
+  };
+
   return (
-    <span className={`${textClass} font-medium`} style={{ color }}>
-      {variance.label} <span className="font-normal" style={{ color: 'var(--text-secondary)' }}>{label}</span>
-    </span>
+    <>
+      <span
+        className="inline-flex items-center"
+        style={{ cursor: 'help' }}
+        onMouseEnter={handleEnter}
+        onMouseMove={handleEnter}
+        onMouseLeave={() => setPos(null)}
+      >
+        <Info size={12} aria-label="Formula" style={{ color: 'var(--text-muted)' }} />
+      </span>
+      {pos && typeof document !== 'undefined' && createPortal(
+        <div
+          role="tooltip"
+          className="pointer-events-none fixed -translate-x-1/2 -translate-y-full whitespace-pre-line rounded px-2.5 py-1.5 text-[0.6875rem] leading-snug shadow-lg z-50 w-max max-w-[18rem] text-left"
+          style={{ left: pos.x, top: pos.y - 6, background: 'var(--primary)', color: '#fff' }}
+        >
+          {text}
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 
