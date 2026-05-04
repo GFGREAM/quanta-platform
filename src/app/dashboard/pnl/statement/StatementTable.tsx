@@ -19,10 +19,9 @@ import {
   fmtVar,
   fmtVarPct,
   flowThruPct,
-  varianceStyle,
   type TableRow,
 } from './tableConfig';
-import { FormulaInfo } from './ui';
+import { FormulaInfo, VariancePill } from './ui';
 
 interface Props {
   hotel: string;
@@ -199,13 +198,25 @@ function Row(props: RowProps) {
         <td className={`${padCell} text-right`} style={{ color: 'var(--text-muted)' }}>—</td>
         <td className={`${padCell} text-right`} style={{ color: 'var(--text-muted)' }}>—</td>
         <td className={`${padCell} text-right`} style={{ color: 'var(--text-muted)' }}>—</td>
-        <td className={`${padCell} text-right font-medium`} style={vsBud === null ? undefined : varianceStyle(vsBud, row.higherIsBetter)}>
-          {vsBud === null ? '—' : `${vsBud >= 0 ? '' : '-'}${Math.abs(vsBud).toFixed(1)}%`}
+        <td className={`${padCell} text-right`}>
+          {vsBud === null ? (
+            <span style={{ color: 'var(--text-muted)' }}>—</span>
+          ) : (
+            <VariancePill varValue={vsBud} higherIsBetter={row.higherIsBetter}>
+              {`${vsBud >= 0 ? '' : '-'}${Math.abs(vsBud).toFixed(1)}%`}
+            </VariancePill>
+          )}
         </td>
         <td className={`${padCell} text-right border-l`} style={{ color: 'var(--text-muted)', borderColor: 'var(--border)' }}>—</td>
         <td className={`${padCell} text-right`} style={{ color: 'var(--text-muted)' }}>—</td>
-        <td className={`${padCell} text-right font-medium`} style={vsLy === null ? undefined : varianceStyle(vsLy, row.higherIsBetter)}>
-          {vsLy === null ? '—' : `${vsLy >= 0 ? '' : '-'}${Math.abs(vsLy).toFixed(1)}%`}
+        <td className={`${padCell} text-right`}>
+          {vsLy === null ? (
+            <span style={{ color: 'var(--text-muted)' }}>—</span>
+          ) : (
+            <VariancePill varValue={vsLy} higherIsBetter={row.higherIsBetter}>
+              {`${vsLy >= 0 ? '' : '-'}${Math.abs(vsLy).toFixed(1)}%`}
+            </VariancePill>
+          )}
         </td>
       </tr>
     );
@@ -223,9 +234,12 @@ function Row(props: RowProps) {
   const varBud = cur - bud;
   const varLy = cur - lyVal;
 
-  const labelClass = row.bold ? 'font-bold' : 'font-normal';
-  const valueClass = row.bold ? 'font-bold' : 'font-normal';
-  const labelColor = row.bold ? 'var(--primary)' : 'var(--text-primary)';
+  const isHi = !!row.highlight;
+  const labelClass = row.bold || isHi ? 'font-bold' : 'font-normal';
+  const valueClass = row.bold || isHi ? 'font-bold' : 'font-normal';
+  const labelColor = isHi ? '#fff' : (row.bold ? 'var(--primary)' : 'var(--text-primary)');
+  const valuePrimary = isHi ? '#fff' : 'var(--primary)';
+  const valueMuted = isHi ? 'rgba(255,255,255,0.8)' : 'var(--text-secondary)';
   // Indent child rows under the group label; chevron icon takes ~14px room.
   const indentPx = depth * 16;
   const Chevron = isOpen ? ChevronDown : ChevronRightIcon;
@@ -233,40 +247,48 @@ function Row(props: RowProps) {
   return (
     <>
       <tr
-        className={`border-t hover:bg-[var(--bg-hover)] ${isGroup ? 'cursor-pointer' : ''}`}
-        style={{ borderColor: 'var(--border-light)' }}
+        className={`border-t ${isGroup ? 'cursor-pointer' : ''} ${isHi ? '' : 'hover:bg-[var(--bg-hover)]'}`}
+        style={{ borderColor: 'var(--border-light)', background: isHi ? 'var(--primary)' : (row.bold ? 'var(--muted)' : undefined) }}
         onClick={isGroup ? () => onToggle(row.label!) : undefined}
       >
         <td className={`${padLabel} ${labelClass}`} style={{ color: labelColor, paddingLeft: indentPx ? `${indentPx + 12}px` : undefined }}>
           <span className="inline-flex items-center gap-1.5">
             {isGroup ? (
-              <Chevron size={12} style={{ color: 'var(--text-secondary)' }} />
+              <Chevron size={12} style={{ color: isHi ? 'rgba(255,255,255,0.7)' : 'var(--text-secondary)' }} />
             ) : (
               <span className="inline-block w-3" />
             )}
             {row.label}
           </span>
         </td>
-        <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={{ color: 'var(--primary)' }}>
+        <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={{ color: valuePrimary }}>
           {fmtValue(cur, format)}
         </td>
-        <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={{ color: 'var(--text-secondary)' }}>
+        <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={{ color: valueMuted }}>
           {fmtValue(bud, format)}
         </td>
-        <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={varianceStyle(varBud, row.higherIsBetter)}>
-          {fmtVar(format === 'pct' ? cur - bud : varBud, format)}
+        <td className={`${padCell} text-right tabular-nums ${valueClass}`}>
+          <VariancePill varValue={varBud} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+            {fmtVar(format === 'pct' ? cur - bud : varBud, format)}
+          </VariancePill>
         </td>
-        <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={varianceStyle(varBud, row.higherIsBetter)}>
-          {fmtVarPct(cur, bud)}
+        <td className={`${padCell} text-right tabular-nums ${valueClass}`}>
+          <VariancePill varValue={varBud} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+            {fmtVarPct(cur, bud)}
+          </VariancePill>
         </td>
-        <td className={`${padCell} text-right tabular-nums border-l ${valueClass}`} style={{ color: 'var(--text-secondary)', borderColor: 'var(--border)' }}>
+        <td className={`${padCell} text-right tabular-nums border-l ${valueClass}`} style={{ color: valueMuted, borderColor: 'var(--border)' }}>
           {fmtValue(lyVal, format)}
         </td>
-        <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={varianceStyle(varLy, row.higherIsBetter)}>
-          {fmtVar(format === 'pct' ? cur - lyVal : varLy, format)}
+        <td className={`${padCell} text-right tabular-nums ${valueClass}`}>
+          <VariancePill varValue={varLy} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+            {fmtVar(format === 'pct' ? cur - lyVal : varLy, format)}
+          </VariancePill>
         </td>
-        <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={varianceStyle(varLy, row.higherIsBetter)}>
-          {fmtVarPct(cur, lyVal)}
+        <td className={`${padCell} text-right tabular-nums ${valueClass}`}>
+          <VariancePill varValue={varLy} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+            {fmtVarPct(cur, lyVal)}
+          </VariancePill>
         </td>
       </tr>
       {isGroup && isOpen && row.children?.map((child, ci) => (
