@@ -16,6 +16,9 @@ export interface TableRow {
   calc?: (rows: ForecastRow[]) => number;
   /** Visual emphasis — bold label + value. */
   bold?: boolean;
+  /** Strong visual emphasis — navy background + white text (used for grand
+   *  totals like GOP / EBITDA). Implies bold. */
+  highlight?: boolean;
   /** Drives green/red coloring of variance cells.
    *  Revenue/profit metrics → true; expenses → false; neutral → undefined. */
   higherIsBetter?: boolean;
@@ -182,9 +185,9 @@ export const TABLE_ROWS: TableRow[] = [
   SP,
 
   // GOP block
-  { kind: 'data', label: 'GOP', format: 'k', higherIsBetter: true, bold: true,
+  { kind: 'data', label: 'GOP', format: 'k', higherIsBetter: true, bold: true, highlight: true,
     calc: gopAbs },
-  { kind: 'data', label: 'GOP%', format: 'pct', higherIsBetter: true, bold: true,
+  { kind: 'data', label: 'GOP%', format: 'pct', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => safeDiv(gopAbs(rs), sumRevenue(rs)) * 100 },
   { kind: 'flow_thru', label: 'Flow Thru% (Flex)', higherIsBetter: true },
   SP,
@@ -199,9 +202,9 @@ export const TABLE_ROWS: TableRow[] = [
     ],
   },
   SP,
-  { kind: 'data', label: 'EBITDA', format: 'k', higherIsBetter: true, bold: true,
+  { kind: 'data', label: 'EBITDA', format: 'k', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => gopAbs(rs) - sumNonOps(rs) },
-  { kind: 'data', label: 'EBITDA%', format: 'pct', higherIsBetter: true, bold: true,
+  { kind: 'data', label: 'EBITDA%', format: 'pct', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => safeDiv(gopAbs(rs) - sumNonOps(rs), sumRevenue(rs)) * 100 },
   SP,
 
@@ -222,9 +225,9 @@ export const TABLE_ROWS: TableRow[] = [
   // renderer swaps in the noXR row sets before calling these calcs.
   { kind: 'data', label: 'Total Expenses (w/o XR)', format: 'k', higherIsBetter: false,
     calc: sumOperatingExpenses, useNoXR: true },
-  { kind: 'data', label: 'GOP (w/o XR)', format: 'k', higherIsBetter: true,
+  { kind: 'data', label: 'GOP (w/o XR)', format: 'k', higherIsBetter: true, bold: true, highlight: true,
     calc: gopAbs, useNoXR: true },
-  { kind: 'data', label: 'GOP% (w/o XR)', format: 'pct', higherIsBetter: true, bold: true,
+  { kind: 'data', label: 'GOP% (w/o XR)', format: 'pct', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => safeDiv(gopAbs(rs), sumRevenue(rs)) * 100, useNoXR: true },
   { kind: 'flow_thru', label: 'Flow Thru% (w/o X/R)', higherIsBetter: true, useNoXR: true },
 ];
@@ -249,13 +252,13 @@ export const SUMMARY_ROWS: TableRow[] = [
     calc: sumRevenue },
   { kind: 'data', label: 'Total Expenses', format: 'k', higherIsBetter: false,
     calc: sumOperatingExpenses },
-  { kind: 'data', label: 'GOP$', format: 'k', higherIsBetter: true, bold: true,
+  { kind: 'data', label: 'GOP$', format: 'k', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => sumRevenue(rs) - sumOperatingExpenses(rs) },
-  { kind: 'data', label: 'EBITDA$', format: 'k', higherIsBetter: true, bold: true,
+  { kind: 'data', label: 'EBITDA$', format: 'k', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => sumRevenue(rs) - sumOperatingExpenses(rs) - sumNonOps(rs) },
-  { kind: 'data', label: 'GOP%', format: 'pct', higherIsBetter: true, bold: true,
+  { kind: 'data', label: 'GOP%', format: 'pct', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => safeDiv(sumRevenue(rs) - sumOperatingExpenses(rs), sumRevenue(rs)) * 100 },
-  { kind: 'data', label: 'EBITDA%', format: 'pct', higherIsBetter: true, bold: true,
+  { kind: 'data', label: 'EBITDA%', format: 'pct', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => safeDiv(sumRevenue(rs) - sumOperatingExpenses(rs) - sumNonOps(rs), sumRevenue(rs)) * 100 },
   { kind: 'flow_thru', label: 'Flow Thru/Flex%', higherIsBetter: true },
   SP,
@@ -266,13 +269,13 @@ export const SUMMARY_ROWS: TableRow[] = [
     calc: (rs) => avg(rs, (r) => r.fxRate) },
   { kind: 'data', label: 'Total Expenses (w/o XR Impact)', format: 'k', higherIsBetter: false,
     calc: sumOperatingExpenses, useNoXR: true },
-  { kind: 'data', label: 'GOP$', format: 'k', higherIsBetter: true,
+  { kind: 'data', label: 'GOP$', format: 'k', higherIsBetter: true, bold: true, highlight: true,
     calc: gopAbs, useNoXR: true },
-  { kind: 'data', label: 'EBITDA$', format: 'k', higherIsBetter: true,
+  { kind: 'data', label: 'EBITDA$', format: 'k', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => gopAbs(rs) - sumNonOps(rs), useNoXR: true },
-  { kind: 'data', label: 'GOP%', format: 'pct', higherIsBetter: true, bold: true,
+  { kind: 'data', label: 'GOP%', format: 'pct', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => safeDiv(gopAbs(rs), sumRevenue(rs)) * 100, useNoXR: true },
-  { kind: 'data', label: 'EBITDA%', format: 'pct', higherIsBetter: true, bold: true,
+  { kind: 'data', label: 'EBITDA%', format: 'pct', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => safeDiv(gopAbs(rs) - sumNonOps(rs), sumRevenue(rs)) * 100, useNoXR: true },
   { kind: 'flow_thru', label: 'Flow Thru/Flex% (w/o XR)', higherIsBetter: true, useNoXR: true },
 ];
