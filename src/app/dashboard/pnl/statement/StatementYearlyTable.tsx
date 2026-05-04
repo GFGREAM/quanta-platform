@@ -14,7 +14,6 @@ import {
   TABLE_ROWS,
   flattenRows,
   flowThruPct,
-  varianceStyle,
   type TableRow,
 } from './tableConfig';
 import {
@@ -22,11 +21,10 @@ import {
   LAYER_LABELS,
   LAYER_ORDER,
   computeCell,
-  cellStyle,
-  fmtCell,
   fmtFlow,
+  renderCell,
 } from './layerHelpers';
-import { FormulaInfo } from './ui';
+import { FormulaInfo, VariancePill } from './ui';
 
 interface Props {
   hotel: string;
@@ -187,9 +185,10 @@ function YearRow({
     ly:  baseRows.filter((r) => r.year === y - 1 && r.scenario === 'Actual'),
   }));
 
-  const labelClass = row.bold ? 'font-bold' : 'font-normal';
-  const labelColor = row.bold ? 'var(--primary)' : 'var(--text-primary)';
-  const valueClass = row.bold ? 'font-bold' : 'font-normal';
+  const isHi = !!row.highlight;
+  const labelClass = row.bold || isHi ? 'font-bold' : 'font-normal';
+  const labelColor = isHi ? '#fff' : (row.bold ? 'var(--primary)' : 'var(--text-primary)');
+  const valueClass = row.bold || isHi ? 'font-bold' : 'font-normal';
 
   if (row.kind === 'flow_thru') {
     let cells: (number | null)[];
@@ -212,9 +211,14 @@ function YearRow({
           <td
             key={`y-${i}`}
             className={`${padCell} text-right tabular-nums`}
-            style={v === null ? { color: 'var(--text-muted)' } : varianceStyle(v, row.higherIsBetter)}
           >
-            {fmtFlow(v)}
+            {v === null ? (
+              <span style={{ color: 'var(--text-muted)' }}>{fmtFlow(v)}</span>
+            ) : (
+              <VariancePill varValue={v} higherIsBetter={row.higherIsBetter}>
+                {fmtFlow(v)}
+              </VariancePill>
+            )}
           </td>
         ))}
       </tr>
@@ -229,18 +233,21 @@ function YearRow({
     computeCell(layer, isPercentRow, calc(cur), calc(bud), calc(ly)),
   );
 
+  const trBg = isHi ? 'var(--primary)' : (row.bold ? 'var(--muted)' : undefined);
+  const stickyBg = isHi ? 'var(--primary)' : (row.bold ? 'var(--muted)' : 'white');
+  const outColor = isHi ? '#fff' : 'var(--primary)';
   return (
-    <tr className="border-t hover:bg-[var(--bg-hover)]" style={{ borderColor: 'var(--border-light)' }}>
-      <td className={`${padLabel} ${labelClass} sticky left-0 bg-white z-10`} style={{ color: labelColor }}>
+    <tr className={`border-t ${isHi ? '' : 'hover:bg-[var(--bg-hover)]'}`} style={{ borderColor: 'var(--border-light)', background: trBg }}>
+      <td className={`${padLabel} ${labelClass} sticky left-0 z-10`} style={{ color: labelColor, background: stickyBg }}>
         {row.label}
       </td>
       {cells.map((cell, i) => (
         <td
           key={`y-${i}`}
           className={`${padCell} text-right tabular-nums ${valueClass}`}
-          style={cellStyle(layer, cell, row.higherIsBetter)}
+          style={layer === 'out' ? { color: outColor } : undefined}
         >
-          {fmtCell(layer, cell, format, isPercentRow)}
+          {renderCell(layer, cell, format, isPercentRow, row.higherIsBetter, isHi)}
         </td>
       ))}
     </tr>

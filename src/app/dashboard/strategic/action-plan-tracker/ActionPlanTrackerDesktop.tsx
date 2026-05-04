@@ -68,7 +68,7 @@ export default function ActionPlanTrackerDesktop() {
       <div className="flex items-center gap-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
         <span className="hover:underline cursor-pointer">Dashboard</span>
         <ChevronRight size={14} />
-        <span className="hover:underline cursor-pointer">Strategic & Planning</span>
+        <span className="hover:underline cursor-pointer">Strategy & Planning</span>
         <ChevronRight size={14} />
         <span style={{ color: 'var(--primary)' }}>Action Plan Tracker</span>
       </div>
