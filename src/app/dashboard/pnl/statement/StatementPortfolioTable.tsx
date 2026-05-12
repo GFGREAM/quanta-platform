@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import {
   currencyLabel,
   scenarioAbbrev,
@@ -10,14 +12,16 @@ import {
   type Scope,
 } from './data';
 import {
+  FLOW_THRU_FORMULA,
+  SUMMARY_ROWS,
   TABLE_ROWS,
   fmtValue,
   fmtVar,
   flattenRows,
   flowThruPct,
-  varianceStyle,
   type TableRow,
 } from './tableConfig';
+import { FormulaInfo, VariancePill } from './ui';
 import type { PortfolioData } from './useStatement';
 
 interface Props {
@@ -43,6 +47,11 @@ export default function StatementPortfolioTable({
   const fontMain = compact ? 'text-[0.6875rem]' : 'text-[0.75rem]';
   const fontHeader = compact ? 'text-[0.625rem]' : 'text-[0.6875rem]';
 
+  // Toggle between Summary subset (default) and the full Detailed row set.
+  const [showDetail, setShowDetail] = useState(false);
+  const rows = flattenRows(showDetail ? TABLE_ROWS : SUMMARY_ROWS);
+  const ToggleIcon = showDetail ? ChevronDown : ChevronRight;
+
   return (
     <div
       className="bg-white border rounded-lg shadow-sm overflow-hidden"
@@ -61,8 +70,19 @@ export default function StatementPortfolioTable({
             {periodTitle}
           </div>
         </div>
-        <div className="text-[0.6875rem] font-medium" style={{ color: 'var(--text-secondary)' }}>
-          {currencyLabel(currency)} · values in thousands where marked
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowDetail((v) => !v)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded border text-[0.6875rem] font-semibold uppercase tracking-wider transition-colors hover:bg-white"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: 'transparent' }}
+          >
+            <ToggleIcon size={12} />
+            {showDetail ? 'Collapse to summary' : 'Expand to detail'}
+          </button>
+          <div className="text-[0.6875rem] font-medium" style={{ color: 'var(--text-secondary)' }}>
+            {currencyLabel(currency)} · values in thousands where marked
+          </div>
         </div>
       </div>
 
@@ -108,9 +128,9 @@ export default function StatementPortfolioTable({
             </tr>
           </thead>
           <tbody>
-            {flattenRows(TABLE_ROWS).map((row, i) => (
+            {rows.map((row, i) => (
               <PortfolioRow
-                key={row.label ?? `spacer-${i}`}
+                key={`${i}-${row.label ?? 'spacer'}`}
                 row={row}
                 portfolio={portfolio}
                 padCell={padCell}
@@ -167,6 +187,20 @@ function PortfolioRow({
     );
   }
 
+  if (row.kind === 'section_header') {
+    return (
+      <tr style={{ background: '#FAFAFA' }}>
+        <td
+          colSpan={totalCols}
+          className={`${padLabel} text-[0.6875rem] font-semibold uppercase tracking-wider border-t border-b`}
+          style={{ color: 'var(--text-secondary)', borderColor: 'var(--border)' }}
+        >
+          {row.label}
+        </td>
+      </tr>
+    );
+  }
+
   // Each hotel group carries its own noXR row sets (current and LY restated
   // at the matching month's Budget FX). When useNoXR is on, swap them in.
   const pickCur = (g: PortfolioData['groups'][number]) => row.useNoXR ? g.currentNoXR : g.current;
@@ -178,7 +212,10 @@ function PortfolioRow({
     return (
       <tr className="border-t" style={{ borderColor: 'var(--border-light)' }}>
         <td className={`${padLabel} font-normal`} style={{ color: 'var(--text-secondary)' }}>
-          {row.label}
+          <span className="inline-flex items-center gap-1.5">
+            {row.label}
+            <FormulaInfo text={FLOW_THRU_FORMULA} />
+          </span>
         </td>
         {/* Group 1 (current values) — blanks for Flow Thru */}
         {portfolio.groups.map((g) => (
@@ -192,14 +229,29 @@ function PortfolioRow({
             <td
               key={`b-${g.code}`}
               className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''}`}
-              style={{ ...varianceStyle(pct, row.higherIsBetter), borderColor: 'var(--border)' }}
+              style={{ borderColor: 'var(--border)' }}
             >
-              {fmtFlowThru(pct)}
+              {pct === null ? (
+                <span style={{ color: 'var(--text-muted)' }}>{fmtFlowThru(pct)}</span>
+              ) : (
+                <VariancePill varValue={pct} higherIsBetter={row.higherIsBetter}>
+                  {fmtFlowThru(pct)}
+                </VariancePill>
+              )}
             </td>
           );
         })}
-        <td className={`${padCell} text-right tabular-nums font-semibold`} style={varianceStyle(flowThruPct(totalCurRows, portfolio.total.budget), row.higherIsBetter)}>
-          {fmtFlowThru(flowThruPct(totalCurRows, portfolio.total.budget))}
+        <td className={`${padCell} text-right tabular-nums font-semibold`}>
+          {(() => {
+            const pct = flowThruPct(totalCurRows, portfolio.total.budget);
+            return pct === null ? (
+              <span style={{ color: 'var(--text-muted)' }}>{fmtFlowThru(pct)}</span>
+            ) : (
+              <VariancePill varValue={pct} higherIsBetter={row.higherIsBetter}>
+                {fmtFlowThru(pct)}
+              </VariancePill>
+            );
+          })()}
         </td>
         {/* Group 3 (vs LY) */}
         {portfolio.groups.map((g, i) => {
@@ -208,14 +260,29 @@ function PortfolioRow({
             <td
               key={`l-${g.code}`}
               className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''}`}
-              style={{ ...varianceStyle(pct, row.higherIsBetter), borderColor: 'var(--border)' }}
+              style={{ borderColor: 'var(--border)' }}
             >
-              {fmtFlowThru(pct)}
+              {pct === null ? (
+                <span style={{ color: 'var(--text-muted)' }}>{fmtFlowThru(pct)}</span>
+              ) : (
+                <VariancePill varValue={pct} higherIsBetter={row.higherIsBetter}>
+                  {fmtFlowThru(pct)}
+                </VariancePill>
+              )}
             </td>
           );
         })}
-        <td className={`${padCell} text-right tabular-nums font-semibold`} style={varianceStyle(flowThruPct(totalCurRows, totalLyRows), row.higherIsBetter)}>
-          {fmtFlowThru(flowThruPct(totalCurRows, totalLyRows))}
+        <td className={`${padCell} text-right tabular-nums font-semibold`}>
+          {(() => {
+            const pct = flowThruPct(totalCurRows, totalLyRows);
+            return pct === null ? (
+              <span style={{ color: 'var(--text-muted)' }}>{fmtFlowThru(pct)}</span>
+            ) : (
+              <VariancePill varValue={pct} higherIsBetter={row.higherIsBetter}>
+                {fmtFlowThru(pct)}
+              </VariancePill>
+            );
+          })()}
         </td>
       </tr>
     );
@@ -223,8 +290,10 @@ function PortfolioRow({
 
   const format = row.format ?? 'integer';
   const calc = row.calc ?? (() => 0);
-  const labelClass = row.bold ? 'font-bold' : 'font-normal';
-  const labelColor = row.bold ? 'var(--primary)' : 'var(--text-primary)';
+  const isHi = !!row.highlight;
+  const labelClass = row.bold || isHi ? 'font-bold' : 'font-normal';
+  const labelColor = (row.bold || isHi) ? 'var(--primary)' : 'var(--text-primary)';
+  const valuePrimary = 'var(--primary)';
   const isPercentRow = format === 'pct';
 
   // Compute per-hotel + TOTAL for each group
@@ -243,17 +312,17 @@ function PortfolioRow({
   const totalVarLy = totalCur - totalLy;
 
   return (
-    <tr className="border-t hover:bg-[var(--bg-hover)]" style={{ borderColor: 'var(--border-light)' }}>
+    <tr className="border-t hover:bg-[var(--bg-hover)]" style={{ borderColor: 'var(--border-light)', background: isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : undefined) }}>
       <td className={`${padLabel} ${labelClass}`} style={{ color: labelColor }}>
         {row.label}
       </td>
       {/* Group 1: current values per hotel + TOTAL */}
       {cur.map((v, i) => (
-        <td key={`v-${i}`} className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''} ${row.bold ? 'font-semibold' : ''}`} style={{ color: 'var(--primary)', borderColor: 'var(--border)' }}>
+        <td key={`v-${i}`} className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''} ${row.bold ? 'font-semibold' : ''}`} style={{ color: valuePrimary, borderColor: 'var(--border)' }}>
           {fmtValue(v, format)}
         </td>
       ))}
-      <td className={`${padCell} text-right tabular-nums font-bold`} style={{ color: 'var(--primary)' }}>
+      <td className={`${padCell} text-right tabular-nums font-bold`} style={{ color: valuePrimary }}>
         {fmtValue(totalCur, format)}
       </td>
       {/* Group 2: vs Budget */}
@@ -261,32 +330,34 @@ function PortfolioRow({
         <td
           key={`b-${i}`}
           className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''}`}
-          style={{ ...varianceStyle(v, row.higherIsBetter), borderColor: 'var(--border)' }}
+          style={{ borderColor: 'var(--border)' }}
         >
-          {isPercentRow ? fmtPctDelta(v) : fmtVar(v, format)}
+          <VariancePill varValue={v} higherIsBetter={row.higherIsBetter}>
+            {isPercentRow ? fmtPctDelta(v) : fmtVar(v, format)}
+          </VariancePill>
         </td>
       ))}
-      <td
-        className={`${padCell} text-right tabular-nums font-semibold`}
-        style={varianceStyle(totalVarBud, row.higherIsBetter)}
-      >
-        {isPercentRow ? fmtPctDelta(totalVarBud) : fmtVar(totalVarBud, format)}
+      <td className={`${padCell} text-right tabular-nums font-semibold`}>
+        <VariancePill varValue={totalVarBud} higherIsBetter={row.higherIsBetter}>
+          {isPercentRow ? fmtPctDelta(totalVarBud) : fmtVar(totalVarBud, format)}
+        </VariancePill>
       </td>
       {/* Group 3: vs LY */}
       {varLy.map((v, i) => (
         <td
           key={`l-${i}`}
           className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''}`}
-          style={{ ...varianceStyle(v, row.higherIsBetter), borderColor: 'var(--border)' }}
+          style={{ borderColor: 'var(--border)' }}
         >
-          {isPercentRow ? fmtPctDelta(v) : fmtVar(v, format)}
+          <VariancePill varValue={v} higherIsBetter={row.higherIsBetter}>
+            {isPercentRow ? fmtPctDelta(v) : fmtVar(v, format)}
+          </VariancePill>
         </td>
       ))}
-      <td
-        className={`${padCell} text-right tabular-nums font-semibold`}
-        style={varianceStyle(totalVarLy, row.higherIsBetter)}
-      >
-        {isPercentRow ? fmtPctDelta(totalVarLy) : fmtVar(totalVarLy, format)}
+      <td className={`${padCell} text-right tabular-nums font-semibold`}>
+        <VariancePill varValue={totalVarLy} higherIsBetter={row.higherIsBetter}>
+          {isPercentRow ? fmtPctDelta(totalVarLy) : fmtVar(totalVarLy, format)}
+        </VariancePill>
       </td>
     </tr>
   );

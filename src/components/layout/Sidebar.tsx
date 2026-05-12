@@ -20,29 +20,29 @@ type MenuEntry = MenuItem | MenuCategory;
 
 const menuItems: MenuEntry[] = [
   { label: 'Home', icon: Home, href: '/dashboard' },
+  { category: 'PROFIT & LOSS', items: [
+    { label: 'P&L Statement', icon: FileText, href: '/dashboard/pnl/statement' },
+  ]},
   { category: 'TOP LINE', items: [
+    { label: 'Market Share', icon: TrendingUp, href: '/dashboard/topline/market-share' },
     { label: 'Rooms Rev$ (Pack)', icon: DollarSign, href: '/dashboard/topline/rooms-rev' },
     { label: 'Other Rev$ (Non Pack)', icon: DollarSign, href: '/dashboard/topline/other-rev' },
-    { label: 'Market Share', icon: TrendingUp, href: '/dashboard/topline/market-share' },
     { label: 'On the Books', icon: BarChart3, href: '/dashboard/topline/on-the-books' },
   ]},
   { category: 'BOTTOM LINE', items: [
     { label: 'Expenses', icon: DollarSign, href: '/dashboard/bottomline/expenses' },
     { label: 'Staffing', icon: Users, href: '/dashboard/bottomline/staffing' },
     { label: 'Utilities', icon: Wrench, href: '/dashboard/bottomline/utilities' },
-    { label: 'Projects', icon: FileText, href: '/dashboard/bottomline/projects' },
-  ]},
-  { category: 'PROFIT & LOSS', items: [
-    { label: 'P&L Statement', icon: FileText, href: '/dashboard/pnl/statement' },
+    { label: 'Capex', icon: FileText, href: '/dashboard/bottomline/projects' },
   ]},
   { category: 'GUEST EXPERIENCE', items: [
+    { label: 'Guest Satisfaction Performance', icon: Star, href: '/dashboard/guest/satisfaction' },
     { label: 'Hotel META Positioning', icon: Hotel, href: '/dashboard/guest/meta-positioning' },
-    { label: 'Guest Satisfaction', icon: Star, href: '/dashboard/guest/satisfaction' },
     { label: 'Competitive Set Radar', icon: Radar, href: '/dashboard/guest/ops-radar' },
   ]},
-  { category: 'STRATEGIC & PLANNING', items: [
-    { label: 'Action Plan Tracker', icon: Target, href: '/dashboard/strategic/action-plan-tracker' },
+  { category: 'STRATEGY & PLANNING', items: [
     { label: 'Forecast', icon: Sparkles, href: '/dashboard/strategic/forecast' },
+    { label: 'Action Plan Tracker', icon: Target, href: '/dashboard/strategic/action-plan-tracker' },
   ]},
   { category: 'MARKET TRENDS', items: [
     { label: 'Airport Passengers', icon: PlaneTakeoff, href: '/dashboard/market/airport-passengers' },

@@ -6,15 +6,17 @@ import {
 } from 'recharts';
 import { selectStyle } from '@/lib/selectStyle';
 import { fmtMetric, METRIC_DEFS, SCOPES, scopeLabel, type MetricKey, type Month } from './data';
-import { useStatement, type ComparisonScenario, type KpiSummary, type ViewMode } from './useStatement';
+import { useStatement, type ViewMode } from './useStatement';
 import StatementTable from './StatementTable';
 import StatementPortfolioTable from './StatementPortfolioTable';
 import StatementSummaryTable from './StatementSummaryTable';
+import StatementMonthlyTable from './StatementMonthlyTable';
+import StatementYearlyTable from './StatementYearlyTable';
 import {
   MultiSelect,
   COLOR_COMPARISON, COLOR_BUDGET, COLOR_LY,
   VIEW_ORDER, VIEW_LABELS, SCOPE_LABELS, CURRENCY_LABELS,
-  LegendDot, VarianceBadge, formatAxis,
+  LegendDot, formatAxis,
 } from './ui';
 
 export default function StatementDesktop() {
@@ -31,9 +33,11 @@ export default function StatementDesktop() {
     metricDef,
     monthlySeries,
     weeklyOutlookSeries,
-    kpis,
     periodCurrent, periodBudget, periodLy,
     periodCurrentNoXR, periodBudgetNoXR, periodLyNoXR,
+    currentScenarioRows, currentBudgetRows, lyActualRows,
+    currentScenarioRowsNoXR, currentBudgetRowsNoXR, lyActualRowsNoXR,
+    allYearsHotelRows, allYearsHotelRowsNoXR, availableYears,
     portfolio,
     hotelOptions, yearOptions, scenarioOptions, monthOptions,
     portfolioHotelOptions, currencyOptions,
@@ -87,6 +91,15 @@ export default function StatementDesktop() {
             </select>
           )}
           <select
+            className="h-9 w-36 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
+            style={selectStyle}
+            value={scenario}
+            onChange={(e) => setScenario(e.target.value as ComparisonScenario)}
+            title="Actual: closed months only · Outlook: weekly refresh · Forecast: monthly refresh"
+          >
+            {scenarioOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select
             className="h-9 w-28 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
             style={selectStyle}
             value={year}
@@ -95,13 +108,14 @@ export default function StatementDesktop() {
             {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
           <select
-            className="h-9 w-36 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
+            className="h-9 w-24 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] disabled:opacity-50 disabled:cursor-not-allowed"
             style={selectStyle}
-            value={scenario}
-            onChange={(e) => setScenario(e.target.value as ComparisonScenario)}
-            title="Actual: closed months only · Outlook: weekly refresh · Forecast: monthly refresh"
+            value={periodMonth}
+            onChange={(e) => setPeriodMonth(e.target.value as Month)}
+            disabled={scope === 'fy'}
+            title="Reference month for MTD / YTD"
           >
-            {scenarioOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            {monthOptions.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
           {/* Scope toggle (table-only) */}
           <div className="flex rounded-lg p-[3px] gap-0.5" style={{ background: 'var(--muted)' }}>
@@ -117,16 +131,6 @@ export default function StatementDesktop() {
               </button>
             ))}
           </div>
-          <select
-            className="h-9 w-24 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] disabled:opacity-50 disabled:cursor-not-allowed"
-            style={selectStyle}
-            value={periodMonth}
-            onChange={(e) => setPeriodMonth(e.target.value as Month)}
-            disabled={scope === 'fy'}
-            title="Reference month for MTD / YTD"
-          >
-            {monthOptions.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
           {/* Currency toggle — restate USD ↔ each hotel's local currency */}
           <div className="flex rounded-lg p-[3px] gap-0.5" style={{ background: 'var(--muted)' }}>
             {currencyOptions.map((c) => (
@@ -147,13 +151,6 @@ export default function StatementDesktop() {
           <LegendDot color={COLOR_BUDGET} label="Budget" />
           <LegendDot color={COLOR_LY} label="LY" />
         </div>
-      </div>
-
-      {/* KPI Strip */}
-      <div className="grid grid-cols-4 gap-3 max-[1100px]:grid-cols-2">
-        {kpis.map((k) => (
-          <StatementKpiCard key={k.key} kpi={k} scenario={scenario} />
-        ))}
       </div>
 
       {/* Comparison table — summary, overview (single), or portfolio */}
@@ -187,6 +184,28 @@ export default function StatementDesktop() {
           budgetNoXR={periodBudgetNoXR}
           lyNoXR={periodLyNoXR}
         />
+      ) : viewMode === 'monthly' ? (
+        <StatementMonthlyTable
+          hotel={hotel}
+          year={year}
+          scenario={scenario}
+          currency={currency}
+          current={currentScenarioRows}
+          budget={currentBudgetRows}
+          ly={lyActualRows}
+          currentNoXR={currentScenarioRowsNoXR}
+          budgetNoXR={currentBudgetRowsNoXR}
+          lyNoXR={lyActualRowsNoXR}
+        />
+      ) : viewMode === 'yearly' ? (
+        <StatementYearlyTable
+          hotel={hotel}
+          scenario={scenario}
+          currency={currency}
+          allRows={allYearsHotelRows}
+          allRowsNoXR={allYearsHotelRowsNoXR}
+          years={availableYears}
+        />
       ) : portfolio.groups.length === 0 ? (
         <div className="bg-white border rounded-lg p-10 text-center text-sm" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
           Select at least one hotel to build the portfolio view.
@@ -202,7 +221,9 @@ export default function StatementDesktop() {
         />
       )}
 
-      {/* Chart panel — monthly trend (summary/overview) or WoW Outlook (portfolio) */}
+      {/* Chart panel — Monthly trend (single/monthly) or WoW Outlook (portfolio).
+          Hidden in Summary because the same view exists in Detailed/Monthly. */}
+      {viewMode !== 'summary' && (
       <div className="bg-white border rounded-lg shadow-sm p-5" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-start justify-between mb-4 gap-4">
           <div>
@@ -348,6 +369,7 @@ export default function StatementDesktop() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -369,24 +391,3 @@ function ViewToggle({ viewMode, setViewMode }: { viewMode: ViewMode; setViewMode
   );
 }
 
-function StatementKpiCard({ kpi, scenario }: { kpi: KpiSummary; scenario: ComparisonScenario }) {
-  const def = METRIC_DEFS.find((m) => m.key === kpi.key)!;
-  const value = fmtMetric(kpi.comparison, def.format);
-  return (
-    <div
-      className="bg-white rounded-lg border px-4 py-3.5 transition-shadow hover:shadow-md flex flex-col gap-2"
-      style={{ borderColor: 'var(--border)' }}
-    >
-      <div className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-        {kpi.label} <span style={{ color: 'var(--text-secondary)' }}>({scenario})</span>
-      </div>
-      <div className="text-xl font-bold leading-tight tracking-tight" style={{ color: 'var(--primary)' }}>
-        {value}
-      </div>
-      <div className="flex items-center justify-between gap-2 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
-        <VarianceBadge label="vs Budget" variance={kpi.varianceVsBudget} higherIsBetter={kpi.higherIsBetter} />
-        <VarianceBadge label="vs LY" variance={kpi.varianceVsLy} higherIsBetter={kpi.higherIsBetter} />
-      </div>
-    </div>
-  );
-}
