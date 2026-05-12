@@ -194,7 +194,7 @@ function YearRow({
 
   const isHi = !!row.highlight;
   const labelClass = row.bold || isHi ? 'font-bold' : 'font-normal';
-  const labelColor = isHi ? '#fff' : (row.bold ? 'var(--primary)' : 'var(--text-primary)');
+  const labelColor = (row.bold || isHi) ? 'var(--primary)' : 'var(--text-primary)';
   const valueClass = row.bold || isHi ? 'font-bold' : 'font-normal';
 
   if (row.kind === 'flow_thru') {
@@ -240,11 +240,11 @@ function YearRow({
     computeCell(layer, isPercentRow, calc(cur), calc(bud), calc(ly)),
   );
 
-  const trBg = isHi ? 'var(--primary)' : (row.bold ? 'var(--muted)' : undefined);
-  const stickyBg = isHi ? 'var(--primary)' : (row.bold ? 'var(--muted)' : 'white');
-  const outColor = isHi ? '#fff' : 'var(--primary)';
+  const trBg = isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : undefined);
+  const stickyBg = isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : 'white');
+  const outColor = 'var(--primary)';
   return (
-    <tr className={`border-t ${isHi ? '' : 'hover:bg-[var(--bg-hover)]'}`} style={{ borderColor: 'var(--border-light)', background: trBg }}>
+    <tr className="border-t hover:bg-[var(--bg-hover)]" style={{ borderColor: 'var(--border-light)', background: trBg }}>
       <td className={`${padLabel} ${labelClass} sticky left-0 z-10`} style={{ color: labelColor, background: stickyBg }}>
         {row.label}
       </td>
@@ -254,7 +254,7 @@ function YearRow({
           className={`${padCell} text-right tabular-nums ${valueClass}`}
           style={layer === 'out' ? { color: outColor } : undefined}
         >
-          {renderCell(layer, cell, format, isPercentRow, row.higherIsBetter, isHi)}
+          {renderCell(layer, cell, format, isPercentRow, row.higherIsBetter)}
         </td>
       ))}
     </tr>
@@ -282,16 +282,15 @@ function renderCell(
   format: RowFormat,
   isPercentRow: boolean,
   higherIsBetter: boolean | undefined,
-  onDark?: boolean,
 ): ReactNode {
   const text = fmtCell(layer, cell, format, isPercentRow);
   if (layer === 'out') return text;
   if (cell.value === null || !Number.isFinite(cell.value)) {
-    return <span style={{ color: onDark ? 'rgba(255,255,255,0.6)' : 'var(--text-muted)' }}>{text}</span>;
+    return <span style={{ color: 'var(--text-muted)' }}>{text}</span>;
   }
   const mag = cell.varianceMagnitude ?? cell.value;
   return (
-    <VariancePill varValue={mag ?? null} higherIsBetter={higherIsBetter} onDark={onDark}>
+    <VariancePill varValue={mag ?? null} higherIsBetter={higherIsBetter}>
       {text}
     </VariancePill>
   );

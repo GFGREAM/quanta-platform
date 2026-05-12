@@ -4,11 +4,14 @@ type Props = {
   sub?: string;
   color?: string;
   accent?: string;
+  /** Overrides the muted gray default for the `sub` line (e.g. success/danger
+   *  when the sub conveys a positive/negative delta). */
+  subColor?: string;
   /** Compact mode for mobile views — smaller text and padding. */
   compact?: boolean;
 };
 
-export default function KpiCard({ label, value, sub, color, accent, compact }: Props) {
+export default function KpiCard({ label, value, sub, color, accent, subColor, compact }: Props) {
   return (
     <div
       className={`relative overflow-hidden rounded-lg border bg-white flex flex-col transition-shadow ${compact ? 'p-3 gap-1' : 'p-4 gap-1.5 hover:shadow-md'}`}
@@ -27,7 +30,7 @@ export default function KpiCard({ label, value, sub, color, accent, compact }: P
         {value}
       </div>
       {sub && (
-        <div className={compact ? 'text-[0.625rem]' : 'text-xs'} style={{ color: 'var(--text-secondary)' }}>
+        <div className={compact ? 'text-[0.625rem]' : 'text-xs'} style={{ color: subColor ?? 'var(--text-secondary)' }}>
           {sub}
         </div>
       )}

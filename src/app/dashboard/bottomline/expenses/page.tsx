@@ -2,6 +2,10 @@
 
 import { Fragment, useMemo, useState } from 'react';
 import { ChevronRight, ChevronDown, TrendingUp, TrendingDown } from 'lucide-react';
+import {
+  CartesianGrid, Legend as RLegend, Line, LineChart as RLineChart, ResponsiveContainer,
+  Tooltip, XAxis, YAxis,
+} from 'recharts';
 import KpiCard from '@/components/ui/KpiCard';
 import { selectStyle } from '@/lib/selectStyle';
 
@@ -219,14 +223,14 @@ const sum = (items: LineItem[], key: 'act' | 'bud' | 'actLy') =>
 
 function fmtMoneyShort(v: number) {
   const abs = Math.abs(v);
-  if (abs >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
-  if (abs >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
-  return `$${v.toFixed(0)}`;
+  if (abs >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${(v / 1_000).toFixed(0)}K`;
+  return v.toFixed(0);
 }
 
 function fmtVarDollar(v: number) {
   const sign = v > 0 ? '+' : v < 0 ? '-' : '';
-  return `${sign}$${Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+  return `${sign}${Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 }
 
 function fmtPct(v: number) {
@@ -873,29 +877,32 @@ function GrandTotalRow({ act, bud, actLy }: { act: number; bud: number; actLy: n
   const diffLy = act - actLy;
   const pctBud = safePct(diffBud, bud);
   const pctLy = safePct(diffLy, actLy);
+  // Expenses: lower is better, so positive variance = danger, negative = success.
+  const budColor = diffBud <= 0 ? 'var(--success)' : 'var(--danger)';
+  const lyColor = diffLy <= 0 ? 'var(--success)' : 'var(--danger)';
 
   return (
-    <tr style={{ background: 'var(--primary)' }}>
-      <td className="px-3.5 py-3 font-bold whitespace-nowrap text-white">GRAND TOTAL EXPENSES</td>
-      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap text-white">
+    <tr style={{ background: 'var(--border)' }}>
+      <td className="px-3.5 py-3 font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>GRAND TOTAL EXPENSES</td>
+      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
         {fmtMoneyShort(act)}
       </td>
-      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap text-white/80">
+      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
         {fmtMoneyShort(bud)}
       </td>
-      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: act > bud ? '#FCA5A5' : '#6EE7B7' }}>
+      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: budColor }}>
         {fmtVarDollar(diffBud)}
       </td>
-      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: act > bud ? '#FCA5A5' : '#6EE7B7' }}>
+      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: budColor }}>
         {fmtPct(pctBud)}
       </td>
-      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap text-white/80">
+      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
         {fmtMoneyShort(actLy)}
       </td>
-      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: act > actLy ? '#FCA5A5' : '#6EE7B7' }}>
+      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: lyColor }}>
         {fmtVarDollar(diffLy)}
       </td>
-      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: act > actLy ? '#FCA5A5' : '#6EE7B7' }}>
+      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: lyColor }}>
         {fmtPct(pctLy)}
       </td>
     </tr>
@@ -911,7 +918,6 @@ const SCOPE_LABEL: Record<TrendScope, string> = {
 
 function ExpenseProgression({ currentMonthIndex }: { currentMonthIndex: number }) {
   const [scope, setScope] = useState<TrendScope>('total');
-  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
   const scopeItems = useMemo(() => {
     if (scope === 'dept') return DEPT_COSTS;
@@ -987,13 +993,11 @@ function ExpenseProgression({ currentMonthIndex }: { currentMonthIndex: number }
           />
         </div>
 
-        <LineChart
+        <ProgressionChart
           cy={series.cy}
           bud={series.bud}
           ly={series.ly}
           currentIdx={safeIdx}
-          hoverIdx={hoverIdx}
-          onHover={setHoverIdx}
         />
 
         {/* Legend */}
@@ -1035,232 +1039,153 @@ function MiniStat({ label, value, valueColor }: { label: string; value: string; 
   );
 }
 
-function LineChart({
-  cy, bud, ly, currentIdx, hoverIdx, onHover,
+function ProgressionChart({
+  cy, bud, ly, currentIdx,
 }: {
   cy: number[];
   bud: number[];
   ly: number[];
   currentIdx: number;
-  hoverIdx: number | null;
-  onHover: (i: number | null) => void;
 }) {
-  const W = 800;
-  const H = 280;
-  const padL = 56;
-  const padR = 16;
-  const padT = 16;
-  const padB = 32;
-  const innerW = W - padL - padR;
-  const innerH = H - padT - padB;
-
-  const all = [...cy, ...bud, ...ly];
-  const minV = Math.min(...all);
-  const maxV = Math.max(...all);
-  // Pad the y-domain by 8% on each side so lines don't hug the edges.
-  const range = maxV - minV || 1;
-  const yMin = minV - range * 0.08;
-  const yMax = maxV + range * 0.08;
-
-  const x = (i: number) => padL + (i / (MONTHS_SHORT.length - 1)) * innerW;
-  const y = (v: number) => padT + (1 - (v - yMin) / (yMax - yMin)) * innerH;
-
-  const pathFor = (arr: number[]) =>
-    arr.map((v, i) => `${i === 0 ? 'M' : 'L'} ${x(i)} ${y(v)}`).join(' ');
-
-  // Y-axis gridlines (5 steps)
-  const ticks = 4;
-  const tickVals = Array.from({ length: ticks + 1 }, (_, i) => yMin + ((yMax - yMin) * i) / ticks);
-
-  const activeIdx = hoverIdx ?? currentIdx;
-
+  const data = MONTHS_SHORT.map((m, i) => ({
+    month: m,
+    cy: cy[i],
+    bud: bud[i],
+    ly: ly[i],
+  }));
+  // Tight Y domain: snap to data range with 8% breathing room so the lines use
+  // most of the chart height instead of compressing near the middle.
+  const allValues = [...cy, ...bud, ...ly].filter(Number.isFinite);
+  const minV = Math.min(...allValues);
+  const maxV = Math.max(...allValues);
+  const pad = (maxV - minV) * 0.08 || maxV * 0.05 || 1;
+  const yMin = Math.max(0, minV - pad);
+  const yMax = maxV + pad;
   return (
-    <div className="w-full overflow-x-auto">
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="w-full h-auto"
-        preserveAspectRatio="none"
-        onMouseLeave={() => onHover(null)}
-      >
-        {/* Grid */}
-        {tickVals.map((v, i) => (
-          <g key={i}>
-            <line
-              x1={padL}
-              x2={W - padR}
-              y1={y(v)}
-              y2={y(v)}
-              stroke="var(--border)"
-              strokeDasharray={i === 0 || i === ticks ? undefined : '3 3'}
-              strokeWidth={1}
-            />
-            <text
-              x={padL - 8}
-              y={y(v)}
-              textAnchor="end"
-              dominantBaseline="middle"
-              fontSize="11"
-              fill="var(--text-muted)"
-            >
-              {fmtMoneyShort(v)}
-            </text>
-          </g>
-        ))}
-
-        {/* X-axis labels */}
-        {MONTHS_SHORT.map((m, i) => (
-          <text
-            key={m}
-            x={x(i)}
-            y={H - padB + 18}
-            textAnchor="middle"
-            fontSize="11"
-            fill={i === currentIdx ? 'var(--primary)' : 'var(--text-muted)'}
-            fontWeight={i === currentIdx ? 600 : 400}
-          >
-            {m}
-          </text>
-        ))}
-
-        {/* LY dotted line */}
-        <path
-          d={pathFor(ly)}
-          fill="none"
-          stroke="var(--text-secondary)"
-          strokeWidth={2}
-          strokeDasharray="2 3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        {/* Budget dashed line */}
-        <path
-          d={pathFor(bud)}
-          fill="none"
-          stroke="var(--accent)"
-          strokeWidth={2}
-          strokeDasharray="6 4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        {/* CY solid line */}
-        <path
-          d={pathFor(cy)}
-          fill="none"
-          stroke="var(--primary)"
-          strokeWidth={2.25}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        {/* CY dots */}
-        {cy.map((v, i) => (
-          <circle
-            key={i}
-            cx={x(i)}
-            cy={y(v)}
-            r={i === activeIdx ? 5 : 3}
-            fill={i === currentIdx ? 'var(--accent)' : 'var(--primary)'}
-            stroke="#fff"
-            strokeWidth={1.5}
+    <div className="h-[280px] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <RLineChart data={data} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
+          <CartesianGrid stroke="#E5E5E5" strokeDasharray="3 3" vertical={false} />
+          <XAxis
+            dataKey="month"
+            tick={(props) => <CurrentMonthTick {...props} currentIdx={currentIdx} />}
+            tickLine={false}
+            axisLine={{ stroke: '#E5E5E5' }}
           />
-        ))}
-
-        {/* Hover vertical line */}
-        {activeIdx != null && (
-          <line
-            x1={x(activeIdx)}
-            x2={x(activeIdx)}
-            y1={padT}
-            y2={H - padB}
-            stroke="var(--border)"
-            strokeWidth={1}
-            strokeDasharray="3 3"
+          <YAxis
+            tick={{ fill: '#6B7280', fontSize: 12 }}
+            tickLine={false}
+            axisLine={{ stroke: '#E5E5E5' }}
+            tickFormatter={(v) => fmtMoneyShort(typeof v === 'number' ? v : Number(v))}
+            width={70}
+            domain={[yMin, yMax]}
           />
-        )}
-
-        {/* Invisible hover zones */}
-        {MONTHS_SHORT.map((_, i) => {
-          const zoneW = innerW / MONTHS_SHORT.length;
-          return (
-            <rect
-              key={i}
-              x={x(i) - zoneW / 2}
-              y={padT}
-              width={zoneW}
-              height={innerH}
-              fill="transparent"
-              style={{ cursor: 'crosshair' }}
-              onMouseEnter={() => onHover(i)}
-            />
-          );
-        })}
-
-        {/* Tooltip */}
-        {activeIdx != null && (() => {
-          const cyV = cy[activeIdx];
-          const budV = bud[activeIdx];
-          const lyV = ly[activeIdx];
-          const budDeltaV = cyV - budV;
-          const budPctV = safePct(budDeltaV, budV);
-          const lyDeltaV = cyV - lyV;
-          const lyPctV = safePct(lyDeltaV, lyV);
-          const tx = x(activeIdx);
-          const ty = Math.min(y(cyV), y(budV), y(lyV)) - 12;
-          const boxW = 148;
-          const boxH = 100;
-          const leftEdge = tx + 10 + boxW > W - padR;
-          const boxX = leftEdge ? tx - 10 - boxW : tx + 10;
-          const boxY = Math.max(ty - boxH, padT + 4);
-          return (
-            <g pointerEvents="none">
-              <rect
-                x={boxX}
-                y={boxY}
-                width={boxW}
-                height={boxH}
-                rx={6}
-                fill="#fff"
-                stroke="var(--border)"
-              />
-              <text x={boxX + 10} y={boxY + 16} fontSize="11" fontWeight={600} fill="var(--primary)">
-                {MONTHS_SHORT[activeIdx]}
-              </text>
-              <text x={boxX + 10} y={boxY + 32} fontSize="11" fill="var(--text-secondary)">
-                CY <tspan fill="var(--primary)" fontWeight={600}>{fmtMoneyShort(cyV)}</tspan>
-              </text>
-              <text x={boxX + 10} y={boxY + 46} fontSize="11" fill="var(--text-secondary)">
-                BUD <tspan fill="var(--accent)" fontWeight={600}>{fmtMoneyShort(budV)}</tspan>
-              </text>
-              <text x={boxX + 10} y={boxY + 60} fontSize="11" fill="var(--text-secondary)">
-                LY <tspan fill="var(--text-secondary)" fontWeight={600}>{fmtMoneyShort(lyV)}</tspan>
-              </text>
-              <text
-                x={boxX + 10}
-                y={boxY + 76}
-                fontSize="11"
-                fontWeight={600}
-                fill={budDeltaV <= 0 ? 'var(--success)' : 'var(--danger)'}
-              >
-                vs BUD {budDeltaV > 0 ? '+' : ''}{budPctV.toFixed(1)}%
-              </text>
-              <text
-                x={boxX + 10}
-                y={boxY + 90}
-                fontSize="11"
-                fontWeight={600}
-                fill={lyDeltaV <= 0 ? 'var(--success)' : 'var(--danger)'}
-              >
-                vs LY {lyDeltaV > 0 ? '+' : ''}{lyPctV.toFixed(1)}%
-              </text>
-            </g>
-          );
-        })()}
-      </svg>
+          <Tooltip content={<ProgressionTooltip />} />
+          <RLegend
+            wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
+            iconType="circle"
+          />
+          <Line
+            type="monotone"
+            dataKey="ly"
+            name="LY"
+            stroke="var(--text-secondary)"
+            strokeWidth={1.75}
+            strokeDasharray="2 4"
+            dot={{ r: 2, fill: 'var(--text-secondary)' }}
+            activeDot={{ r: 4 }}
+          />
+          <Line
+            type="monotone"
+            dataKey="bud"
+            name="Budget"
+            stroke="var(--accent)"
+            strokeWidth={2}
+            strokeDasharray="6 4"
+            dot={{ r: 3, fill: 'var(--accent)' }}
+            activeDot={{ r: 5 }}
+          />
+          <Line
+            type="monotone"
+            dataKey="cy"
+            name="Current Year"
+            stroke="var(--primary)"
+            strokeWidth={2.5}
+            dot={{ r: 3, fill: 'var(--primary)' }}
+            activeDot={{ r: 5 }}
+          />
+        </RLineChart>
+      </ResponsiveContainer>
     </div>
   );
 }
+
+// Highlights the current month tick (bold + primary color) without losing
+// the default tick layout.
+function CurrentMonthTick(props: {
+  x?: number; y?: number; payload?: { value: string; index: number };
+  currentIdx: number;
+}) {
+  const { x = 0, y = 0, payload, currentIdx } = props;
+  const isCurrent = payload?.index === currentIdx;
+  return (
+    <text
+      x={x}
+      y={y}
+      dy={16}
+      textAnchor="middle"
+      fontSize={12}
+      fontWeight={isCurrent ? 600 : 400}
+      fill={isCurrent ? 'var(--primary)' : '#6B7280'}
+    >
+      {payload?.value}
+    </text>
+  );
+}
+
+interface ProgressionPayload {
+  payload: { month: string; cy: number; bud: number; ly: number };
+}
+
+// Custom tooltip — shows the three series plus variance% vs Budget and LY,
+// coloring the deltas with the expense convention (lower = good).
+function ProgressionTooltip({ active, payload }: { active?: boolean; payload?: ProgressionPayload[] }) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0].payload;
+  const budDelta = p.cy - p.bud;
+  const budPct = p.bud ? (budDelta / p.bud) * 100 : 0;
+  const lyDelta = p.cy - p.ly;
+  const lyPct = p.ly ? (lyDelta / p.ly) * 100 : 0;
+  const budColor = budDelta <= 0 ? 'var(--success)' : 'var(--danger)';
+  const lyColor = lyDelta <= 0 ? 'var(--success)' : 'var(--danger)';
+  return (
+    <div
+      className="bg-white border rounded-lg px-3 py-2 shadow-sm text-xs"
+      style={{ borderColor: 'var(--border)' }}
+    >
+      <div className="font-semibold mb-1" style={{ color: 'var(--primary)' }}>{p.month}</div>
+      <div className="flex justify-between gap-4">
+        <span style={{ color: 'var(--text-secondary)' }}>CY</span>
+        <span className="font-semibold" style={{ color: 'var(--primary)' }}>{fmtMoneyShort(p.cy)}</span>
+      </div>
+      <div className="flex justify-between gap-4">
+        <span style={{ color: 'var(--text-secondary)' }}>BUD</span>
+        <span className="font-semibold" style={{ color: 'var(--accent)' }}>{fmtMoneyShort(p.bud)}</span>
+      </div>
+      <div className="flex justify-between gap-4">
+        <span style={{ color: 'var(--text-secondary)' }}>LY</span>
+        <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>{fmtMoneyShort(p.ly)}</span>
+      </div>
+      <div className="font-semibold mt-1" style={{ color: budColor }}>
+        vs BUD {budDelta > 0 ? '+' : ''}{budPct.toFixed(1)}%
+      </div>
+      <div className="font-semibold" style={{ color: lyColor }}>
+        vs LY {lyDelta > 0 ? '+' : ''}{lyPct.toFixed(1)}%
+      </div>
+    </div>
+  );
+}
+
 
 // ─── Shared ───────────────────────────────────────────────────
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {

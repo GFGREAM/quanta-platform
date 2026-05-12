@@ -271,10 +271,10 @@ function Row({
   const isHi = !!row.highlight;
   const labelClass = row.bold || isHi ? 'font-bold' : 'font-normal';
   const valueClass = row.bold || isHi ? 'font-bold' : 'font-normal';
-  const labelColor = isHi ? '#fff' : (row.bold ? 'var(--primary)' : 'var(--text-primary)');
-  const valuePrimary = isHi ? '#fff' : 'var(--primary)';
-  const valueMuted = isHi ? 'rgba(255,255,255,0.8)' : 'var(--text-secondary)';
-  const trBg = isHi ? 'var(--primary)' : (row.bold ? 'var(--muted)' : undefined);
+  const labelColor = (row.bold || isHi) ? 'var(--primary)' : 'var(--text-primary)';
+  const valuePrimary = 'var(--primary)';
+  const valueMuted = 'var(--text-secondary)';
+  const trBg = isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : undefined);
 
   if (compact) {
     const isPercentRow = format === 'pct';
@@ -283,16 +283,16 @@ function Row({
     const varBudPct = isPercentRow ? cur - bud : undefined;
     const varLyPct = isPercentRow ? cur - lyVal : undefined;
     return (
-      <tr className={`border-t ${isHi ? '' : 'hover:bg-[var(--bg-hover)]'}`} style={{ borderColor: 'var(--border-light)', background: trBg }}>
+      <tr className={`border-t hover:bg-[var(--bg-hover)]`} style={{ borderColor: 'var(--border-light)', background: trBg }}>
         <td className={`${padLabel} ${labelClass}`} style={{ color: labelColor }}>{row.label}</td>
         <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={{ color: valuePrimary }}>
           {fmtValue(cur, format)}
         </td>
         <td className={`${padCell} text-right tabular-nums ${valueClass}`}>
           {varBudCell === null ? (
-            <span style={{ color: isHi ? 'rgba(255,255,255,0.6)' : 'var(--text-muted)' }}></span>
+            <span style={{ color: 'var(--text-muted)' }}></span>
           ) : (
-            <VariancePill varValue={varBudCell} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+            <VariancePill varValue={varBudCell} higherIsBetter={row.higherIsBetter}>
               {fmtVar(varBudCell, format)}
             </VariancePill>
           )}
@@ -301,16 +301,15 @@ function Row({
           <VariancePill
             varValue={isPercentRow ? (varBudPct ?? 0) : (cur - bud)}
             higherIsBetter={row.higherIsBetter}
-            onDark={isHi}
           >
             {isPercentRow ? fmtPctDelta(varBudPct) : fmtVarPct(cur, bud)}
           </VariancePill>
         </td>
         <td className={`${padCell} text-right tabular-nums ${valueClass}`}>
           {varLyCell === null ? (
-            <span style={{ color: isHi ? 'rgba(255,255,255,0.6)' : 'var(--text-muted)' }}></span>
+            <span style={{ color: 'var(--text-muted)' }}></span>
           ) : (
-            <VariancePill varValue={varLyCell} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+            <VariancePill varValue={varLyCell} higherIsBetter={row.higherIsBetter}>
               {fmtVar(varLyCell, format)}
             </VariancePill>
           )}
@@ -319,7 +318,6 @@ function Row({
           <VariancePill
             varValue={isPercentRow ? (varLyPct ?? 0) : (cur - lyVal)}
             higherIsBetter={row.higherIsBetter}
-            onDark={isHi}
           >
             {isPercentRow ? fmtPctDelta(varLyPct) : fmtVarPct(cur, lyVal)}
           </VariancePill>
@@ -333,7 +331,7 @@ function Row({
   const varBud = cur - bud;
   const varLy = cur - lyVal;
   return (
-    <tr className={`border-t ${isHi ? '' : 'hover:bg-[var(--bg-hover)]'}`} style={{ borderColor: 'var(--border-light)', background: trBg }}>
+    <tr className={`border-t hover:bg-[var(--bg-hover)]`} style={{ borderColor: 'var(--border-light)', background: trBg }}>
       <td className={`${padLabel} ${labelClass}`} style={{ color: labelColor }}>{row.label}</td>
       <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={{ color: valuePrimary }}>
         {fmtValue(cur, format)}
@@ -342,12 +340,12 @@ function Row({
         {fmtValue(bud, format)}
       </td>
       <td className={`${padCell} text-right tabular-nums ${valueClass}`}>
-        <VariancePill varValue={varBud} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+        <VariancePill varValue={varBud} higherIsBetter={row.higherIsBetter}>
           {fmtVar(format === 'pct' ? cur - bud : varBud, format)}
         </VariancePill>
       </td>
       <td className={`${padCell} text-right tabular-nums ${valueClass}`}>
-        <VariancePill varValue={varBud} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+        <VariancePill varValue={varBud} higherIsBetter={row.higherIsBetter}>
           {fmtVarPct(cur, bud)}
         </VariancePill>
       </td>
@@ -355,12 +353,12 @@ function Row({
         {fmtValue(lyVal, format)}
       </td>
       <td className={`${padCell} text-right tabular-nums ${valueClass}`}>
-        <VariancePill varValue={varLy} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+        <VariancePill varValue={varLy} higherIsBetter={row.higherIsBetter}>
           {fmtVar(format === 'pct' ? cur - lyVal : varLy, format)}
         </VariancePill>
       </td>
       <td className={`${padCell} text-right tabular-nums ${valueClass}`}>
-        <VariancePill varValue={varLy} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+        <VariancePill varValue={varLy} higherIsBetter={row.higherIsBetter}>
           {fmtVarPct(cur, lyVal)}
         </VariancePill>
       </td>

@@ -177,6 +177,20 @@ function Row(props: RowProps) {
     );
   }
 
+  if (row.kind === 'section_header') {
+    return (
+      <tr style={{ background: '#FAFAFA' }}>
+        <td
+          colSpan={8}
+          className={`${padLabel} text-[0.6875rem] font-semibold uppercase tracking-wider border-t border-b`}
+          style={{ color: 'var(--text-secondary)', borderColor: 'var(--border)' }}
+        >
+          {row.label}
+        </td>
+      </tr>
+    );
+  }
+
   // Rows flagged with useNoXR read from the FX-stripped row sets. Budget passes
   // through unchanged since Budget @ Budget FX is identity.
   const curRows = row.useNoXR ? currentNoXR : current;
@@ -237,9 +251,9 @@ function Row(props: RowProps) {
   const isHi = !!row.highlight;
   const labelClass = row.bold || isHi ? 'font-bold' : 'font-normal';
   const valueClass = row.bold || isHi ? 'font-bold' : 'font-normal';
-  const labelColor = isHi ? '#fff' : (row.bold ? 'var(--primary)' : 'var(--text-primary)');
-  const valuePrimary = isHi ? '#fff' : 'var(--primary)';
-  const valueMuted = isHi ? 'rgba(255,255,255,0.8)' : 'var(--text-secondary)';
+  const labelColor = (row.bold || isHi) ? 'var(--primary)' : 'var(--text-primary)';
+  const valuePrimary = 'var(--primary)';
+  const valueMuted = 'var(--text-secondary)';
   // Indent child rows under the group label; chevron icon takes ~14px room.
   const indentPx = depth * 16;
   const Chevron = isOpen ? ChevronDown : ChevronRightIcon;
@@ -247,14 +261,14 @@ function Row(props: RowProps) {
   return (
     <>
       <tr
-        className={`border-t ${isGroup ? 'cursor-pointer' : ''} ${isHi ? '' : 'hover:bg-[var(--bg-hover)]'}`}
-        style={{ borderColor: 'var(--border-light)', background: isHi ? 'var(--primary)' : (row.bold ? 'var(--muted)' : undefined) }}
+        className={`border-t ${isGroup ? 'cursor-pointer' : ''} hover:bg-[var(--bg-hover)]`}
+        style={{ borderColor: 'var(--border-light)', background: isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : undefined) }}
         onClick={isGroup ? () => onToggle(row.label!) : undefined}
       >
         <td className={`${padLabel} ${labelClass}`} style={{ color: labelColor, paddingLeft: indentPx ? `${indentPx + 12}px` : undefined }}>
           <span className="inline-flex items-center gap-1.5">
             {isGroup ? (
-              <Chevron size={12} style={{ color: isHi ? 'rgba(255,255,255,0.7)' : 'var(--text-secondary)' }} />
+              <Chevron size={12} style={{ color: 'var(--text-secondary)' }} />
             ) : (
               <span className="inline-block w-3" />
             )}
@@ -268,12 +282,12 @@ function Row(props: RowProps) {
           {fmtValue(bud, format)}
         </td>
         <td className={`${padCell} text-right tabular-nums ${valueClass}`}>
-          <VariancePill varValue={varBud} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+          <VariancePill varValue={varBud} higherIsBetter={row.higherIsBetter}>
             {fmtVar(format === 'pct' ? cur - bud : varBud, format)}
           </VariancePill>
         </td>
         <td className={`${padCell} text-right tabular-nums ${valueClass}`}>
-          <VariancePill varValue={varBud} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+          <VariancePill varValue={varBud} higherIsBetter={row.higherIsBetter}>
             {fmtVarPct(cur, bud)}
           </VariancePill>
         </td>
@@ -281,12 +295,12 @@ function Row(props: RowProps) {
           {fmtValue(lyVal, format)}
         </td>
         <td className={`${padCell} text-right tabular-nums ${valueClass}`}>
-          <VariancePill varValue={varLy} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+          <VariancePill varValue={varLy} higherIsBetter={row.higherIsBetter}>
             {fmtVar(format === 'pct' ? cur - lyVal : varLy, format)}
           </VariancePill>
         </td>
         <td className={`${padCell} text-right tabular-nums ${valueClass}`}>
-          <VariancePill varValue={varLy} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+          <VariancePill varValue={varLy} higherIsBetter={row.higherIsBetter}>
             {fmtVarPct(cur, lyVal)}
           </VariancePill>
         </td>

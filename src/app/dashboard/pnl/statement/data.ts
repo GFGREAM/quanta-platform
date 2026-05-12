@@ -327,9 +327,9 @@ export function fmtMoney(value: number): string {
   if (!Number.isFinite(value)) return '—';
   const abs = Math.abs(value);
   const sign = value < 0 ? '-' : '';
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
-  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(0)}K`;
-  return `${sign}$${Math.round(abs).toLocaleString('en-US')}`;
+  if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(0)}K`;
+  return `${sign}${Math.round(abs).toLocaleString('en-US')}`;
 }
 
 export function fmtMoneyFull(value: number): string {

@@ -162,7 +162,7 @@ export const TABLE_ROWS: TableRow[] = [
     calc: sumRoomsRevenue },
   { kind: 'data', label: 'Other Revenue (Non Package)', format: 'k', higherIsBetter: true,
     calc: sumOtherRevenue },
-  { kind: 'group', label: 'Club/Timeshare Revenue', format: 'k', higherIsBetter: true,
+  { kind: 'group', label: 'Club & Timeshare Revenue', format: 'k', higherIsBetter: true,
     calc: (rs) => sum(rs, (r) => r.clubMaintFee + r.timeshareMaintFee),
     children: [
       { kind: 'data', label: 'Club Revenue', format: 'k', higherIsBetter: true,
@@ -215,14 +215,12 @@ export const TABLE_ROWS: TableRow[] = [
     calc: (rs) => safeDiv(gopAbs(rs) - sumNonOps(rs), totalRooms(rs) * 1000) },
   SP,
 
-  // FX (average across the period)
-  { kind: 'data', label: 'Exchange Rate (X/R)', format: 'fx',
-    calc: (rs) => avg(rs, (r) => r.fxRate) },
-  SP,
-
-  // FX-stripped variants — restate each expense field at the matching month's
+  // FX impact section — restate each expense field at the matching month's
   // Budget FX rate, leaving Revenue alone (USD-native). Driven by useNoXR; the
   // renderer swaps in the noXR row sets before calling these calcs.
+  { kind: 'section_header', label: 'w/o Exchange Rate Impact' },
+  { kind: 'data', label: 'Exchange Rate (X/R)', format: 'fx',
+    calc: (rs) => avg(rs, (r) => r.fxRate) },
   { kind: 'data', label: 'Total Expenses (w/o XR)', format: 'k', higherIsBetter: false,
     calc: sumOperatingExpenses, useNoXR: true },
   { kind: 'data', label: 'GOP (w/o XR)', format: 'k', higherIsBetter: true, bold: true, highlight: true,
@@ -290,6 +288,20 @@ const groupInt = (n: number) => Math.round(n).toLocaleString('en-US');
 const groupOneDecimal = (n: number) =>
   n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
+/** Auto K/M suffix for money values. Mirrors the Expenses page convention so
+ *  numbers stay readable without the column-wide "$ thousands" mental math. */
+function fmtMoneyAuto(value: number, isVar: boolean): string {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+  let body: string;
+  if (abs >= 1_000_000) body = `${(abs / 1_000_000).toFixed(2)}M`;
+  else if (abs >= 1_000) body = `${Math.round(abs / 1_000).toLocaleString('en-US')}K`;
+  else body = abs.toFixed(0);
+  // Variance cells use accounting parens for negatives instead of a leading "-".
+  if (isVar) return value < 0 ? `(${body})` : body;
+  return `${sign}${body}`;
+}
+
 /** Format a value cell (current/budget/LY column). */
 export function fmtValue(value: number, format: RowFormat): string {
   if (!Number.isFinite(value)) return '—';
@@ -297,7 +309,7 @@ export function fmtValue(value: number, format: RowFormat): string {
     case 'integer':
       return groupInt(value);
     case 'k':
-      return groupOneDecimal(value / 1000);
+      return fmtMoneyAuto(value, false);
     case 'pct':
       return `${value.toFixed(1)}%`;
     case 'rate':
@@ -321,7 +333,7 @@ export function fmtVar(varValue: number, format: RowFormat): string {
     case 'integer':
       return withParens(groupInt(abs), isNeg);
     case 'k':
-      return withParens(groupInt(abs / 1000), isNeg);
+      return fmtMoneyAuto(varValue, true);
     case 'pct':
       // Delta in percentage points; sign shown literally.
       return `${varValue >= 0 ? '' : '-'}${abs.toFixed(1)}%`;

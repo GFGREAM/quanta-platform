@@ -33,10 +33,10 @@ const menuItems: MenuEntry[] = [
     { label: 'Expenses', icon: DollarSign, href: '/dashboard/bottomline/expenses' },
     { label: 'Staffing', icon: Users, href: '/dashboard/bottomline/staffing' },
     { label: 'Utilities', icon: Wrench, href: '/dashboard/bottomline/utilities' },
-    { label: 'Projects', icon: FileText, href: '/dashboard/bottomline/projects' },
+    { label: 'Capex', icon: FileText, href: '/dashboard/bottomline/projects' },
   ]},
   { category: 'GUEST EXPERIENCE', items: [
-    { label: 'Guest Satisfaction', icon: Star, href: '/dashboard/guest/satisfaction' },
+    { label: 'Guest Satisfaction Performance', icon: Star, href: '/dashboard/guest/satisfaction' },
     { label: 'Hotel META Positioning', icon: Hotel, href: '/dashboard/guest/meta-positioning' },
     { label: 'Competitive Set Radar', icon: Radar, href: '/dashboard/guest/ops-radar' },
   ]},
