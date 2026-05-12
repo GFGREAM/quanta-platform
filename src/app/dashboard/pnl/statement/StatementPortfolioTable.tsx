@@ -292,8 +292,8 @@ function PortfolioRow({
   const calc = row.calc ?? (() => 0);
   const isHi = !!row.highlight;
   const labelClass = row.bold || isHi ? 'font-bold' : 'font-normal';
-  const labelColor = isHi ? '#fff' : (row.bold ? 'var(--primary)' : 'var(--text-primary)');
-  const valuePrimary = isHi ? '#fff' : 'var(--primary)';
+  const labelColor = (row.bold || isHi) ? 'var(--primary)' : 'var(--text-primary)';
+  const valuePrimary = 'var(--primary)';
   const isPercentRow = format === 'pct';
 
   // Compute per-hotel + TOTAL for each group
@@ -312,7 +312,7 @@ function PortfolioRow({
   const totalVarLy = totalCur - totalLy;
 
   return (
-    <tr className={`border-t ${isHi ? '' : 'hover:bg-[var(--bg-hover)]'}`} style={{ borderColor: 'var(--border-light)', background: isHi ? 'var(--primary)' : (row.bold ? 'var(--muted)' : undefined) }}>
+    <tr className="border-t hover:bg-[var(--bg-hover)]" style={{ borderColor: 'var(--border-light)', background: isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : undefined) }}>
       <td className={`${padLabel} ${labelClass}`} style={{ color: labelColor }}>
         {row.label}
       </td>
@@ -332,13 +332,13 @@ function PortfolioRow({
           className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''}`}
           style={{ borderColor: 'var(--border)' }}
         >
-          <VariancePill varValue={v} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+          <VariancePill varValue={v} higherIsBetter={row.higherIsBetter}>
             {isPercentRow ? fmtPctDelta(v) : fmtVar(v, format)}
           </VariancePill>
         </td>
       ))}
       <td className={`${padCell} text-right tabular-nums font-semibold`}>
-        <VariancePill varValue={totalVarBud} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+        <VariancePill varValue={totalVarBud} higherIsBetter={row.higherIsBetter}>
           {isPercentRow ? fmtPctDelta(totalVarBud) : fmtVar(totalVarBud, format)}
         </VariancePill>
       </td>
@@ -349,13 +349,13 @@ function PortfolioRow({
           className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''}`}
           style={{ borderColor: 'var(--border)' }}
         >
-          <VariancePill varValue={v} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+          <VariancePill varValue={v} higherIsBetter={row.higherIsBetter}>
             {isPercentRow ? fmtPctDelta(v) : fmtVar(v, format)}
           </VariancePill>
         </td>
       ))}
       <td className={`${padCell} text-right tabular-nums font-semibold`}>
-        <VariancePill varValue={totalVarLy} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+        <VariancePill varValue={totalVarLy} higherIsBetter={row.higherIsBetter}>
           {isPercentRow ? fmtPctDelta(totalVarLy) : fmtVar(totalVarLy, format)}
         </VariancePill>
       </td>

@@ -18,7 +18,8 @@
       "Bash(npx tsx:*)",
       "Bash(npx tsc:*)",
       "Bash(npx next:*)",
-      "Bash(git mv:*)"
+      "Bash(git mv:*)",
+      "Bash(xxd src/app/dashboard/strategic/action-plan-tracker/data.ts)"
     ]
   }
 }

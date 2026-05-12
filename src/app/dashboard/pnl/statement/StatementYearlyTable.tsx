@@ -110,7 +110,7 @@ function YearRow({ row, layer, allRows, allRowsNoXR, years, scenario, padCell, p
 
   const isHi = !!row.highlight;
   const labelClass = row.bold || isHi ? 'font-bold' : 'font-normal';
-  const labelColor = isHi ? '#fff' : (row.bold ? 'var(--primary)' : 'var(--text-primary)');
+  const labelColor = (row.bold || isHi) ? 'var(--primary)' : 'var(--text-primary)';
   const valueClass = row.bold || isHi ? 'font-bold' : 'font-normal';
 
   if (row.kind === 'flow_thru') {
@@ -137,15 +137,15 @@ function YearRow({ row, layer, allRows, allRowsNoXR, years, scenario, padCell, p
   const isPercentRow = format === 'pct';
   const cells = slicesByYear.map(({ cur, bud, ly }) => computeCell(layer, isPercentRow, calc(cur), calc(bud), calc(ly)));
 
-  const trBg = isHi ? 'var(--primary)' : (row.bold ? 'var(--muted)' : undefined);
-  const stickyBg = isHi ? 'var(--primary)' : (row.bold ? 'var(--muted)' : 'white');
-  const outColor = isHi ? '#fff' : 'var(--primary)';
+  const trBg = isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : undefined);
+  const stickyBg = isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : 'white');
+  const outColor = 'var(--primary)';
   return (
-    <tr className={`border-t ${isHi ? '' : 'hover:bg-[var(--bg-hover)]'}`} style={{ borderColor: 'var(--border-light)', background: trBg }}>
+    <tr className="border-t hover:bg-[var(--bg-hover)]" style={{ borderColor: 'var(--border-light)', background: trBg }}>
       <td className={`${padLabel} ${labelClass} sticky left-0 z-10`} style={{ color: labelColor, background: stickyBg }}>{row.label}</td>
       {cells.map((cell, i) => (
         <td key={`y-${i}`} className={`${padCell} text-right tabular-nums ${valueClass}`} style={layer === 'out' ? { color: outColor } : undefined}>
-          {renderCell(layer, cell, format, isPercentRow, row.higherIsBetter, isHi)}
+          {renderCell(layer, cell, format, isPercentRow, row.higherIsBetter)}
         </td>
       ))}
     </tr>

@@ -116,7 +116,7 @@ function MonthRow({ row, layer, current, budget, ly, currentNoXR, budgetNoXR, ly
 
   const isHi = !!row.highlight;
   const labelClass = row.bold || isHi ? 'font-bold' : 'font-normal';
-  const labelColor = isHi ? '#fff' : (row.bold ? 'var(--primary)' : 'var(--text-primary)');
+  const labelColor = (row.bold || isHi) ? 'var(--primary)' : 'var(--text-primary)';
   const valueClass = row.bold || isHi ? 'font-bold' : 'font-normal';
 
   if (row.kind === 'flow_thru') {
@@ -161,19 +161,19 @@ function MonthRow({ row, layer, current, budget, ly, currentNoXR, budgetNoXR, ly
   const fyLy = sumOver(lyRows);
   const fyCell = computeCell(layer, isPercentRow, fyCur, fyBud, fyLy);
 
-  const trBg = isHi ? 'var(--primary)' : (row.bold ? 'var(--muted)' : undefined);
-  const stickyBg = isHi ? 'var(--primary)' : (row.bold ? 'var(--muted)' : 'white');
-  const outColor = isHi ? '#fff' : 'var(--primary)';
+  const trBg = isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : undefined);
+  const stickyBg = isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : 'white');
+  const outColor = 'var(--primary)';
   return (
-    <tr className={`border-t ${isHi ? '' : 'hover:bg-[var(--bg-hover)]'}`} style={{ borderColor: 'var(--border-light)', background: trBg }}>
+    <tr className="border-t hover:bg-[var(--bg-hover)]" style={{ borderColor: 'var(--border-light)', background: trBg }}>
       <td className={`${padLabel} ${labelClass} sticky left-0 z-10`} style={{ color: labelColor, background: stickyBg }}>{row.label}</td>
       {monthCells.map((cell, i) => (
         <td key={`m-${i}`} className={`${padCell} text-right tabular-nums ${valueClass}`} style={layer === 'out' ? { color: outColor } : undefined}>
-          {renderCell(layer, cell, format, isPercentRow, row.higherIsBetter, isHi)}
+          {renderCell(layer, cell, format, isPercentRow, row.higherIsBetter)}
         </td>
       ))}
       <td className={`${padCell} text-right tabular-nums font-semibold border-l`} style={layer === 'out' ? { color: outColor, borderColor: 'var(--border)' } : { borderColor: 'var(--border)' }}>
-        {renderCell(layer, fyCell, format, isPercentRow, row.higherIsBetter, isHi)}
+        {renderCell(layer, fyCell, format, isPercentRow, row.higherIsBetter)}
       </td>
     </tr>
   );

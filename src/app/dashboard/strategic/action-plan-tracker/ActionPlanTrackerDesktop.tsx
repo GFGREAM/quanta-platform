@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Eye, ListFilter, Layers, GitBranch, ChevronRight, Table as TableIcon } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { Eye, ListFilter, Layers, GitBranch, ChevronRight, Table as TableIcon, Download } from 'lucide-react';
 import KpiCard from '@/components/ui/KpiCard';
 import { selectStyle } from '@/lib/selectStyle';
 import {
@@ -10,11 +10,21 @@ import {
   MONTHS, STATUS_LIST, PRIORITIES,
   fmtMoney, getRoi, fmtDate,
   TODAY, CURRENT_MONTH,
+  occurrenceDates,
 } from './data';
 import { Badge, DotBadge, ActionDetailPanel, dayPct } from './ui';
 import { useActionPlan } from './useActionPlan';
 
 type View = 'gantt' | 'table';
+
+type GanttFilters = {
+  hotel: string;
+  project: string;
+  area: string;
+  status: string;
+  priority: string;
+  owner: string;
+};
 
 export default function ActionPlanTrackerDesktop() {
   const {
@@ -161,7 +171,16 @@ export default function ActionPlanTrackerDesktop() {
         </span>
       </div>
 
-      {view === 'gantt' && <GanttView filtered={displayed} onShowDetail={setDetailId} />}
+      {view === 'gantt' && (
+        <GanttView
+          filtered={displayed}
+          onShowDetail={setDetailId}
+          filters={{
+            hotel: filterHotel, project: filterProject, area: filterArea,
+            status: filterStatus, priority: filterPriority, owner: filterOwner,
+          }}
+        />
+      )}
       {view === 'table' && <TableView filtered={displayed} onShowDetail={setDetailId} />}
 
       <ActionDetailPanel action={detailAction} onClose={() => setDetailId(null)} />
@@ -169,11 +188,85 @@ export default function ActionPlanTrackerDesktop() {
   );
 }
 
-function GanttView({ filtered, onShowDetail }: { filtered: Action[]; onShowDetail: (id: number) => void }) {
+function GanttView({ filtered, onShowDetail, filters }: { filtered: Action[]; onShowDetail: (id: number) => void; filters: GanttFilters }) {
   const todayDim = new Date(TODAY.getFullYear(), TODAY.getMonth() + 1, 0).getDate();
   const todayPct = ((CURRENT_MONTH + (TODAY.getDate() - 1) / todayDim) / 12) * 100;
+  const captureRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    if (!captureRef.current || downloading) return;
+    setDownloading(true);
+    try {
+      const [{ toPng }, jsPdfModule] = await Promise.all([
+        import('html-to-image'),
+        import('jspdf'),
+      ]);
+      const JsPDF = jsPdfModule.default;
+      const dataUrl = await toPng(captureRef.current, { backgroundColor: '#ffffff', pixelRatio: 2, cacheBust: true });
+      const img = new Image();
+      img.src = dataUrl;
+      await new Promise((resolve, reject) => { img.onload = () => resolve(null); img.onerror = reject; });
+
+      const pdf = new JsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 24;
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(13);
+      pdf.text('Action Plan Tracker — Gantt', margin, margin + 12);
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.setTextColor(110);
+      const generated = new Date().toLocaleString();
+      pdf.text(`Generated ${generated}  ·  ${filtered.length} action${filtered.length !== 1 ? 's' : ''}`, margin, margin + 26);
+
+      const filterParts: string[] = [];
+      if (filters.hotel) filterParts.push(`Hotel: ${filters.hotel}`);
+      if (filters.project) filterParts.push(`Project: ${filters.project}`);
+      if (filters.area) filterParts.push(`Area: ${filters.area}`);
+      if (filters.status) filterParts.push(`Status: ${filters.status}`);
+      if (filters.priority) filterParts.push(`Priority: ${filters.priority}`);
+      if (filters.owner) filterParts.push(`Owner: ${filters.owner}`);
+      const filterText = filterParts.length ? filterParts.join('  ·  ') : 'No filters applied';
+      const filterLines = pdf.splitTextToSize(`Filters: ${filterText}`, pageW - margin * 2);
+      pdf.text(filterLines, margin, margin + 38);
+
+      const headerH = 38 + filterLines.length * 10;
+      const availW = pageW - margin * 2;
+      const availH = pageH - margin * 2 - headerH;
+      const ratio = Math.min(availW / img.width, availH / img.height);
+      const renderW = img.width * ratio;
+      const renderH = img.height * ratio;
+      pdf.addImage(dataUrl, 'PNG', margin, margin + headerH, renderW, renderH);
+
+      const today = new Date().toISOString().slice(0, 10);
+      pdf.save(`action-plan-tracker-${today}.pdf`);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div className="bg-white border rounded-lg overflow-hidden shadow-sm" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex items-center justify-between px-3 py-1.5 border-b" style={{ background: 'var(--muted)', borderColor: 'var(--border)' }}>
+        <span className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+          Gantt
+        </span>
+        <button
+          onClick={handleDownloadPdf}
+          disabled={downloading}
+          className="flex items-center gap-1.5 h-7 px-2.5 rounded-md border bg-white text-[0.75rem] font-medium cursor-pointer transition-colors hover:bg-[var(--bg-hover)] disabled:opacity-60 disabled:cursor-wait"
+          style={{ color: 'var(--text-secondary)', borderColor: 'var(--border)' }}
+          title="Download Gantt as PDF with current filters"
+        >
+          <Download size={12} />
+          {downloading ? 'Generating…' : 'Download PDF'}
+        </button>
+      </div>
+      <div ref={captureRef}>
       <div className="flex border-b" style={{ background: 'var(--muted)', borderColor: 'var(--border)' }}>
         <div
           className="w-[280px] shrink-0 px-4 py-2.5 text-[0.6875rem] font-semibold uppercase tracking-wider border-r"
@@ -257,36 +350,72 @@ function GanttView({ filtered, onShowDetail }: { filtered: Action[]; onShowDetai
                   TODAY
                 </span>
               </div>
-              <div
-                className="absolute top-1/2 -translate-y-1/2 h-7 rounded-full flex items-center overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.12)] z-[2] cursor-pointer transition-all hover:-translate-y-[calc(50%+1px)] hover:shadow-[0_3px_8px_rgba(0,0,0,0.18)]"
-                style={{
-                  left: `calc(${left.toFixed(2)}% + 4px)`,
-                  width: `calc(${width.toFixed(2)}% - 8px)`,
-                  background: color,
-                }}
-                onClick={() => onShowDetail(a.id)}
-              >
+              {a.recurrence ? (
+                <>
+                  <div
+                    className="absolute top-1/2 h-px z-[1] pointer-events-none"
+                    style={{
+                      left: `calc(${left.toFixed(2)}% + 4px)`,
+                      width: `calc(${width.toFixed(2)}% - 8px)`,
+                      background: color,
+                      opacity: 0.25,
+                      transform: 'translateY(-50%)',
+                    }}
+                  />
+                  {occurrenceDates(a).map((date) => {
+                    const dotLeft = dayPct(date);
+                    const isPast = new Date(date + 'T00:00:00') < TODAY;
+                    return (
+                      <div
+                        key={date}
+                        className="absolute top-1/2 w-2.5 h-2.5 rounded-full z-[2] cursor-pointer transition-transform hover:scale-150"
+                        style={{
+                          left: `${dotLeft.toFixed(2)}%`,
+                          transform: 'translate(-50%, -50%)',
+                          background: color,
+                          opacity: isPast ? 0.5 : 1,
+                          border: '1.5px solid white',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+                        }}
+                        onClick={() => onShowDetail(a.id)}
+                        title={`${a.actionTitle} — ${fmtDate(date)}`}
+                      />
+                    );
+                  })}
+                </>
+              ) : (
                 <div
-                  className="h-full flex items-center px-2.5 gap-1.5 whitespace-nowrap overflow-hidden"
-                  style={{ background: `linear-gradient(90deg, ${color}, ${color}cc)` }}
+                  className="absolute top-1/2 -translate-y-1/2 h-7 rounded-full flex items-center overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.12)] z-[2] cursor-pointer transition-all hover:-translate-y-[calc(50%+1px)] hover:shadow-[0_3px_8px_rgba(0,0,0,0.18)]"
+                  style={{
+                    left: `calc(${left.toFixed(2)}% + 4px)`,
+                    width: `calc(${width.toFixed(2)}% - 8px)`,
+                    background: color,
+                  }}
+                  onClick={() => onShowDetail(a.id)}
                 >
-                  <span className="text-[0.6875rem] font-semibold text-white overflow-hidden text-ellipsis">
-                    {a.actionTitle}
-                  </span>
-                  {a.investmentUsd ? (
-                    <span className="text-[0.6875rem] text-white/85 shrink-0">{fmtMoney(a.investmentUsd)}</span>
-                  ) : null}
-                  {r ? (
-                    <span className="text-[0.6875rem] font-bold text-white bg-white/25 px-[5px] py-px rounded-lg shrink-0">
-                      {r > 0 ? '+' : ''}{r}% ROI
+                  <div
+                    className="h-full flex items-center px-2.5 gap-1.5 whitespace-nowrap overflow-hidden"
+                    style={{ background: `linear-gradient(90deg, ${color}, ${color}cc)` }}
+                  >
+                    <span className="text-[0.6875rem] font-semibold text-white overflow-hidden text-ellipsis">
+                      {a.actionTitle}
                     </span>
-                  ) : null}
+                    {a.investmentUsd ? (
+                      <span className="text-[0.6875rem] text-white/85 shrink-0">{fmtMoney(a.investmentUsd)}</span>
+                    ) : null}
+                    {r ? (
+                      <span className="text-[0.6875rem] font-bold text-white bg-white/25 px-[5px] py-px rounded-lg shrink-0">
+                        {r > 0 ? '+' : ''}{r}% ROI
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
