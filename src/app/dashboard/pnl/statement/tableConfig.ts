@@ -81,12 +81,15 @@ const perPayingGuest =
 const SP: TableRow = { kind: 'spacer' };
 
 export const TABLE_ROWS: TableRow[] = [
+  // #Guests POR — surfaced above the Total Guests group so the per-room
+  // density stays visible regardless of whether the group is expanded.
+  { kind: 'data', label: '#Guests POR', format: 'ratio', higherIsBetter: true,
+    calc: (rs) => safeDiv(sumGuests(rs), totalOccupied(rs)) },
+
   // Total Guests — collapsed shows the count; expanded reveals per-guest econ.
   { kind: 'group', label: 'Total Guests', format: 'integer', higherIsBetter: true,
     calc: sumGuests,
     children: [
-      { kind: 'data', label: '#Guests POR', format: 'ratio', higherIsBetter: true,
-        calc: (rs) => safeDiv(sumGuests(rs), totalOccupied(rs)) },
       { kind: 'data', label: 'Rooms Revenue (Package) PG', format: 'rate', higherIsBetter: true,
         calc: perGuest(sumRoomsRevenue) },
       { kind: 'data', label: 'Other Revenue (Non-Package) PG', format: 'rate', higherIsBetter: true,
@@ -150,14 +153,14 @@ export const TABLE_ROWS: TableRow[] = [
     calc: (rs) => safeDiv(sumRoomsRevenue(rs), sumAvailability(rs)) },
   SP,
 
-  // Revenue — Package + Non-Package shown flat; Club + Time Share live as
-  // children of the Total Revenue parent (often $0 for non-club hotels).
+  // Revenue — Package, Non-Package and the combined Club/Timeshare line shown
+  // flat above the Total Revenue subtotal (often $0 for non-club hotels).
   { kind: 'data', label: 'Rooms Revenue (Package)', format: 'k', higherIsBetter: true,
     calc: sumRoomsRevenue },
   { kind: 'data', label: 'Other Revenue (Non Package)', format: 'k', higherIsBetter: true,
     calc: sumOtherRevenue },
-  { kind: 'group', label: 'Total Revenue', format: 'k', higherIsBetter: true, bold: true,
-    calc: sumRevenue,
+  { kind: 'group', label: 'Club/Timeshare Revenue', format: 'k', higherIsBetter: true,
+    calc: (rs) => sum(rs, (r) => r.clubMaintFee + r.timeshareMaintFee),
     children: [
       { kind: 'data', label: 'Club Revenue', format: 'k', higherIsBetter: true,
         calc: (rs) => sum(rs, (r) => r.clubMaintFee) },
@@ -165,6 +168,8 @@ export const TABLE_ROWS: TableRow[] = [
         calc: (rs) => sum(rs, (r) => r.timeshareMaintFee) },
     ],
   },
+  { kind: 'data', label: 'Total Revenue', format: 'k', higherIsBetter: true, bold: true,
+    calc: sumRevenue },
   SP,
 
   // Expenses
@@ -179,7 +184,7 @@ export const TABLE_ROWS: TableRow[] = [
   // GOP block
   { kind: 'data', label: 'GOP', format: 'k', higherIsBetter: true, bold: true,
     calc: gopAbs },
-  { kind: 'data', label: 'GOP%', format: 'pct', higherIsBetter: true,
+  { kind: 'data', label: 'GOP%', format: 'pct', higherIsBetter: true, bold: true,
     calc: (rs) => safeDiv(gopAbs(rs), sumRevenue(rs)) * 100 },
   { kind: 'flow_thru', label: 'Flow Thru% (Flex)', higherIsBetter: true },
   SP,
@@ -196,7 +201,7 @@ export const TABLE_ROWS: TableRow[] = [
   SP,
   { kind: 'data', label: 'EBITDA', format: 'k', higherIsBetter: true, bold: true,
     calc: (rs) => gopAbs(rs) - sumNonOps(rs) },
-  { kind: 'data', label: 'EBITDA%', format: 'pct', higherIsBetter: true,
+  { kind: 'data', label: 'EBITDA%', format: 'pct', higherIsBetter: true, bold: true,
     calc: (rs) => safeDiv(gopAbs(rs) - sumNonOps(rs), sumRevenue(rs)) * 100 },
   SP,
 
@@ -219,7 +224,7 @@ export const TABLE_ROWS: TableRow[] = [
     calc: sumOperatingExpenses, useNoXR: true },
   { kind: 'data', label: 'GOP (w/o XR)', format: 'k', higherIsBetter: true,
     calc: gopAbs, useNoXR: true },
-  { kind: 'data', label: 'GOP% (w/o XR)', format: 'pct', higherIsBetter: true,
+  { kind: 'data', label: 'GOP% (w/o XR)', format: 'pct', higherIsBetter: true, bold: true,
     calc: (rs) => safeDiv(gopAbs(rs), sumRevenue(rs)) * 100, useNoXR: true },
   { kind: 'flow_thru', label: 'Flow Thru% (w/o X/R)', higherIsBetter: true, useNoXR: true },
 ];
@@ -248,11 +253,11 @@ export const SUMMARY_ROWS: TableRow[] = [
     calc: (rs) => sumRevenue(rs) - sumOperatingExpenses(rs) },
   { kind: 'data', label: 'EBITDA$', format: 'k', higherIsBetter: true, bold: true,
     calc: (rs) => sumRevenue(rs) - sumOperatingExpenses(rs) - sumNonOps(rs) },
-  { kind: 'data', label: 'GOP%', format: 'pct', higherIsBetter: true,
+  { kind: 'data', label: 'GOP%', format: 'pct', higherIsBetter: true, bold: true,
     calc: (rs) => safeDiv(sumRevenue(rs) - sumOperatingExpenses(rs), sumRevenue(rs)) * 100 },
-  { kind: 'data', label: 'EBITDA%', format: 'pct', higherIsBetter: true,
+  { kind: 'data', label: 'EBITDA%', format: 'pct', higherIsBetter: true, bold: true,
     calc: (rs) => safeDiv(sumRevenue(rs) - sumOperatingExpenses(rs) - sumNonOps(rs), sumRevenue(rs)) * 100 },
-  { kind: 'flow_thru', label: 'GOP Flow Thru/ Flex%', higherIsBetter: true },
+  { kind: 'flow_thru', label: 'Flow Thru/Flex%', higherIsBetter: true },
   SP,
 
   // FX impact section — restated at the matching month's Budget FX rate.
@@ -265,11 +270,11 @@ export const SUMMARY_ROWS: TableRow[] = [
     calc: gopAbs, useNoXR: true },
   { kind: 'data', label: 'EBITDA$', format: 'k', higherIsBetter: true,
     calc: (rs) => gopAbs(rs) - sumNonOps(rs), useNoXR: true },
-  { kind: 'data', label: 'GOP%', format: 'pct', higherIsBetter: true,
+  { kind: 'data', label: 'GOP%', format: 'pct', higherIsBetter: true, bold: true,
     calc: (rs) => safeDiv(gopAbs(rs), sumRevenue(rs)) * 100, useNoXR: true },
-  { kind: 'data', label: 'EBITDA%', format: 'pct', higherIsBetter: true,
+  { kind: 'data', label: 'EBITDA%', format: 'pct', higherIsBetter: true, bold: true,
     calc: (rs) => safeDiv(gopAbs(rs) - sumNonOps(rs), sumRevenue(rs)) * 100, useNoXR: true },
-  { kind: 'flow_thru', label: 'GOP Flow Thru/ Flex% (w/o XR)', higherIsBetter: true, useNoXR: true },
+  { kind: 'flow_thru', label: 'Flow Thru/Flex% (w/o XR)', higherIsBetter: true, useNoXR: true },
 ];
 
 // ─── Cell formatters ────────────────────────────────────────────
@@ -348,6 +353,14 @@ export function flattenRows(rows: TableRow[]): TableRow[] {
   }
   return out;
 }
+
+/** Tooltip text shown next to Flow Thru / Flex% cells in the visuals. */
+export const FLOW_THRU_FORMULA =
+  'Hospitality convention:\n' +
+  '• When ΔRevenue > 0 → Flow Thru% = ΔGOP / ΔRevenue\n' +
+  '   (share of incremental revenue that converted to GOP)\n' +
+  '• When ΔRevenue < 0 → Flex% = ΔExpenses / ΔRevenue\n' +
+  '   (both deltas negative → positive Flex = good cost discipline)';
 
 /** Flow Thru% / Flex calculation (cross-column, hospitality convention).
  *  - When current revenue is ABOVE the reference: Flow Thru% = ΔGOP / ΔRev

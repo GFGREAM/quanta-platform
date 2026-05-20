@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import {
   currencyLabel,
   scenarioAbbrev,
@@ -10,6 +12,8 @@ import {
   type Scope,
 } from './data';
 import {
+  FLOW_THRU_FORMULA,
+  SUMMARY_ROWS,
   TABLE_ROWS,
   fmtValue,
   fmtVar,
@@ -18,6 +22,7 @@ import {
   varianceStyle,
   type TableRow,
 } from './tableConfig';
+import { FormulaInfo } from './ui';
 import type { PortfolioData } from './useStatement';
 
 interface Props {
@@ -43,6 +48,11 @@ export default function StatementPortfolioTable({
   const fontMain = compact ? 'text-[0.6875rem]' : 'text-[0.75rem]';
   const fontHeader = compact ? 'text-[0.625rem]' : 'text-[0.6875rem]';
 
+  // Toggle between Summary subset (default) and the full Detailed row set.
+  const [showDetail, setShowDetail] = useState(false);
+  const rows = flattenRows(showDetail ? TABLE_ROWS : SUMMARY_ROWS);
+  const ToggleIcon = showDetail ? ChevronDown : ChevronRight;
+
   return (
     <div
       className="bg-white border rounded-lg shadow-sm overflow-hidden"
@@ -61,8 +71,19 @@ export default function StatementPortfolioTable({
             {periodTitle}
           </div>
         </div>
-        <div className="text-[0.6875rem] font-medium" style={{ color: 'var(--text-secondary)' }}>
-          {currencyLabel(currency)} · values in thousands where marked
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowDetail((v) => !v)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded border text-[0.6875rem] font-semibold uppercase tracking-wider transition-colors hover:bg-white"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: 'transparent' }}
+          >
+            <ToggleIcon size={12} />
+            {showDetail ? 'Collapse to summary' : 'Expand to detail'}
+          </button>
+          <div className="text-[0.6875rem] font-medium" style={{ color: 'var(--text-secondary)' }}>
+            {currencyLabel(currency)} · values in thousands where marked
+          </div>
         </div>
       </div>
 
@@ -108,9 +129,9 @@ export default function StatementPortfolioTable({
             </tr>
           </thead>
           <tbody>
-            {flattenRows(TABLE_ROWS).map((row, i) => (
+            {rows.map((row, i) => (
               <PortfolioRow
-                key={row.label ?? `spacer-${i}`}
+                key={`${i}-${row.label ?? 'spacer'}`}
                 row={row}
                 portfolio={portfolio}
                 padCell={padCell}
@@ -167,6 +188,20 @@ function PortfolioRow({
     );
   }
 
+  if (row.kind === 'section_header') {
+    return (
+      <tr style={{ background: '#FAFAFA' }}>
+        <td
+          colSpan={totalCols}
+          className={`${padLabel} text-[0.6875rem] font-semibold uppercase tracking-wider border-t border-b`}
+          style={{ color: 'var(--text-secondary)', borderColor: 'var(--border)' }}
+        >
+          {row.label}
+        </td>
+      </tr>
+    );
+  }
+
   // Each hotel group carries its own noXR row sets (current and LY restated
   // at the matching month's Budget FX). When useNoXR is on, swap them in.
   const pickCur = (g: PortfolioData['groups'][number]) => row.useNoXR ? g.currentNoXR : g.current;
@@ -178,7 +213,10 @@ function PortfolioRow({
     return (
       <tr className="border-t" style={{ borderColor: 'var(--border-light)' }}>
         <td className={`${padLabel} font-normal`} style={{ color: 'var(--text-secondary)' }}>
-          {row.label}
+          <span className="inline-flex items-center gap-1.5">
+            {row.label}
+            <FormulaInfo text={FLOW_THRU_FORMULA} />
+          </span>
         </td>
         {/* Group 1 (current values) — blanks for Flow Thru */}
         {portfolio.groups.map((g) => (

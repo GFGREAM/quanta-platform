@@ -8,7 +8,6 @@ import {
   YEARS,
   MONTHS,
   METRICS_BY_KEY,
-  KPI_METRICS,
   COMPARISON_SCENARIOS,
   CURRENCIES,
   WEEKLY_OUTLOOK_DRIFTS,
@@ -21,7 +20,7 @@ import {
   type Scope,
 } from './data';
 
-export type ViewMode = 'summary' | 'single' | 'portfolio';
+export type ViewMode = 'summary' | 'single' | 'monthly' | 'yearly' | 'portfolio';
 
 export interface PortfolioHotelGroup {
   hotel: string;
@@ -60,17 +59,6 @@ export interface MonthlyPoint {
   ly: number | null;
 }
 
-export interface KpiSummary {
-  key: MetricKey;
-  label: string;
-  comparison: number;
-  budget: number;
-  ly: number;
-  varianceVsBudget: { pct: number; label: string } | null;
-  varianceVsLy: { pct: number; label: string } | null;
-  higherIsBetter: boolean;
-}
-
 function aggregateMonth(
   rows: ForecastRow[],
   scenario: Scenario,
@@ -80,12 +68,6 @@ function aggregateMonth(
   const matches = rows.filter((r) => r.scenario === scenario && r.month === month);
   if (matches.length === 0) return null;
   return matches.reduce((sum, r) => sum + calc(r), 0);
-}
-
-function variance(actual: number, compare: number): { pct: number; label: string } | null {
-  if (!compare) return null;
-  const pct = ((actual - compare) / Math.abs(compare)) * 100;
-  return { pct, label: `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%` };
 }
 
 export function useStatement() {
@@ -104,6 +86,10 @@ export function useStatement() {
   const [loading, setLoading] = useState(false);
   const [dynamicHotels, setDynamicHotels] = useState<string[]>([]);
   const [dynamicYears, setDynamicYears] = useState<number[]>([]);
+  // All-years dataset, fetched lazily when viewMode === 'yearly'. Cached by
+  // currency so flipping USD/Local refetches; flipping `year` does not.
+  const [allYearsRows, setAllYearsRows] = useState<ForecastRow[]>([]);
+  const [allYearsLoaded, setAllYearsLoaded] = useState<Currency | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -156,6 +142,30 @@ export function useStatement() {
     return () => controller.abort();
   }, [year, currency]);
 
+  // Lazy fetch of the all-years dataset for the Yearly view. Triggers when
+  // viewMode flips to 'yearly' and the cached currency doesn't match.
+  useEffect(() => {
+    if (viewMode !== 'yearly') return;
+    if (allYearsLoaded === currency) return;
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const params = new URLSearchParams({ year: 'all', currency });
+        const res = await fetch(`/api/aag/forecast-rows?${params}`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+        const data: ForecastRow[] = await res.json();
+        if (controller.signal.aborted) return;
+        setAllYearsRows(data);
+        setAllYearsLoaded(currency);
+      } catch {
+        // swallow; Yearly view will show empty
+      }
+    })();
+    return () => controller.abort();
+  }, [viewMode, currency, allYearsLoaded]);
+
   // The server already returns rows in the requested currency, so no
   // client-side conversion is needed.
   const convertedRows = useMemo(() => forecastRows, [forecastRows]);
@@ -189,18 +199,33 @@ export function useStatement() {
     [currentYearRows, lyYearRows, metricDef, scenario],
   );
 
+  // Year-wide row sets per scenario (no period filter). Used by Monthly view
+  // which slices by month at render time rather than by MTD/YTD/FY.
+  const currentScenarioRows = useMemo(
+    () => currentYearRows.filter((r) => r.scenario === scenario),
+    [currentYearRows, scenario],
+  );
+  const currentBudgetRows = useMemo(
+    () => currentYearRows.filter((r) => r.scenario === 'Budget'),
+    [currentYearRows],
+  );
+  const lyActualRows = useMemo(
+    () => lyYearRows.filter((r) => r.scenario === 'Actual'),
+    [lyYearRows],
+  );
+
   // Period-scoped row sets for the single-hotel comparison table.
   const periodCurrent = useMemo(
-    () => filterByPeriod(currentYearRows.filter((r) => r.scenario === scenario), scope, periodMonth),
-    [currentYearRows, scenario, scope, periodMonth],
+    () => filterByPeriod(currentScenarioRows, scope, periodMonth),
+    [currentScenarioRows, scope, periodMonth],
   );
   const periodBudget = useMemo(
-    () => filterByPeriod(currentYearRows.filter((r) => r.scenario === 'Budget'), scope, periodMonth),
-    [currentYearRows, scope, periodMonth],
+    () => filterByPeriod(currentBudgetRows, scope, periodMonth),
+    [currentBudgetRows, scope, periodMonth],
   );
   const periodLy = useMemo(
-    () => filterByPeriod(lyYearRows.filter((r) => r.scenario === 'Actual'), scope, periodMonth),
-    [lyYearRows, scope, periodMonth],
+    () => filterByPeriod(lyActualRows, scope, periodMonth),
+    [lyActualRows, scope, periodMonth],
   );
 
   // ─── FX-stripped row sets ──────────────────────────────────────────
@@ -244,29 +269,58 @@ export function useStatement() {
     [periodLy, restateAtBudgetFx],
   );
 
-  // KPIs share the table's period scope so the cards stay in sync with the
-  // MTD/YTD/FY toggle and the reference month — `periodCurrent` is already
-  // filtered by `scenario`, `periodBudget` by Budget, `periodLy` by Actual.
-  const kpis = useMemo<KpiSummary[]>(() => {
-    const sumOver = (rows: ForecastRow[], calc: (r: ForecastRow) => number) =>
-      rows.reduce((s, r) => s + calc(r), 0);
-    return KPI_METRICS.map((key) => {
-      const def = METRICS_BY_KEY[key];
-      const comparison = sumOver(periodCurrent, def.calc);
-      const budget = sumOver(periodBudget, def.calc);
-      const ly = sumOver(periodLy, def.calc);
-      return {
-        key,
-        label: def.label,
-        comparison,
-        budget,
-        ly,
-        varianceVsBudget: variance(comparison, budget),
-        varianceVsLy: variance(comparison, ly),
-        higherIsBetter: def.higherIsBetter,
-      };
-    });
-  }, [periodCurrent, periodBudget, periodLy]);
+  // Year-wide FX-stripped variants for Monthly view.
+  const currentScenarioRowsNoXR = useMemo(
+    () => currentScenarioRows.map(restateAtBudgetFx),
+    [currentScenarioRows, restateAtBudgetFx],
+  );
+  const currentBudgetRowsNoXR = currentBudgetRows;
+  const lyActualRowsNoXR = useMemo(
+    () => lyActualRows.map(restateAtBudgetFx),
+    [lyActualRows, restateAtBudgetFx],
+  );
+
+  // ─── Yearly view data ──────────────────────────────────────────────
+  // Builds a per-year breakdown from the all-years dataset. Uses an FX map
+  // keyed off the all-years Budget rows (same convention as the period view).
+  const allYearsBudgetFxByKey = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of allYearsRows) {
+      if (r.scenario === 'Budget') {
+        map.set(`${r.hotel}|${r.year}|${r.month}`, r.fxRate);
+      }
+    }
+    return map;
+  }, [allYearsRows]);
+
+  const restateAllAtBudgetFx = useCallback((r: ForecastRow): ForecastRow => {
+    const refFx = allYearsBudgetFxByKey.get(`${r.hotel}|${r.year}|${r.month}`);
+    if (!refFx || refFx === 0) return r;
+    const factor = r.fxRate / refFx;
+    return {
+      ...r,
+      departmentalExpenses: r.departmentalExpenses * factor,
+      undistributedExpenses: r.undistributedExpenses * factor,
+      otherExpenses: r.otherExpenses * factor,
+      nonOperating: r.nonOperating * factor,
+    };
+  }, [allYearsBudgetFxByKey]);
+
+  const allYearsHotelRows = useMemo(
+    () => allYearsRows.filter((r) => hotel === '' || r.hotel === hotel),
+    [allYearsRows, hotel],
+  );
+
+  const allYearsHotelRowsNoXR = useMemo(
+    () => allYearsHotelRows.map(restateAllAtBudgetFx),
+    [allYearsHotelRows, restateAllAtBudgetFx],
+  );
+
+  const availableYears = useMemo(() => {
+    const set = new Set<number>();
+    for (const r of allYearsHotelRows) set.add(r.year);
+    return [...set].sort((a, b) => a - b);
+  }, [allYearsHotelRows]);
 
   // Portfolio rows are independent of the single-hotel filter. The selection
   // is driven by `portfolioHotels`, ordered by PORTFOLIO_HOTELS so the column
@@ -333,13 +387,21 @@ export function useStatement() {
     portfolioHotels, setPortfolioHotels,
     metricDef,
     monthlySeries,
-    kpis,
     periodCurrent,
     periodBudget,
     periodLy,
     periodCurrentNoXR,
     periodBudgetNoXR,
     periodLyNoXR,
+    currentScenarioRows,
+    currentBudgetRows,
+    lyActualRows,
+    currentScenarioRowsNoXR,
+    currentBudgetRowsNoXR,
+    lyActualRowsNoXR,
+    allYearsHotelRows,
+    allYearsHotelRowsNoXR,
+    availableYears,
     portfolio,
     weeklyOutlookSeries,
     loading,

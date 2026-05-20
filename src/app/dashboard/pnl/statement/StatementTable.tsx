@@ -13,6 +13,7 @@ import {
   type Scope,
 } from './data';
 import {
+  FLOW_THRU_FORMULA,
   TABLE_ROWS,
   fmtValue,
   fmtVar,
@@ -21,6 +22,7 @@ import {
   varianceStyle,
   type TableRow,
 } from './tableConfig';
+import { FormulaInfo } from './ui';
 
 interface Props {
   hotel: string;
@@ -188,7 +190,11 @@ function Row(props: RowProps) {
     return (
       <tr className="border-t" style={{ borderColor: 'var(--border-light)' }}>
         <td className={`${padLabel} font-normal`} style={{ color: 'var(--text-secondary)' }}>
-          {row.label}
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block w-3" />
+            {row.label}
+            <FormulaInfo text={FLOW_THRU_FORMULA} />
+          </span>
         </td>
         <td className={`${padCell} text-right`} style={{ color: 'var(--text-muted)' }}>—</td>
         <td className={`${padCell} text-right`} style={{ color: 'var(--text-muted)' }}>—</td>
@@ -244,22 +250,22 @@ function Row(props: RowProps) {
         <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={{ color: 'var(--primary)' }}>
           {fmtValue(cur, format)}
         </td>
-        <td className={`${padCell} text-right tabular-nums`} style={{ color: 'var(--text-secondary)' }}>
+        <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={{ color: 'var(--text-secondary)' }}>
           {fmtValue(bud, format)}
         </td>
-        <td className={`${padCell} text-right tabular-nums`} style={varianceStyle(varBud, row.higherIsBetter)}>
+        <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={varianceStyle(varBud, row.higherIsBetter)}>
           {fmtVar(format === 'pct' ? cur - bud : varBud, format)}
         </td>
-        <td className={`${padCell} text-right tabular-nums`} style={varianceStyle(varBud, row.higherIsBetter)}>
+        <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={varianceStyle(varBud, row.higherIsBetter)}>
           {fmtVarPct(cur, bud)}
         </td>
-        <td className={`${padCell} text-right tabular-nums border-l`} style={{ color: 'var(--text-secondary)', borderColor: 'var(--border)' }}>
+        <td className={`${padCell} text-right tabular-nums border-l ${valueClass}`} style={{ color: 'var(--text-secondary)', borderColor: 'var(--border)' }}>
           {fmtValue(lyVal, format)}
         </td>
-        <td className={`${padCell} text-right tabular-nums`} style={varianceStyle(varLy, row.higherIsBetter)}>
+        <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={varianceStyle(varLy, row.higherIsBetter)}>
           {fmtVar(format === 'pct' ? cur - lyVal : varLy, format)}
         </td>
-        <td className={`${padCell} text-right tabular-nums`} style={varianceStyle(varLy, row.higherIsBetter)}>
+        <td className={`${padCell} text-right tabular-nums ${valueClass}`} style={varianceStyle(varLy, row.higherIsBetter)}>
           {fmtVarPct(cur, lyVal)}
         </td>
       </tr>

@@ -46,7 +46,7 @@ interface ForecastRow {
 // individual, no acumulado). El ytd_flag de la tabla es etiqueta del Excel
 // original, no afecta la magnitud del numero. Lo seteamos a 'MTD' siempre
 // en el output para que el cliente sume libremente segun el scope.
-const SQL = `
+const SQL_YEAR = `
 WITH ultimos_snapshots AS (
   SELECT hotel, data_type, year_num, MAX(week) AS max_week
   FROM at_a_glance.aag
@@ -84,6 +84,45 @@ JOIN ultimos_snapshots us
 ORDER BY a.hotel, a.year_num, a.month_name, a.data_type;
 `;
 
+// "All years" variant — same shape, no year filter. Used by the Yearly view
+// which renders one column per year. The currency placeholder is $1 here.
+const SQL_ALL = `
+WITH ultimos_snapshots AS (
+  SELECT hotel, data_type, year_num, MAX(week) AS max_week
+  FROM at_a_glance.aag
+  GROUP BY hotel, data_type, year_num
+)
+SELECT
+  a.hotel,
+  a.year_num                          AS year,
+  a.month_name                        AS month,
+  a.data_type                         AS scenario,
+  a.company,
+  a.complex_name                      AS complex,
+  a.exchange_rate                     AS fx_rate,
+  COALESCE(a.rooms, 0)                AS rooms,
+  COALESCE(a.availability, 0)         AS availability,
+  a.rooms_sold,
+  a.rooms_comp,
+  CASE WHEN $1 = 'Local' THEN a.rooms_revenue_nc                ELSE a.rooms_revenue                END AS rooms_revenue,
+  CASE WHEN $1 = 'Local' THEN a.club_maintenance_fee_nc         ELSE a.club_maintenance_fee         END AS club_maint_fee,
+  CASE WHEN $1 = 'Local' THEN a.timeshare_maintenance_fee_nc    ELSE a.timeshare_maintenance_fee    END AS timeshare_maint_fee,
+  CASE WHEN $1 = 'Local' THEN a.other_revenue_nc                ELSE a.other_revenue                END AS other_revenue,
+  CASE WHEN $1 = 'Local' THEN a.departmental_expenses_nc        ELSE a.departmental_expenses        END AS departmental_expenses,
+  CASE WHEN $1 = 'Local' THEN a.undistributed_expenses_nc       ELSE a.undistributed_expenses       END AS undistributed_expenses,
+  CASE WHEN $1 = 'Local' THEN a.other_expenses_nc               ELSE a.other_expenses               END AS other_expenses,
+  CASE WHEN $1 = 'Local' THEN a.non_operating_nc                ELSE a.non_operating                END AS non_operating,
+  a.number_of_guests                  AS guests,
+  a.number_of_paying_guests           AS paying_guests
+FROM at_a_glance.aag a
+JOIN ultimos_snapshots us
+  ON us.hotel = a.hotel
+  AND us.data_type = a.data_type
+  AND us.year_num = a.year_num
+  AND us.max_week = a.week
+ORDER BY a.hotel, a.year_num, a.month_name, a.data_type;
+`;
+
 export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -98,15 +137,21 @@ export async function GET(request: Request) {
     if (!yearParam) {
       return NextResponse.json({ error: "year is required" }, { status: 400 });
     }
-    const year = Number(yearParam);
-    if (!Number.isInteger(year)) {
-      return NextResponse.json({ error: "year must be an integer" }, { status: 400 });
-    }
     if (currencyParam !== "USD" && currencyParam !== "Local") {
       return NextResponse.json({ error: "currency must be USD or Local" }, { status: 400 });
     }
 
-    const result = await pool.query(SQL, [year, currencyParam]);
+    const isAll = yearParam === "all";
+    let result;
+    if (isAll) {
+      result = await pool.query(SQL_ALL, [currencyParam]);
+    } else {
+      const year = Number(yearParam);
+      if (!Number.isInteger(year)) {
+        return NextResponse.json({ error: "year must be 'all' or an integer" }, { status: 400 });
+      }
+      result = await pool.query(SQL_YEAR, [year, currencyParam]);
+    }
 
     const rows: ForecastRow[] = result.rows.map((r) => ({
       hotel: r.hotel,
