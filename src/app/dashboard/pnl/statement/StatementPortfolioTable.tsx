@@ -19,10 +19,9 @@ import {
   fmtVar,
   flattenRows,
   flowThruPct,
-  varianceStyle,
   type TableRow,
 } from './tableConfig';
-import { FormulaInfo } from './ui';
+import { FormulaInfo, VariancePill } from './ui';
 import type { PortfolioData } from './useStatement';
 
 interface Props {
@@ -210,6 +209,15 @@ function PortfolioRow({
   const totalLyRows = row.useNoXR ? portfolio.total.lyNoXR : portfolio.total.ly;
 
   if (row.kind === 'flow_thru') {
+    const renderFlowThruPill = (pct: number | null) =>
+      pct === null ? (
+        <span style={{ color: 'var(--text-muted)' }}>{fmtFlowThru(pct)}</span>
+      ) : (
+        <VariancePill varValue={pct} higherIsBetter={row.higherIsBetter}>
+          {fmtFlowThru(pct)}
+        </VariancePill>
+      );
+
     return (
       <tr className="border-t" style={{ borderColor: 'var(--border-light)' }}>
         <td className={`${padLabel} font-normal`} style={{ color: 'var(--text-secondary)' }}>
@@ -224,36 +232,30 @@ function PortfolioRow({
         ))}
         <td className={`${padCell} text-right`} style={{ color: 'var(--text-muted)' }}>—</td>
         {/* Group 2 (vs Budget) — flow thru per hotel + total */}
-        {portfolio.groups.map((g, i) => {
-          const pct = flowThruPct(pickCur(g), g.budget);
-          return (
-            <td
-              key={`b-${g.code}`}
-              className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''}`}
-              style={{ ...varianceStyle(pct, row.higherIsBetter), borderColor: 'var(--border)' }}
-            >
-              {fmtFlowThru(pct)}
-            </td>
-          );
-        })}
-        <td className={`${padCell} text-right tabular-nums font-semibold`} style={varianceStyle(flowThruPct(totalCurRows, portfolio.total.budget), row.higherIsBetter)}>
-          {fmtFlowThru(flowThruPct(totalCurRows, portfolio.total.budget))}
+        {portfolio.groups.map((g, i) => (
+          <td
+            key={`b-${g.code}`}
+            className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''}`}
+            style={{ borderColor: 'var(--border)' }}
+          >
+            {renderFlowThruPill(flowThruPct(pickCur(g), g.budget))}
+          </td>
+        ))}
+        <td className={`${padCell} text-right tabular-nums font-semibold`}>
+          {renderFlowThruPill(flowThruPct(totalCurRows, portfolio.total.budget))}
         </td>
         {/* Group 3 (vs LY) */}
-        {portfolio.groups.map((g, i) => {
-          const pct = flowThruPct(pickCur(g), pickLy(g));
-          return (
-            <td
-              key={`l-${g.code}`}
-              className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''}`}
-              style={{ ...varianceStyle(pct, row.higherIsBetter), borderColor: 'var(--border)' }}
-            >
-              {fmtFlowThru(pct)}
-            </td>
-          );
-        })}
-        <td className={`${padCell} text-right tabular-nums font-semibold`} style={varianceStyle(flowThruPct(totalCurRows, totalLyRows), row.higherIsBetter)}>
-          {fmtFlowThru(flowThruPct(totalCurRows, totalLyRows))}
+        {portfolio.groups.map((g, i) => (
+          <td
+            key={`l-${g.code}`}
+            className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''}`}
+            style={{ borderColor: 'var(--border)' }}
+          >
+            {renderFlowThruPill(flowThruPct(pickCur(g), pickLy(g)))}
+          </td>
+        ))}
+        <td className={`${padCell} text-right tabular-nums font-semibold`}>
+          {renderFlowThruPill(flowThruPct(totalCurRows, totalLyRows))}
         </td>
       </tr>
     );
@@ -261,8 +263,10 @@ function PortfolioRow({
 
   const format = row.format ?? 'integer';
   const calc = row.calc ?? (() => 0);
-  const labelClass = row.bold ? 'font-bold' : 'font-normal';
-  const labelColor = row.bold ? 'var(--primary)' : 'var(--text-primary)';
+  const isHi = !!row.highlight;
+  const labelClass = row.bold || isHi ? 'font-bold' : 'font-normal';
+  const labelColor = isHi ? '#fff' : (row.bold ? 'var(--primary)' : 'var(--text-primary)');
+  const valuePrimary = isHi ? '#fff' : 'var(--primary)';
   const isPercentRow = format === 'pct';
 
   // Compute per-hotel + TOTAL for each group
@@ -281,17 +285,17 @@ function PortfolioRow({
   const totalVarLy = totalCur - totalLy;
 
   return (
-    <tr className="border-t hover:bg-[var(--bg-hover)]" style={{ borderColor: 'var(--border-light)' }}>
+    <tr className={`border-t ${isHi ? '' : 'hover:bg-[var(--bg-hover)]'}`} style={{ borderColor: 'var(--border-light)', background: isHi ? 'var(--primary)' : (row.bold ? 'var(--muted)' : undefined) }}>
       <td className={`${padLabel} ${labelClass}`} style={{ color: labelColor }}>
         {row.label}
       </td>
       {/* Group 1: current values per hotel + TOTAL */}
       {cur.map((v, i) => (
-        <td key={`v-${i}`} className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''} ${row.bold ? 'font-semibold' : ''}`} style={{ color: 'var(--primary)', borderColor: 'var(--border)' }}>
+        <td key={`v-${i}`} className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''} ${row.bold ? 'font-semibold' : ''}`} style={{ color: valuePrimary, borderColor: 'var(--border)' }}>
           {fmtValue(v, format)}
         </td>
       ))}
-      <td className={`${padCell} text-right tabular-nums font-bold`} style={{ color: 'var(--primary)' }}>
+      <td className={`${padCell} text-right tabular-nums font-bold`} style={{ color: valuePrimary }}>
         {fmtValue(totalCur, format)}
       </td>
       {/* Group 2: vs Budget */}
@@ -299,32 +303,34 @@ function PortfolioRow({
         <td
           key={`b-${i}`}
           className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''}`}
-          style={{ ...varianceStyle(v, row.higherIsBetter), borderColor: 'var(--border)' }}
+          style={{ borderColor: 'var(--border)' }}
         >
-          {isPercentRow ? fmtPctDelta(v) : fmtVar(v, format)}
+          <VariancePill varValue={v} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+            {isPercentRow ? fmtPctDelta(v) : fmtVar(v, format)}
+          </VariancePill>
         </td>
       ))}
-      <td
-        className={`${padCell} text-right tabular-nums font-semibold`}
-        style={varianceStyle(totalVarBud, row.higherIsBetter)}
-      >
-        {isPercentRow ? fmtPctDelta(totalVarBud) : fmtVar(totalVarBud, format)}
+      <td className={`${padCell} text-right tabular-nums font-semibold`}>
+        <VariancePill varValue={totalVarBud} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+          {isPercentRow ? fmtPctDelta(totalVarBud) : fmtVar(totalVarBud, format)}
+        </VariancePill>
       </td>
       {/* Group 3: vs LY */}
       {varLy.map((v, i) => (
         <td
           key={`l-${i}`}
           className={`${padCell} text-right tabular-nums ${i === 0 ? 'border-l' : ''}`}
-          style={{ ...varianceStyle(v, row.higherIsBetter), borderColor: 'var(--border)' }}
+          style={{ borderColor: 'var(--border)' }}
         >
-          {isPercentRow ? fmtPctDelta(v) : fmtVar(v, format)}
+          <VariancePill varValue={v} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+            {isPercentRow ? fmtPctDelta(v) : fmtVar(v, format)}
+          </VariancePill>
         </td>
       ))}
-      <td
-        className={`${padCell} text-right tabular-nums font-semibold`}
-        style={varianceStyle(totalVarLy, row.higherIsBetter)}
-      >
-        {isPercentRow ? fmtPctDelta(totalVarLy) : fmtVar(totalVarLy, format)}
+      <td className={`${padCell} text-right tabular-nums font-semibold`}>
+        <VariancePill varValue={totalVarLy} higherIsBetter={row.higherIsBetter} onDark={isHi}>
+          {isPercentRow ? fmtPctDelta(totalVarLy) : fmtVar(totalVarLy, format)}
+        </VariancePill>
       </td>
     </tr>
   );

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Info } from 'lucide-react';
 import { fmtMoney, type Currency, type MetricFormat, type Scope } from './data';
+import { varianceStyle } from './tableConfig';
 import type { ViewMode } from './useStatement';
 
 // Re-export MultiSelect from its promoted location so existing imports still work.
@@ -68,6 +69,56 @@ export function FormulaInfo({ text }: { text: string }) {
         document.body,
       )}
     </>
+  );
+}
+
+// ─── Variance pill ──────────────────────────────────────────────
+// Wraps variance values in a colored chip (mirrors the Expenses page style).
+// When the variance is null/zero/non-finite or `higherIsBetter` is undefined,
+// the pill chrome (background + padding) is suppressed and the content renders
+// inline so empty/neutral cells don't get a visible chip.
+//
+// `onDark` swaps the chip for plain bold text in lighter red/green tones —
+// used inside highlight (navy-background) rows where the standard pill would
+// have insufficient contrast.
+export function VariancePill({
+  children,
+  varValue,
+  higherIsBetter,
+  onDark,
+}: {
+  children: React.ReactNode;
+  varValue: number | null;
+  higherIsBetter?: boolean;
+  onDark?: boolean;
+}) {
+  if (onDark) {
+    if (
+      higherIsBetter === undefined
+      || varValue === null
+      || varValue === 0
+      || !Number.isFinite(varValue)
+    ) {
+      return <span style={{ color: 'rgba(255,255,255,0.85)' }}>{children}</span>;
+    }
+    const isGood = higherIsBetter ? varValue > 0 : varValue < 0;
+    return (
+      <span style={{ color: isGood ? '#6EE7B7' : '#FCA5A5', fontWeight: 600 }}>
+        {children}
+      </span>
+    );
+  }
+  const style = varianceStyle(varValue, higherIsBetter);
+  if (!style.background) {
+    return <span style={style}>{children}</span>;
+  }
+  return (
+    <span
+      className="inline-block px-2 py-0.5 rounded-sm font-semibold"
+      style={style}
+    >
+      {children}
+    </span>
   );
 }
 

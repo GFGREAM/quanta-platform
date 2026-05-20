@@ -15,11 +15,8 @@ import {
   FLOW_THRU_FORMULA,
   SUMMARY_ROWS,
   TABLE_ROWS,
-  fmtValue,
-  fmtVar,
   flattenRows,
   flowThruPct,
-  varianceStyle,
   type TableRow,
 } from './tableConfig';
 import {
@@ -27,11 +24,10 @@ import {
   LAYER_LABELS,
   LAYER_ORDER,
   computeCell,
-  cellStyle,
-  fmtCell,
   fmtFlow,
+  renderCell,
 } from './layerHelpers';
-import { FormulaInfo } from './ui';
+import { FormulaInfo, VariancePill } from './ui';
 
 interface Props {
   hotel: string;
@@ -198,9 +194,10 @@ function MonthRow({
   const budRows = row.useNoXR ? budgetNoXR : budget;
   const lyRows = row.useNoXR ? lyNoXR : ly;
 
-  const labelClass = row.bold ? 'font-bold' : 'font-normal';
-  const labelColor = row.bold ? 'var(--primary)' : 'var(--text-primary)';
-  const valueClass = row.bold ? 'font-bold' : 'font-normal';
+  const isHi = !!row.highlight;
+  const labelClass = row.bold || isHi ? 'font-bold' : 'font-normal';
+  const labelColor = isHi ? '#fff' : (row.bold ? 'var(--primary)' : 'var(--text-primary)');
+  const valueClass = row.bold || isHi ? 'font-bold' : 'font-normal';
 
   if (row.kind === 'flow_thru') {
     // Flow Thru is only meaningful for variance layers; for Outlook layer leave dashes.
@@ -232,16 +229,27 @@ function MonthRow({
           <td
             key={`m-${i}`}
             className={`${padCell} text-right tabular-nums`}
-            style={v === null ? { color: 'var(--text-muted)' } : varianceStyle(v, row.higherIsBetter)}
           >
-            {fmtFlow(v)}
+            {v === null ? (
+              <span style={{ color: 'var(--text-muted)' }}>{fmtFlow(v)}</span>
+            ) : (
+              <VariancePill varValue={v} higherIsBetter={row.higherIsBetter}>
+                {fmtFlow(v)}
+              </VariancePill>
+            )}
           </td>
         ))}
         <td
           className={`${padCell} text-right tabular-nums font-semibold border-l`}
-          style={cellFY === null ? { color: 'var(--text-muted)', borderColor: 'var(--border)' } : { ...varianceStyle(cellFY, row.higherIsBetter), borderColor: 'var(--border)' }}
+          style={{ borderColor: 'var(--border)' }}
         >
-          {fmtFlow(cellFY)}
+          {cellFY === null ? (
+            <span style={{ color: 'var(--text-muted)' }}>{fmtFlow(cellFY)}</span>
+          ) : (
+            <VariancePill varValue={cellFY} higherIsBetter={row.higherIsBetter}>
+              {fmtFlow(cellFY)}
+            </VariancePill>
+          )}
         </td>
       </tr>
     );
@@ -264,25 +272,28 @@ function MonthRow({
   const fyLy = sumOver(lyRows);
   const fyCell = computeCell(layer, isPercentRow, fyCur, fyBud, fyLy);
 
+  const trBg = isHi ? 'var(--primary)' : (row.bold ? 'var(--muted)' : undefined);
+  const stickyBg = isHi ? 'var(--primary)' : (row.bold ? 'var(--muted)' : 'white');
+  const outColor = isHi ? '#fff' : 'var(--primary)';
   return (
-    <tr className="border-t hover:bg-[var(--bg-hover)]" style={{ borderColor: 'var(--border-light)' }}>
-      <td className={`${padLabel} ${labelClass} sticky left-0 bg-white z-10`} style={{ color: labelColor }}>
+    <tr className={`border-t ${isHi ? '' : 'hover:bg-[var(--bg-hover)]'}`} style={{ borderColor: 'var(--border-light)', background: trBg }}>
+      <td className={`${padLabel} ${labelClass} sticky left-0 z-10`} style={{ color: labelColor, background: stickyBg }}>
         {row.label}
       </td>
       {monthCells.map((cell, i) => (
         <td
           key={`m-${i}`}
           className={`${padCell} text-right tabular-nums ${valueClass}`}
-          style={cellStyle(layer, cell, row.higherIsBetter)}
+          style={layer === 'out' ? { color: outColor } : undefined}
         >
-          {fmtCell(layer, cell, format, isPercentRow)}
+          {renderCell(layer, cell, format, isPercentRow, row.higherIsBetter, isHi)}
         </td>
       ))}
       <td
         className={`${padCell} text-right tabular-nums font-semibold border-l`}
-        style={{ ...cellStyle(layer, fyCell, row.higherIsBetter), borderColor: 'var(--border)' }}
+        style={layer === 'out' ? { color: outColor, borderColor: 'var(--border)' } : { borderColor: 'var(--border)' }}
       >
-        {fmtCell(layer, fyCell, format, isPercentRow)}
+        {renderCell(layer, fyCell, format, isPercentRow, row.higherIsBetter, isHi)}
       </td>
     </tr>
   );
