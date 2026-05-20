@@ -1068,7 +1068,7 @@ function ProgressionChart({
           <CartesianGrid stroke="#E5E5E5" strokeDasharray="3 3" vertical={false} />
           <XAxis
             dataKey="month"
-            tick={(props) => <CurrentMonthTick {...props} currentIdx={currentIdx} />}
+            tick={(props: Record<string, unknown>) => <CurrentMonthTick x={props.x as number} y={props.y as number} payload={props.payload as { value: string; index: number }} currentIdx={currentIdx} />}
             tickLine={false}
             axisLine={{ stroke: '#E5E5E5' }}
           />
