@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { selectStyle } from '@/lib/selectStyle';
 import { fmtMetric, METRIC_DEFS, SCOPES, scopeLabel, type MetricKey, type Month } from './data';
-import { useStatement, type ViewMode } from './useStatement';
+import { useStatement, type ComparisonScenario, type ViewMode } from './useStatement';
 import StatementTable from './StatementTable';
 import StatementPortfolioTable from './StatementPortfolioTable';
 import StatementSummaryTable from './StatementSummaryTable';

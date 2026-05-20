@@ -12,27 +12,21 @@ import {
   FLOW_THRU_FORMULA,
   SUMMARY_ROWS,
   TABLE_ROWS,
-  fmtValue,
-  fmtVar,
   flattenRows,
   flowThruPct,
   varianceStyle,
-  type RowFormat,
   type TableRow,
 } from './tableConfig';
+import {
+  type Layer,
+  LAYER_LABELS,
+  LAYER_ORDER,
+  computeCell,
+  cellStyle,
+  fmtCell,
+  fmtFlow,
+} from './layerHelpers';
 import { FormulaInfo } from './ui';
-
-type Layer = 'out' | 'varBud' | 'varBudPct' | 'varLy' | 'varLyPct';
-
-const LAYER_LABELS: Record<Layer, string> = {
-  out: 'Outlook',
-  varBud: 'vs Bud',
-  varBudPct: 'vs Bud%',
-  varLy: 'vs LY',
-  varLyPct: 'vs LY%',
-};
-
-const LAYER_ORDER: Layer[] = ['out', 'varBud', 'varBudPct', 'varLy', 'varLyPct'];
 
 interface Props {
   hotel: string;
@@ -251,47 +245,4 @@ function YearRow({
       ))}
     </tr>
   );
-}
-
-interface CellNum { value: number | null; varianceMagnitude?: number | null }
-
-function computeCell(layer: Layer, isPercentRow: boolean, cur: number, bud: number, lyV: number): CellNum {
-  if (layer === 'out') return { value: cur };
-  if (layer === 'varBud') return { value: cur - bud, varianceMagnitude: cur - bud };
-  if (layer === 'varBudPct') {
-    if (isPercentRow) return { value: cur - bud, varianceMagnitude: cur - bud };
-    return { value: relPct(cur, bud), varianceMagnitude: cur - bud };
-  }
-  if (layer === 'varLy') return { value: cur - lyV, varianceMagnitude: cur - lyV };
-  // varLyPct
-  if (isPercentRow) return { value: cur - lyV, varianceMagnitude: cur - lyV };
-  return { value: relPct(cur, lyV), varianceMagnitude: cur - lyV };
-}
-
-function cellStyle(layer: Layer, cell: CellNum, higherIsBetter: boolean | undefined): React.CSSProperties {
-  if (layer === 'out') return { color: 'var(--primary)' };
-  const mag = cell.varianceMagnitude ?? cell.value;
-  return varianceStyle(mag ?? null, higherIsBetter);
-}
-
-function fmtCell(layer: Layer, cell: CellNum, format: RowFormat, isPercentRow: boolean): string {
-  if (cell.value === null || !Number.isFinite(cell.value)) return '—';
-  if (layer === 'out') return fmtValue(cell.value, format);
-  if (layer === 'varBud' || layer === 'varLy') return fmtVar(cell.value, format);
-  return fmtPercentDelta(cell.value, isPercentRow);
-}
-
-function fmtPercentDelta(value: number, _isPercentRow: boolean): string {
-  if (!Number.isFinite(value)) return '—';
-  return `${value >= 0 ? '' : '-'}${Math.abs(value).toFixed(1)}%`;
-}
-
-function fmtFlow(v: number | null): string {
-  if (v === null || !Number.isFinite(v)) return '—';
-  return `${v >= 0 ? '' : '-'}${Math.abs(v).toFixed(1)}%`;
-}
-
-function relPct(cur: number, ref: number): number | null {
-  if (!Number.isFinite(cur) || !Number.isFinite(ref) || ref === 0) return null;
-  return ((cur - ref) / Math.abs(ref)) * 100;
 }

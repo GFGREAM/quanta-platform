@@ -20,22 +20,18 @@ import {
   flattenRows,
   flowThruPct,
   varianceStyle,
-  type RowFormat,
   type TableRow,
 } from './tableConfig';
+import {
+  type Layer,
+  LAYER_LABELS,
+  LAYER_ORDER,
+  computeCell,
+  cellStyle,
+  fmtCell,
+  fmtFlow,
+} from './layerHelpers';
 import { FormulaInfo } from './ui';
-
-type Layer = 'out' | 'varBud' | 'varBudPct' | 'varLy' | 'varLyPct';
-
-const LAYER_LABELS: Record<Layer, string> = {
-  out: 'Outlook',
-  varBud: 'vs Bud',
-  varBudPct: 'vs Bud%',
-  varLy: 'vs LY',
-  varLyPct: 'vs LY%',
-};
-
-const LAYER_ORDER: Layer[] = ['out', 'varBud', 'varBudPct', 'varLy', 'varLyPct'];
 
 interface Props {
   hotel: string;
@@ -261,12 +257,12 @@ function MonthRow({
     const cur = sumOver(filterMonth(curRows, m));
     const bud = sumOver(filterMonth(budRows, m));
     const lyV = sumOver(filterMonth(lyRows, m));
-    return computeCell(layer, format, isPercentRow, cur, bud, lyV);
+    return computeCell(layer, isPercentRow, cur, bud, lyV);
   });
   const fyCur = sumOver(curRows);
   const fyBud = sumOver(budRows);
   const fyLy = sumOver(lyRows);
-  const fyCell = computeCell(layer, format, isPercentRow, fyCur, fyBud, fyLy);
+  const fyCell = computeCell(layer, isPercentRow, fyCur, fyBud, fyLy);
 
   return (
     <tr className="border-t hover:bg-[var(--bg-hover)]" style={{ borderColor: 'var(--border-light)' }}>
@@ -277,73 +273,19 @@ function MonthRow({
         <td
           key={`m-${i}`}
           className={`${padCell} text-right tabular-nums ${valueClass}`}
-          style={cellStyle(layer, cell, row.higherIsBetter, isPercentRow)}
+          style={cellStyle(layer, cell, row.higherIsBetter)}
         >
           {fmtCell(layer, cell, format, isPercentRow)}
         </td>
       ))}
       <td
         className={`${padCell} text-right tabular-nums font-semibold border-l`}
-        style={{ ...cellStyle(layer, fyCell, row.higherIsBetter, isPercentRow), borderColor: 'var(--border)' }}
+        style={{ ...cellStyle(layer, fyCell, row.higherIsBetter), borderColor: 'var(--border)' }}
       >
         {fmtCell(layer, fyCell, format, isPercentRow)}
       </td>
     </tr>
   );
-}
-
-interface CellNum { value: number | null; varianceMagnitude?: number | null }
-
-function computeCell(layer: Layer, _format: RowFormat, isPercentRow: boolean, cur: number, bud: number, lyV: number): CellNum {
-  if (layer === 'out') {
-    return { value: cur };
-  }
-  if (layer === 'varBud') {
-    if (isPercentRow) return { value: cur - bud, varianceMagnitude: cur - bud };
-    return { value: cur - bud, varianceMagnitude: cur - bud };
-  }
-  if (layer === 'varBudPct') {
-    if (isPercentRow) return { value: cur - bud, varianceMagnitude: cur - bud };
-    return { value: relPct(cur, bud), varianceMagnitude: cur - bud };
-  }
-  if (layer === 'varLy') {
-    if (isPercentRow) return { value: cur - lyV, varianceMagnitude: cur - lyV };
-    return { value: cur - lyV, varianceMagnitude: cur - lyV };
-  }
-  // varLyPct
-  if (isPercentRow) return { value: cur - lyV, varianceMagnitude: cur - lyV };
-  return { value: relPct(cur, lyV), varianceMagnitude: cur - lyV };
-}
-
-function cellStyle(layer: Layer, cell: CellNum, higherIsBetter: boolean | undefined, _isPercentRow: boolean): React.CSSProperties {
-  if (layer === 'out') return { color: 'var(--primary)' };
-  const mag = cell.varianceMagnitude ?? cell.value;
-  return varianceStyle(mag ?? null, higherIsBetter);
-}
-
-function fmtCell(layer: Layer, cell: CellNum, format: RowFormat, isPercentRow: boolean): string {
-  if (cell.value === null || !Number.isFinite(cell.value)) return '—';
-  if (layer === 'out') return fmtValue(cell.value, format);
-  if (layer === 'varBud' || layer === 'varLy') {
-    return fmtVar(cell.value, format);
-  }
-  // pct layers — for pct rows it's already a pp delta; for $ rows it's a relative %.
-  return fmtPercentDelta(cell.value, isPercentRow);
-}
-
-function fmtPercentDelta(value: number, _isPercentRow: boolean): string {
-  if (!Number.isFinite(value)) return '—';
-  return `${value >= 0 ? '' : '-'}${Math.abs(value).toFixed(1)}%`;
-}
-
-function fmtFlow(v: number | null): string {
-  if (v === null || !Number.isFinite(v)) return '—';
-  return `${v >= 0 ? '' : '-'}${Math.abs(v).toFixed(1)}%`;
-}
-
-function relPct(cur: number, ref: number): number | null {
-  if (!Number.isFinite(cur) || !Number.isFinite(ref) || ref === 0) return null;
-  return ((cur - ref) / Math.abs(ref)) * 100;
 }
 
 function filterMonth(rows: ForecastRow[], m: Month): ForecastRow[] {
