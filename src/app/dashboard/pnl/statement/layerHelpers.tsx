@@ -2,7 +2,9 @@
 // both StatementMonthlyTable and StatementYearlyTable.
 
 import type React from 'react';
+import type { ReactNode } from 'react';
 import { fmtValue, fmtVar, varianceStyle, type RowFormat } from './tableConfig';
+import { VariancePill } from './ui';
 
 // ─── Layer types ─────────────────────────────────────────────────
 
@@ -67,4 +69,27 @@ export function fmtFlow(v: number | null): string {
 export function relPct(cur: number, ref: number): number | null {
   if (!Number.isFinite(cur) || !Number.isFinite(ref) || ref === 0) return null;
   return ((cur - ref) / Math.abs(ref)) * 100;
+}
+
+// ─── Render helper (VariancePill-aware) ──────────────────────────
+
+export function renderCell(
+  layer: Layer,
+  cell: CellNum,
+  format: RowFormat,
+  isPercentRow: boolean,
+  higherIsBetter: boolean | undefined,
+  onDark?: boolean,
+): ReactNode {
+  const text = fmtCell(layer, cell, format, isPercentRow);
+  if (layer === 'out') return text;
+  if (cell.value === null || !Number.isFinite(cell.value)) {
+    return <span style={{ color: onDark ? 'rgba(255,255,255,0.6)' : 'var(--text-muted)' }}>{text}</span>;
+  }
+  const mag = cell.varianceMagnitude ?? cell.value;
+  return (
+    <VariancePill varValue={mag ?? null} higherIsBetter={higherIsBetter} onDark={onDark}>
+      {text}
+    </VariancePill>
+  );
 }

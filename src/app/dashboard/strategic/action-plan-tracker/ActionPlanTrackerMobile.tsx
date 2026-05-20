@@ -43,7 +43,7 @@ export default function ActionPlanTrackerMobile() {
     <div className="flex flex-col gap-4" style={{ color: 'var(--text-primary)' }}>
       {/* Breadcrumb */}
       <div className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
-        <span>Strategic</span>
+        <span>Strategy</span>
         <ChevronRight size={12} />
         <span style={{ color: 'var(--primary)' }}>Action Plan Tracker</span>
       </div>
