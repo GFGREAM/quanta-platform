@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
-import { Home, DollarSign, FileText, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, ChevronLeft, ChevronRight, X, Target, Radar, PlaneTakeoff } from 'lucide-react';
+import { Home, DollarSign, FileText, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, ChevronLeft, ChevronRight, X, Target, Radar, PlaneTakeoff, ClipboardCheck } from 'lucide-react';
 
 interface MenuItem {
   label: string;
@@ -47,6 +47,10 @@ const menuItems: MenuEntry[] = [
   { category: 'MARKET TRENDS', items: [
     { label: 'Airport Passengers', icon: PlaneTakeoff, href: '/dashboard/market/airport-passengers' },
     { label: 'Market Demand', icon: BarChart3, href: '/dashboard/market/market-demand' },
+  ]},
+  { category: 'TOOLS', items: [
+    { label: 'GFG Hotel Audits', icon: ClipboardCheck, href: '/dashboard/tools/hotel-audits' },
+    { label: 'Hotel META Snapshot', icon: FileText, href: '/dashboard/tools/hotel-meta-snapshot' },
   ]},
 ];
 
