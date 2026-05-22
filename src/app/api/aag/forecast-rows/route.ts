@@ -39,8 +39,8 @@ interface ForecastRow {
 }
 
 // Query: trae year y year-1 de at_a_glance.aag, tomando solo el ultimo
-// snapshot por (hotel, data_type, year_num). Currency aplicada server-side:
-// si USD, usa columnas sin sufijo; si Local, usa *_nc.
+// snapshot por (hotel, data_type, year). Currency aplicada server-side:
+// si USD, usa columnas sin sufijo; si Local, usa *_local.
 //
 // IMPORTANTE: tratamos todas las filas como MTD (cada fila representa un mes
 // individual, no acumulado). El ytd_flag de la tabla es etiqueta del Excel
@@ -48,14 +48,14 @@ interface ForecastRow {
 // en el output para que el cliente sume libremente segun el scope.
 const SQL_YEAR = `
 WITH ultimos_snapshots AS (
-  SELECT hotel, data_type, year_num, MAX(week) AS max_week
+  SELECT hotel, data_type, year, MAX(week) AS max_week
   FROM at_a_glance.aag
-  WHERE year_num IN ($1::int, $1::int - 1)
-  GROUP BY hotel, data_type, year_num
+  WHERE year IN ($1::int, $1::int - 1)
+  GROUP BY hotel, data_type, year
 )
 SELECT
   a.hotel,
-  a.year_num                          AS year,
+  a.year                          AS year,
   a.month_name                        AS month,
   a.data_type                         AS scenario,
   a.company,
@@ -65,36 +65,36 @@ SELECT
   COALESCE(a.availability, 0)         AS availability,
   a.rooms_sold,
   a.rooms_comp,
-  CASE WHEN $2 = 'Local' THEN a.rooms_revenue_nc                ELSE a.rooms_revenue                END AS rooms_revenue,
-  CASE WHEN $2 = 'Local' THEN a.club_maintenance_fee_nc         ELSE a.club_maintenance_fee         END AS club_maint_fee,
-  CASE WHEN $2 = 'Local' THEN a.timeshare_maintenance_fee_nc    ELSE a.timeshare_maintenance_fee    END AS timeshare_maint_fee,
-  CASE WHEN $2 = 'Local' THEN a.other_revenue_nc                ELSE a.other_revenue                END AS other_revenue,
-  CASE WHEN $2 = 'Local' THEN a.departmental_expenses_nc        ELSE a.departmental_expenses        END AS departmental_expenses,
-  CASE WHEN $2 = 'Local' THEN a.undistributed_expenses_nc       ELSE a.undistributed_expenses       END AS undistributed_expenses,
-  CASE WHEN $2 = 'Local' THEN a.other_expenses_nc               ELSE a.other_expenses               END AS other_expenses,
-  CASE WHEN $2 = 'Local' THEN a.non_operating_nc                ELSE a.non_operating                END AS non_operating,
+  CASE WHEN $2 = 'Local' THEN a.rooms_revenue_local                ELSE a.rooms_revenue                END AS rooms_revenue,
+  CASE WHEN $2 = 'Local' THEN a.club_maintenance_fee_local         ELSE a.club_maintenance_fee         END AS club_maint_fee,
+  CASE WHEN $2 = 'Local' THEN a.timeshare_maintenance_fee_local    ELSE a.timeshare_maintenance_fee    END AS timeshare_maint_fee,
+  CASE WHEN $2 = 'Local' THEN a.other_revenue_local                ELSE a.other_revenue                END AS other_revenue,
+  CASE WHEN $2 = 'Local' THEN a.departmental_expenses_local        ELSE a.departmental_expenses        END AS departmental_expenses,
+  CASE WHEN $2 = 'Local' THEN a.undistributed_expenses_local       ELSE a.undistributed_expenses       END AS undistributed_expenses,
+  CASE WHEN $2 = 'Local' THEN a.other_expenses_local               ELSE a.other_expenses               END AS other_expenses,
+  CASE WHEN $2 = 'Local' THEN a.non_operating_local                ELSE a.non_operating                END AS non_operating,
   a.number_of_guests                  AS guests,
   a.number_of_paying_guests           AS paying_guests
 FROM at_a_glance.aag a
 JOIN ultimos_snapshots us
   ON us.hotel = a.hotel
   AND us.data_type = a.data_type
-  AND us.year_num = a.year_num
+  AND us.year = a.year
   AND us.max_week = a.week
-ORDER BY a.hotel, a.year_num, a.month_name, a.data_type;
+ORDER BY a.hotel, a.year, a.month_name, a.data_type;
 `;
 
 // "All years" variant — same shape, no year filter. Used by the Yearly view
 // which renders one column per year. The currency placeholder is $1 here.
 const SQL_ALL = `
 WITH ultimos_snapshots AS (
-  SELECT hotel, data_type, year_num, MAX(week) AS max_week
+  SELECT hotel, data_type, year, MAX(week) AS max_week
   FROM at_a_glance.aag
-  GROUP BY hotel, data_type, year_num
+  GROUP BY hotel, data_type, year
 )
 SELECT
   a.hotel,
-  a.year_num                          AS year,
+  a.year                          AS year,
   a.month_name                        AS month,
   a.data_type                         AS scenario,
   a.company,
@@ -104,23 +104,23 @@ SELECT
   COALESCE(a.availability, 0)         AS availability,
   a.rooms_sold,
   a.rooms_comp,
-  CASE WHEN $1 = 'Local' THEN a.rooms_revenue_nc                ELSE a.rooms_revenue                END AS rooms_revenue,
-  CASE WHEN $1 = 'Local' THEN a.club_maintenance_fee_nc         ELSE a.club_maintenance_fee         END AS club_maint_fee,
-  CASE WHEN $1 = 'Local' THEN a.timeshare_maintenance_fee_nc    ELSE a.timeshare_maintenance_fee    END AS timeshare_maint_fee,
-  CASE WHEN $1 = 'Local' THEN a.other_revenue_nc                ELSE a.other_revenue                END AS other_revenue,
-  CASE WHEN $1 = 'Local' THEN a.departmental_expenses_nc        ELSE a.departmental_expenses        END AS departmental_expenses,
-  CASE WHEN $1 = 'Local' THEN a.undistributed_expenses_nc       ELSE a.undistributed_expenses       END AS undistributed_expenses,
-  CASE WHEN $1 = 'Local' THEN a.other_expenses_nc               ELSE a.other_expenses               END AS other_expenses,
-  CASE WHEN $1 = 'Local' THEN a.non_operating_nc                ELSE a.non_operating                END AS non_operating,
+  CASE WHEN $1 = 'Local' THEN a.rooms_revenue_local                ELSE a.rooms_revenue                END AS rooms_revenue,
+  CASE WHEN $1 = 'Local' THEN a.club_maintenance_fee_local         ELSE a.club_maintenance_fee         END AS club_maint_fee,
+  CASE WHEN $1 = 'Local' THEN a.timeshare_maintenance_fee_local    ELSE a.timeshare_maintenance_fee    END AS timeshare_maint_fee,
+  CASE WHEN $1 = 'Local' THEN a.other_revenue_local                ELSE a.other_revenue                END AS other_revenue,
+  CASE WHEN $1 = 'Local' THEN a.departmental_expenses_local        ELSE a.departmental_expenses        END AS departmental_expenses,
+  CASE WHEN $1 = 'Local' THEN a.undistributed_expenses_local       ELSE a.undistributed_expenses       END AS undistributed_expenses,
+  CASE WHEN $1 = 'Local' THEN a.other_expenses_local               ELSE a.other_expenses               END AS other_expenses,
+  CASE WHEN $1 = 'Local' THEN a.non_operating_local                ELSE a.non_operating                END AS non_operating,
   a.number_of_guests                  AS guests,
   a.number_of_paying_guests           AS paying_guests
 FROM at_a_glance.aag a
 JOIN ultimos_snapshots us
   ON us.hotel = a.hotel
   AND us.data_type = a.data_type
-  AND us.year_num = a.year_num
+  AND us.year = a.year
   AND us.max_week = a.week
-ORDER BY a.hotel, a.year_num, a.month_name, a.data_type;
+ORDER BY a.hotel, a.year, a.month_name, a.data_type;
 `;
 
 export async function GET(request: Request) {
