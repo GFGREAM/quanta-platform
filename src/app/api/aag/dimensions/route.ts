@@ -17,7 +17,7 @@ const EMPTY_DIMENSIONS: DimensionsResponse = {
 // distintos presentes en at_a_glance.aag. Una sola pasada con dos CTEs.
 const SQL = `
 WITH years AS (
-  SELECT DISTINCT year_num AS y
+  SELECT DISTINCT year AS y
   FROM at_a_glance.aag
   ORDER BY y
 ),
