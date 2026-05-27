@@ -50,7 +50,7 @@ function validGoogleMapsUrl(value: string): boolean {
 }
 
 function validEmail(value: string): boolean {
-  if (!value) return true;
+  if (!value) return false;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
@@ -147,7 +147,10 @@ export default function HotelMetaSnapshotPage() {
       errs.push('valid Expedia URL');
       newErrors.expediaUrl = true;
     }
-    if (!validEmail(form.email.trim())) {
+    if (!form.email.trim()) {
+      errs.push('Email is required to receive the report');
+      newErrors.email = true;
+    } else if (!validEmail(form.email.trim())) {
       errs.push('valid email format');
       newErrors.email = true;
     }
@@ -162,12 +165,15 @@ export default function HotelMetaSnapshotPage() {
       alert('Please fix: ' + errs.join(', '));
       return;
     }
-
     setStatus('submitting');
     setErrorMessage('');
     startProgress();
 
+    // Generar job_id único en el cliente
+    const jobId = crypto.randomUUID();
+
     const payload = {
+      job_id: jobId,
       hotel_name: form.hotelName.trim(),
       city: form.city.trim(),
       period_days: 180,
@@ -179,33 +185,64 @@ export default function HotelMetaSnapshotPage() {
     };
 
     try {
-      const res = await fetch('/api/snapshot/run', {
+      // Disparar el job (espera 202)
+      const runRes = await fetch('/api/snapshot/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(text || 'HTTP ' + res.status);
+      if (runRes.status !== 202) {
+        const text = await runRes.text().catch(() => '');
+        throw new Error(text || `HTTP ${runRes.status}`);
       }
 
-      const blob = await res.blob();
-      stopProgress();
-      setStatus('success');
+      // Polling cada 5 segundos al status endpoint
+      const POLL_INTERVAL_MS = 5000;
+      const MAX_POLL_DURATION_MS = 30 * 60 * 1000; // 30 min
+      const pollStart = Date.now();
 
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = form.hotelName.replace(/[^a-zA-Z0-9 ]/g, '').replace(/ /g, '_') + '_Digital_Presence_Snapshot.pdf';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      while (Date.now() - pollStart < MAX_POLL_DURATION_MS) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+
+        const statusRes = await fetch(`/api/snapshot/status/${jobId}`, {
+          method: 'GET',
+        });
+
+        if (statusRes.status === 202) {
+          // Aún procesando, continuar polling
+          continue;
+        }
+
+        if (statusRes.status === 200) {
+          // PDF listo, descargar
+          const blob = await statusRes.blob();
+          stopProgress();
+          setStatus('success');
+
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download =
+            form.hotelName.replace(/[^a-zA-Z0-9 ]/g, '').replace(/ /g, '_') +
+            '_Digital_Presence_Snapshot.pdf';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          return;
+        }
+
+        // Cualquier otro status es error
+        const errText = await statusRes.text().catch(() => '');
+        throw new Error(`Status check failed (HTTP ${statusRes.status}): ${errText.slice(0, 200)}`);
+      }
+
+      throw new Error('Snapshot timed out after 30 minutes. Check your email — the report may have been sent there.');
     } catch (e) {
       stopProgress();
       const message = e instanceof Error ? e.message : 'Unknown error';
-      setErrorMessage(message + '. Please ensure the workflow is active and try again.');
+      setErrorMessage(message);
       setStatus('error');
     }
   };
@@ -381,9 +418,7 @@ export default function HotelMetaSnapshotPage() {
             </div>
 
             <div style={{ marginTop: '18px', marginBottom: '14px' }}>
-              <label style={labelStyle}>
-                Email <span style={{ fontWeight: 400, color: '#aaa', textTransform: 'none', letterSpacing: 0 }}>(optional) — receive the report in your inbox</span>
-              </label>
+              <label style={labelStyle}>Email *</label>
               <input
                 type="email"
                 value={form.email}
@@ -442,6 +477,10 @@ export default function HotelMetaSnapshotPage() {
                   PDF downloads automatically when ready.
                   <br />
                   <strong>Please keep this tab open.</strong>
+                  <br />
+                  <span style={{ fontSize: '11px', color: '#8B9AAB' }}>
+                    A copy will also be sent to your email.
+                  </span>
                 </>
               )}
             </div>
