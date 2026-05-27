@@ -5,17 +5,18 @@ import {
   CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { selectStyle } from '@/lib/selectStyle';
-import { fmtMetric, METRIC_DEFS, SCOPES, scopeLabel, type MetricKey, type Month } from './data';
-import { useStatement, type ComparisonScenario, type ViewMode } from './useStatement';
+import { fmtMetric, METRIC_DEFS, SCOPES, scopeLabel, scenarioLabel, type MetricKey, type Month } from './data';
+import { useStatement, type ViewMode } from './useStatement';
 import StatementTable from './StatementTable';
 import StatementPortfolioTable from './StatementPortfolioTable';
 import StatementSummaryTable from './StatementSummaryTable';
 import StatementMonthlyTable from './StatementMonthlyTable';
+import StatementQuarterlyTable from './StatementQuarterlyTable';
 import StatementYearlyTable from './StatementYearlyTable';
 import {
   MultiSelect,
   COLOR_COMPARISON, COLOR_BUDGET, COLOR_LY,
-  VIEW_ORDER, VIEW_LABELS, SCOPE_LABELS, CURRENCY_LABELS,
+  VIEW_ORDER, VIEW_LABELS, SCOPE_LABELS, CURRENCY_LABELS, BASIS_LABELS,
   LegendDot, formatAxis,
 } from './ui';
 
@@ -24,14 +25,15 @@ export default function StatementMobile() {
     year, setYear,
     hotel, setHotel,
     metric, setMetric,
-    scenario, setScenario,
+    scenario,
     scope, setScope,
     periodMonth, setPeriodMonth,
     viewMode, setViewMode,
     currency, setCurrency,
+    basis, setBasis,
     portfolioHotels, setPortfolioHotels,
     metricDef,
-    monthlySeries,
+    chartSeries,
     weeklyOutlookSeries,
     periodCurrent, periodBudget, periodLy,
     periodCurrentNoXR, periodBudgetNoXR, periodLyNoXR,
@@ -39,8 +41,8 @@ export default function StatementMobile() {
     currentScenarioRowsNoXR, currentBudgetRowsNoXR, lyActualRowsNoXR,
     allYearsHotelRows, allYearsHotelRowsNoXR, availableYears,
     portfolio,
-    hotelOptions, yearOptions, scenarioOptions, monthOptions,
-    portfolioHotelOptions, currencyOptions,
+    hotelOptions, yearOptions, monthOptions,
+    portfolioHotelOptions, currencyOptions, basisOptions,
   } = useStatement();
 
   return (
@@ -59,7 +61,7 @@ export default function StatementMobile() {
             P&amp;L Statement
           </h1>
           <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-            {scenario} vs Budget vs LY
+            {scenarioLabel(scenario)} vs Budget vs LY
           </p>
         </div>
         <ViewToggleMobile viewMode={viewMode} setViewMode={setViewMode} />
@@ -88,14 +90,6 @@ export default function StatementMobile() {
             {hotelOptions.map((h) => <option key={h} value={h}>{h}</option>)}
           </select>
         )}
-        <select
-          className="h-10 px-3 pr-8 rounded-md border text-sm bg-white appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
-          style={selectStyle}
-          value={scenario}
-          onChange={(e) => setScenario(e.target.value as ComparisonScenario)}
-        >
-          {scenarioOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
         <select
           className="h-10 px-3 pr-8 rounded-md border text-sm bg-white appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
           style={selectStyle}
@@ -141,6 +135,18 @@ export default function StatementMobile() {
             </button>
           ))}
         </div>
+        <div className="flex rounded-lg p-[3px] gap-0.5" style={{ background: 'var(--muted)' }}>
+          {basisOptions.map((b) => (
+            <button
+              key={b}
+              onClick={() => setBasis(b)}
+              className={`px-2.5 py-1 rounded-md text-[0.75rem] font-medium border-none cursor-pointer ${basis === b ? 'bg-white shadow-sm' : 'bg-transparent'}`}
+              style={{ color: basis === b ? 'var(--primary)' : 'var(--text-secondary)' }}
+            >
+              {BASIS_LABELS[b]}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Comparison table — summary, overview (single), or portfolio */}
@@ -152,6 +158,7 @@ export default function StatementMobile() {
           year={year}
           scenario={scenario}
           currency={currency}
+          basis={basis}
           current={periodCurrent}
           budget={periodBudget}
           ly={periodLy}
@@ -168,6 +175,7 @@ export default function StatementMobile() {
           year={year}
           scenario={scenario}
           currency={currency}
+          basis={basis}
           current={periodCurrent}
           budget={periodBudget}
           ly={periodLy}
@@ -182,6 +190,21 @@ export default function StatementMobile() {
           year={year}
           scenario={scenario}
           currency={currency}
+          basis={basis}
+          current={currentScenarioRows}
+          budget={currentBudgetRows}
+          ly={lyActualRows}
+          currentNoXR={currentScenarioRowsNoXR}
+          budgetNoXR={currentBudgetRowsNoXR}
+          lyNoXR={lyActualRowsNoXR}
+        />
+      ) : viewMode === 'quarter' ? (
+        <StatementQuarterlyTable
+          hotel={hotel}
+          year={year}
+          scenario={scenario}
+          currency={currency}
+          basis={basis}
           current={currentScenarioRows}
           budget={currentBudgetRows}
           ly={lyActualRows}
@@ -194,6 +217,8 @@ export default function StatementMobile() {
           hotel={hotel}
           scenario={scenario}
           currency={currency}
+          basis={basis}
+          year={year}
           allRows={allYearsHotelRows}
           allRowsNoXR={allYearsHotelRowsNoXR}
           years={availableYears}
@@ -209,19 +234,24 @@ export default function StatementMobile() {
           year={year}
           scenario={scenario}
           currency={currency}
+          basis={basis}
           portfolio={portfolio}
           compact
         />
       )}
 
       {/* Chart — Monthly trend (single/monthly) or WoW Outlook (portfolio).
-          Hidden in Summary because the same view exists in Detailed/Monthly. */}
+          Hidden in Summary because the same view exists in Expanded/Monthly. */}
       {viewMode !== 'summary' && (
       <div className="bg-white border rounded-lg p-3" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-start justify-between mb-2 gap-2">
           <div className="min-w-0">
             <div className="text-[0.625rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-              {viewMode === 'portfolio' ? 'Outlook · WoW' : 'Monthly trend'}
+              {viewMode === 'portfolio'
+                ? 'Outlook · WoW'
+                : viewMode === 'quarter' ? 'Quarterly trend'
+                : viewMode === 'yearly' ? 'Yearly trend'
+                : 'Monthly trend'}
             </div>
             <div className="text-[0.8125rem] font-semibold truncate" style={{ color: 'var(--primary)' }}>
               {viewMode === 'portfolio' ? `${metricDef.label} · ${scopeLabel(scope, periodMonth, year)}` : metricDef.label}
@@ -244,7 +274,7 @@ export default function StatementMobile() {
             </>
           ) : (
             <>
-              <LegendDot color={COLOR_COMPARISON} label={scenario} size="sm" />
+              <LegendDot color={COLOR_COMPARISON} label={scenarioLabel(scenario)} size="sm" />
               <LegendDot color={COLOR_BUDGET} label="Budget" size="sm" />
               <LegendDot color={COLOR_LY} label="LY" size="sm" />
             </>
@@ -253,10 +283,10 @@ export default function StatementMobile() {
         <div className="h-[280px]">
           {viewMode !== 'portfolio' ? (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthlySeries} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <LineChart data={chartSeries} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke="#E5E5E5" strokeDasharray="3 3" vertical={false} />
                 <XAxis
-                  dataKey="month"
+                  dataKey="label"
                   tick={{ fill: '#6B7280', fontSize: 10 }}
                   tickLine={false}
                   axisLine={{ stroke: '#E5E5E5' }}
@@ -302,7 +332,7 @@ export default function StatementMobile() {
                 <Line
                   type="monotone"
                   dataKey="comparison"
-                  name={scenario}
+                  name={scenarioLabel(scenario)}
                   stroke={COLOR_COMPARISON}
                   strokeWidth={2}
                   dot={false}

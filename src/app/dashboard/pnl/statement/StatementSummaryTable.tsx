@@ -4,6 +4,7 @@ import {
   currencyLabel,
   scenarioAbbrev,
   scopeLabel,
+  type Basis,
   type Currency,
   type ForecastRow,
   type Month,
@@ -13,6 +14,8 @@ import {
 import {
   FLOW_THRU_FORMULA,
   SUMMARY_ROWS,
+  basisCalc,
+  basisFormat,
   fmtValue,
   fmtVar,
   fmtVarPct,
@@ -35,6 +38,7 @@ interface Props {
   currentNoXR: ForecastRow[];
   budgetNoXR: ForecastRow[];
   lyNoXR: ForecastRow[];
+  basis: Basis;
   compact?: boolean;
 }
 
@@ -42,6 +46,7 @@ export default function StatementSummaryTable({
   hotel, scope, periodMonth, year, scenario, currency,
   current, budget, ly,
   currentNoXR, budgetNoXR, lyNoXR,
+  basis,
   compact,
 }: Props) {
   const periodTitle = scopeLabel(scope, periodMonth, year);
@@ -117,6 +122,7 @@ export default function StatementSummaryTable({
                 currentNoXR={currentNoXR}
                 budgetNoXR={budgetNoXR}
                 lyNoXR={lyNoXR}
+                basis={basis}
                 padCell={padCell}
                 padLabel={padLabel}
                 colSpanAll={colSpanAll}
@@ -149,7 +155,7 @@ function Th({
 }
 
 function Row({
-  row, current, budget, ly, currentNoXR, budgetNoXR, lyNoXR,
+  row, current, budget, ly, currentNoXR, budgetNoXR, lyNoXR, basis,
   padCell, padLabel, colSpanAll, compact,
 }: {
   row: TableRow;
@@ -159,6 +165,7 @@ function Row({
   currentNoXR: ForecastRow[];
   budgetNoXR: ForecastRow[];
   lyNoXR: ForecastRow[];
+  basis: Basis;
   padCell: string;
   padLabel: string;
   colSpanAll: number;
@@ -194,10 +201,14 @@ function Row({
   if (row.kind === 'flow_thru') {
     const vsBud = flowThruPct(curRows, budRows);
     const vsLy = flowThruPct(curRows, lyRows);
+    const isHiFt = !!row.highlight;
+    const ftLabelClass = row.bold || isHiFt ? 'font-bold' : 'font-normal';
+    const ftLabelColor = (row.bold || isHiFt) ? 'var(--primary)' : 'var(--text-secondary)';
+    const ftBg = isHiFt ? 'var(--border)' : (row.bold ? 'var(--muted)' : undefined);
     if (compact) {
       return (
-        <tr className="border-t" style={{ borderColor: 'var(--border-light)' }}>
-          <td className={`${padLabel} font-normal`} style={{ color: 'var(--text-secondary)' }}>
+        <tr className="border-t" style={{ borderColor: 'var(--border-light)', background: ftBg }}>
+          <td className={`${padLabel} ${ftLabelClass}`} style={{ color: ftLabelColor }}>
             <span className="inline-flex items-center gap-1.5">
               {row.label}
               <FormulaInfo text={FLOW_THRU_FORMULA} />
@@ -228,8 +239,8 @@ function Row({
       );
     }
     return (
-      <tr className="border-t" style={{ borderColor: 'var(--border-light)' }}>
-        <td className={`${padLabel} font-normal`} style={{ color: 'var(--text-secondary)' }}>
+      <tr className="border-t" style={{ borderColor: 'var(--border-light)', background: ftBg }}>
+        <td className={`${padLabel} ${ftLabelClass}`} style={{ color: ftLabelColor }}>
           <span className="inline-flex items-center gap-1.5">
             {row.label}
             <FormulaInfo text={FLOW_THRU_FORMULA} />
@@ -263,8 +274,8 @@ function Row({
   }
 
   // data row
-  const format = row.format ?? 'integer';
-  const calc = row.calc ?? (() => 0);
+  const format = basisFormat(row, basis);
+  const calc = basisCalc(row, basis);
   const cur = calc(curRows);
   const bud = calc(budRows);
   const lyVal = calc(lyRows);
@@ -326,7 +337,7 @@ function Row({
     );
   }
 
-  // Desktop layout — mirrors StatementTable (Detailed view):
+  // Desktop layout — mirrors StatementTable (Expanded view):
   // label · Outlook · Budget · Var · Var% · LY · Var · Var%
   const varBud = cur - bud;
   const varLy = cur - lyVal;

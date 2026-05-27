@@ -11,6 +11,14 @@ export const MONTHS = [
 ] as const;
 export type Month = (typeof MONTHS)[number];
 
+// Calendar quarters → the months each rolls up. Q1 = Jan–Mar, Q4 = Oct–Dec.
+export const QUARTERS: { label: string; months: Month[] }[] = [
+  { label: 'Q1', months: ['Jan', 'Feb', 'Mar'] },
+  { label: 'Q2', months: ['Apr', 'May', 'Jun'] },
+  { label: 'Q3', months: ['Jul', 'Aug', 'Sep'] },
+  { label: 'Q4', months: ['Oct', 'Nov', 'Dec'] },
+];
+
 export const SCENARIOS: readonly Scenario[] = ['Actual', 'Budget', 'Outlook', 'Forecast'] as const;
 
 /** Scenarios available in the comparison selector.
@@ -385,18 +393,39 @@ export function filterByPeriod(rows: ForecastRow[], scope: Scope, month: Month):
 
 export function scenarioAbbrev(scenario: Scenario): string {
   switch (scenario) {
-    case 'Outlook': return 'OUT';
+    // Outlook data is surfaced as "Forecast" in the UI (data stays Outlook).
+    case 'Outlook': return 'FCST';
     case 'Forecast': return 'FCST';
     case 'Budget': return 'BUD';
     case 'Actual': return 'ACT';
   }
 }
 
+/** Display name for a scenario. The Outlook scenario is surfaced as "Forecast"
+ *  in the UI — the underlying data still comes from the Outlook rows. */
+export function scenarioLabel(scenario: Scenario): string {
+  return scenario === 'Outlook' ? 'Forecast' : scenario;
+}
+
+// Full month names — used only in display labels (titles). The filters keep the
+// abbreviated MONTHS values.
+const MONTH_FULL: Record<Month, string> = {
+  Jan: 'January', Feb: 'February', Mar: 'March', Apr: 'April', May: 'May', Jun: 'June',
+  Jul: 'July', Aug: 'August', Sep: 'September', Oct: 'October', Nov: 'November', Dec: 'December',
+};
+
 export function scopeLabel(scope: Scope, month: Month, year: number): string {
   if (scope === 'fy') return `FY ${year}`;
-  if (scope === 'ytd') return `YTD ${month}`;
-  return `${month} ${year}`;
+  if (scope === 'ytd') return `YTD ${MONTH_FULL[month]}`;
+  return `${MONTH_FULL[month]} ${year}`;
 }
+
+// ─── Presentation basis (Total $ / per-room) ────────────────────
+// Money line items can be shown as the absolute amount (Total $), per occupied
+// room (POR = sold + comp) or per available room (PAR).
+export type Basis = 'total' | 'por' | 'par';
+
+export const BASES: readonly Basis[] = ['total', 'por', 'par'] as const;
 
 // ─── Currency conversion ────────────────────────────────────────
 
