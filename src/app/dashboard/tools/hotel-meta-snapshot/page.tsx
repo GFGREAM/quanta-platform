@@ -497,6 +497,27 @@ export default function HotelMetaSnapshotPage() {
                 );
               })}
             </div>
+
+            {status === 'success' && (
+              <button
+                onClick={reset}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  marginTop: '12px',
+                  background: '#fff',
+                  border: '1.5px solid #1E2756',
+                  color: '#1E2756',
+                  padding: '9px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Start new snapshot
+              </button>
+            )}
           </div>
         )}
 
@@ -532,7 +553,7 @@ export default function HotelMetaSnapshotPage() {
                 cursor: 'pointer',
               }}
             >
-              ← Try again
+              ← Start over
             </button>
           </div>
         )}
