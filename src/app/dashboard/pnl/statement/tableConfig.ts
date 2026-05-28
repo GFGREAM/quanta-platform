@@ -3,7 +3,7 @@
 // single number; the renderer then formats it according to `format`.
 
 import type React from 'react';
-import type { ForecastRow } from './data';
+import type { ForecastRow, Basis } from './data';
 
 export type RowFormat = 'integer' | 'k' | 'pct' | 'rate' | 'fx' | 'x_room' | 'ratio';
 export type RowKind = 'data' | 'spacer' | 'flow_thru' | 'section_header' | 'group';
@@ -81,8 +81,6 @@ const perPayingGuest =
 
 // ─── Row config ─────────────────────────────────────────────────
 
-const SP: TableRow = { kind: 'spacer' };
-
 export const TABLE_ROWS: TableRow[] = [
   // #Guests POR — surfaced above the Total Guests group so the per-room
   // density stays visible regardless of whether the group is expanded.
@@ -105,8 +103,6 @@ export const TABLE_ROWS: TableRow[] = [
         calc: perGuest(gopAbs) },
     ],
   },
-  SP,
-
   // Paying Guests — same pattern, denominator = paying guests only.
   { kind: 'group', label: 'Paying Guests', format: 'integer', higherIsBetter: true,
     calc: sumPayingGuests,
@@ -125,8 +121,6 @@ export const TABLE_ROWS: TableRow[] = [
         calc: perPayingGuest(gopAbs) },
     ],
   },
-  SP,
-
   // Occupied rooms — group reveals capacity + Total occupancy metrics.
   { kind: 'group', label: 'Total Occupied Rooms', format: 'integer', higherIsBetter: true,
     calc: totalOccupied,
@@ -145,8 +139,6 @@ export const TABLE_ROWS: TableRow[] = [
     calc: (rs) => sum(rs, (r) => r.roomsComp) },
   { kind: 'data', label: 'Paid Occupied Rooms', format: 'integer', higherIsBetter: true,
     calc: (rs) => sum(rs, (r) => r.roomsSold) },
-  SP,
-
   // Paid occupancy metrics (Total* live as children of Total Occupied Rooms).
   { kind: 'data', label: 'Paid Occupancy', format: 'pct', higherIsBetter: true,
     calc: (rs) => safeDiv(sum(rs, (r) => r.roomsSold), sumAvailability(rs)) * 100 },
@@ -154,15 +146,13 @@ export const TABLE_ROWS: TableRow[] = [
     calc: (rs) => safeDiv(sumRoomsRevenue(rs), sum(rs, (r) => r.roomsSold)) },
   { kind: 'data', label: 'Paid RevPAR', format: 'rate', higherIsBetter: true,
     calc: (rs) => safeDiv(sumRoomsRevenue(rs), sumAvailability(rs)) },
-  SP,
-
   // Revenue — Package, Non-Package and the combined Club/Timeshare line shown
   // flat above the Total Revenue subtotal (often $0 for non-club hotels).
   { kind: 'data', label: 'Rooms Revenue (Package)', format: 'k', higherIsBetter: true,
     calc: sumRoomsRevenue },
   { kind: 'data', label: 'Other Revenue (Non Package)', format: 'k', higherIsBetter: true,
     calc: sumOtherRevenue },
-  { kind: 'group', label: 'Club & Timeshare Revenue', format: 'k', higherIsBetter: true,
+  { kind: 'group', label: 'Other Revenue (Club & Timeshare)', format: 'k', higherIsBetter: true,
     calc: (rs) => sum(rs, (r) => r.clubMaintFee + r.timeshareMaintFee),
     children: [
       { kind: 'data', label: 'Club Revenue', format: 'k', higherIsBetter: true,
@@ -173,8 +163,6 @@ export const TABLE_ROWS: TableRow[] = [
   },
   { kind: 'data', label: 'Total Revenue', format: 'k', higherIsBetter: true, bold: true,
     calc: sumRevenue },
-  SP,
-
   // Expenses
   { kind: 'data', label: 'Departmental Expenses', format: 'k', higherIsBetter: false,
     calc: (rs) => sum(rs, (r) => r.departmentalExpenses) },
@@ -182,16 +170,12 @@ export const TABLE_ROWS: TableRow[] = [
     calc: (rs) => sum(rs, (r) => r.undistributedExpenses) },
   { kind: 'data', label: 'Total Expenses', format: 'k', higherIsBetter: false, bold: true,
     calc: sumOperatingExpenses },
-  SP,
-
   // GOP block
   { kind: 'data', label: 'GOP', format: 'k', higherIsBetter: true, bold: true, highlight: true,
     calc: gopAbs },
   { kind: 'data', label: 'GOP%', format: 'pct', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => safeDiv(gopAbs(rs), sumRevenue(rs)) * 100 },
-  { kind: 'flow_thru', label: 'Flow Thru% (Flex)', higherIsBetter: true },
-  SP,
-
+  { kind: 'flow_thru', label: 'Flow Thru/Flex%', higherIsBetter: true, bold: true, highlight: true },
   // Total Non Ops — group reveals the Fees vs Other Non-Ops split.
   { kind: 'group', label: 'Total Non Ops Expenses', format: 'k', higherIsBetter: false,
     calc: sumNonOps,
@@ -201,20 +185,15 @@ export const TABLE_ROWS: TableRow[] = [
         calc: sumOtherNonOps },
     ],
   },
-  SP,
   { kind: 'data', label: 'EBITDA', format: 'k', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => gopAbs(rs) - sumNonOps(rs) },
   { kind: 'data', label: 'EBITDA%', format: 'pct', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => safeDiv(gopAbs(rs) - sumNonOps(rs), sumRevenue(rs)) * 100 },
-  SP,
-
   // Per-room contribution (sums rooms across distinct hotels for portfolio TOTAL)
   { kind: 'data', label: 'GOP x Room', format: 'x_room', higherIsBetter: true,
     calc: (rs) => safeDiv(gopAbs(rs), totalRooms(rs) * 1000) },
   { kind: 'data', label: 'EBITDA x Room', format: 'x_room', higherIsBetter: true,
     calc: (rs) => safeDiv(gopAbs(rs) - sumNonOps(rs), totalRooms(rs) * 1000) },
-  SP,
-
   // FX impact section — restate each expense field at the matching month's
   // Budget FX rate, leaving Revenue alone (USD-native). Driven by useNoXR; the
   // renderer swaps in the noXR row sets before calling these calcs.
@@ -227,7 +206,7 @@ export const TABLE_ROWS: TableRow[] = [
     calc: gopAbs, useNoXR: true },
   { kind: 'data', label: 'GOP% (w/o XR)', format: 'pct', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => safeDiv(gopAbs(rs), sumRevenue(rs)) * 100, useNoXR: true },
-  { kind: 'flow_thru', label: 'Flow Thru% (w/o X/R)', higherIsBetter: true, useNoXR: true },
+  { kind: 'flow_thru', label: 'Flow Thru/Flex% (w/o XR)', higherIsBetter: true, useNoXR: true, bold: true, highlight: true },
 ];
 
 // ─── Summary table rows (compact view) ──────────────────────────
@@ -243,12 +222,19 @@ export const SUMMARY_ROWS: TableRow[] = [
     calc: (rs) => safeDiv(sum(rs, (r) => r.roomsRevenue), sum(rs, (r) => r.roomsSold)) },
   { kind: 'data', label: 'RevPAR', format: 'rate', higherIsBetter: true,
     calc: (rs) => safeDiv(sum(rs, (r) => r.roomsRevenue), sum(rs, (r) => r.availability)) },
-  SP,
-
-  // P&L
-  { kind: 'data', label: 'Total Revenue', format: 'k', higherIsBetter: true,
+  // P&L — Revenue (two component lines) and its subtotal
+  { kind: 'data', label: 'Rooms Revenue (Package)', format: 'k', higherIsBetter: true,
+    calc: sumRoomsRevenue },
+  { kind: 'data', label: 'Other Revenue (Non Package)', format: 'k', higherIsBetter: true,
+    calc: sumOtherRevenue },
+  { kind: 'data', label: 'Total Revenue', format: 'k', higherIsBetter: true, bold: true,
     calc: sumRevenue },
-  { kind: 'data', label: 'Total Expenses', format: 'k', higherIsBetter: false,
+  // Expenses (two component lines) and its subtotal
+  { kind: 'data', label: 'Departmental Expenses', format: 'k', higherIsBetter: false,
+    calc: (rs) => sum(rs, (r) => r.departmentalExpenses) },
+  { kind: 'data', label: 'Undistributed Expenses', format: 'k', higherIsBetter: false,
+    calc: (rs) => sum(rs, (r) => r.undistributedExpenses) },
+  { kind: 'data', label: 'Total Expenses', format: 'k', higherIsBetter: false, bold: true,
     calc: sumOperatingExpenses },
   { kind: 'data', label: 'GOP$', format: 'k', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => sumRevenue(rs) - sumOperatingExpenses(rs) },
@@ -258,9 +244,7 @@ export const SUMMARY_ROWS: TableRow[] = [
     calc: (rs) => safeDiv(sumRevenue(rs) - sumOperatingExpenses(rs), sumRevenue(rs)) * 100 },
   { kind: 'data', label: 'EBITDA%', format: 'pct', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => safeDiv(sumRevenue(rs) - sumOperatingExpenses(rs) - sumNonOps(rs), sumRevenue(rs)) * 100 },
-  { kind: 'flow_thru', label: 'Flow Thru/Flex%', higherIsBetter: true },
-  SP,
-
+  { kind: 'flow_thru', label: 'Flow Thru/Flex%', higherIsBetter: true, bold: true, highlight: true },
   // FX impact section — restated at the matching month's Budget FX rate.
   { kind: 'section_header', label: 'w/o Exchange Rate Impact' },
   { kind: 'data', label: 'Exchange Rate (XR)', format: 'fx',
@@ -275,7 +259,7 @@ export const SUMMARY_ROWS: TableRow[] = [
     calc: (rs) => safeDiv(gopAbs(rs), sumRevenue(rs)) * 100, useNoXR: true },
   { kind: 'data', label: 'EBITDA%', format: 'pct', higherIsBetter: true, bold: true, highlight: true,
     calc: (rs) => safeDiv(gopAbs(rs) - sumNonOps(rs), sumRevenue(rs)) * 100, useNoXR: true },
-  { kind: 'flow_thru', label: 'Flow Thru/Flex% (w/o XR)', higherIsBetter: true, useNoXR: true },
+  { kind: 'flow_thru', label: 'Flow Thru/Flex% (w/o XR)', higherIsBetter: true, useNoXR: true, bold: true, highlight: true },
 ];
 
 // ─── Cell formatters ────────────────────────────────────────────
@@ -303,6 +287,27 @@ function fmtMoneyAuto(value: number, isVar: boolean): string {
 }
 
 /** Format a value cell (current/budget/LY column). */
+// ─── Presentation basis (Total $ / POR / PAR) ───────────────────
+// Money rows ('k' format) can be divided by occupied rooms (POR = sold + comp)
+// or available rooms (PAR). Non-money rows (%, rates, counts) are unchanged.
+const isMoneyRow = (row: TableRow) => (row.format ?? 'integer') === 'k';
+
+/** Returns the row's value function adjusted for the presentation basis. */
+export function basisCalc(row: TableRow, basis: Basis): (rows: ForecastRow[]) => number {
+  const calc = row.calc ?? (() => 0);
+  if (basis === 'total' || !isMoneyRow(row)) return calc;
+  return (rows) => {
+    const denom = basis === 'por' ? totalOccupied(rows) : sumAvailability(rows);
+    return denom ? calc(rows) / denom : 0;
+  };
+}
+
+/** Money rows render as a per-room rate under POR/PAR (not thousands). */
+export function basisFormat(row: TableRow, basis: Basis): RowFormat {
+  const format = row.format ?? 'integer';
+  return basis !== 'total' && format === 'k' ? 'rate' : format;
+}
+
 export function fmtValue(value: number, format: RowFormat): string {
   if (!Number.isFinite(value)) return '—';
   switch (format) {
@@ -355,27 +360,12 @@ export function fmtVarPct(currentValue: number, refValue: number): string {
   return `${pct >= 0 ? '' : '-'}${Math.abs(pct).toFixed(1)}%`;
 }
 
-/** Flatten group rows into a sequential list (parent followed by children),
- *  for renderers that don't support drill-down (Portfolio). The 'group' kind
- *  still renders as a normal data row in the data-path of PortfolioRow. */
-export function flattenRows(rows: TableRow[]): TableRow[] {
-  const out: TableRow[] = [];
-  for (const r of rows) {
-    out.push(r);
-    if (r.kind === 'group' && r.children) {
-      for (const c of r.children) out.push(c);
-    }
-  }
-  return out;
-}
-
 /** Tooltip text shown next to Flow Thru / Flex% cells in the visuals. */
 export const FLOW_THRU_FORMULA =
-  'Hospitality convention:\n' +
-  '• When ΔRevenue > 0 → Flow Thru% = ΔGOP / ΔRevenue\n' +
-  '   (share of incremental revenue that converted to GOP)\n' +
-  '• When ΔRevenue < 0 → Flex% = ΔExpenses / ΔRevenue\n' +
-  '   (both deltas negative → positive Flex = good cost discipline)';
+  'How a change in revenue translates to profit (GOP). One metric, two readings:\n' +
+  '• Flow Thru (revenue up): how much of the additional revenue converted to GOP.\n' +
+  '• Flex (revenue down): how well expenses flexed down with the lower revenue.\n' +
+  'Higher is better in both cases.';
 
 /** Flow Thru% / Flex calculation (cross-column, hospitality convention).
  *  - When current revenue is ABOVE the reference: Flow Thru% = ΔGOP / ΔRev

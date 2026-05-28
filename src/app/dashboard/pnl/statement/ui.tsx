@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Info } from 'lucide-react';
-import { fmtMoney, type Currency, type MetricFormat, type Scope } from './data';
+import { fmtMoney, type Basis, type Currency, type MetricFormat, type Scope } from './data';
 import { varianceStyle } from './tableConfig';
 import type { ViewMode } from './useStatement';
 
@@ -18,10 +18,11 @@ export const COLOR_LY = '#9CA3AF';         // var(--text-muted) — Last Year re
 
 // ─── Label maps ─────────────────────────────────────────────────
 
-export const VIEW_ORDER: ViewMode[] = ['summary', 'single', 'monthly', 'yearly', 'portfolio'];
-export const VIEW_LABELS: Record<ViewMode, string> = { summary: 'Summary', single: 'Detailed', monthly: 'Monthly', yearly: 'Yearly', portfolio: 'Portfolio' };
+export const VIEW_ORDER: ViewMode[] = ['summary', 'single', 'monthly', 'quarter', 'yearly', 'portfolio'];
+export const VIEW_LABELS: Record<ViewMode, string> = { summary: 'Summary', single: 'Expanded', monthly: 'Monthly', quarter: 'Quarterly', yearly: 'Yearly', portfolio: 'Portfolio' };
 export const SCOPE_LABELS: Record<Scope, string> = { mtd: 'MTD', ytd: 'YTD', fy: 'FY' };
 export const CURRENCY_LABELS: Record<Currency, string> = { USD: 'USD', Local: 'Local' };
+export const BASIS_LABELS: Record<Basis, string> = { total: 'Total $', por: 'POR', par: 'PAR' };
 
 // ─── Shared small components ────────────────────────────────────
 
@@ -114,7 +115,11 @@ export function VariancePill({
   }
   return (
     <span
-      className="inline-block px-2 py-0.5 rounded-sm font-semibold"
+      // leading-none + align-middle keep the chip shorter than the cell's text
+      // strut and centered on it, so a pill cell never grows the row taller than
+      // a plain-text cell. This keeps row heights uniform across all tables
+      // (rows with colored variance chips vs neutral/plain rows like "Comps").
+      className="inline-block px-2 rounded-sm font-semibold leading-none align-middle"
       style={style}
     >
       {children}

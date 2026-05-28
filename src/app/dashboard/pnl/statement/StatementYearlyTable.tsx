@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import {
   currencyLabel,
+  scenarioLabel,
+  type Basis,
   type Currency,
   type ForecastRow,
   type Scenario,
@@ -12,7 +14,8 @@ import {
   FLOW_THRU_FORMULA,
   SUMMARY_ROWS,
   TABLE_ROWS,
-  flattenRows,
+  basisCalc,
+  basisFormat,
   flowThruPct,
   type TableRow,
 } from './tableConfig';
@@ -30,22 +33,39 @@ interface Props {
   hotel: string;
   scenario: Scenario;
   currency: Currency;
+  /** Selected filter year — shown first (leftmost), then prior years descending. */
+  year: number;
   allRows: ForecastRow[];
   allRowsNoXR: ForecastRow[];
   years: number[];
+  basis: Basis;
 }
 
 export default function StatementYearlyTable({
-  hotel, scenario, currency, allRows, allRowsNoXR, years,
+  hotel, scenario, currency, year, allRows, allRowsNoXR, years, basis,
 }: Props) {
   const [showDetail, setShowDetail] = useState(false);
   const [layer, setLayer] = useState<Layer>('out');
-  const rows = flattenRows(showDetail ? TABLE_ROWS : SUMMARY_ROWS);
+  // Drill-down state — group rows start collapsed; click toggles their children.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const toggle = (label: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label); else next.add(label);
+      return next;
+    });
+  const rows = showDetail ? TABLE_ROWS : SUMMARY_ROWS;
   const ToggleIcon = showDetail ? ChevronDown : ChevronRight;
 
   const heading = hotel || 'All hotels';
   const padCell = 'px-2 py-1.5';
   const padLabel = 'px-3 py-1.5';
+
+  // Column order: selected filter year first (leftmost), then the remaining
+  // years most-recent → oldest (left to right).
+  const cols = years.includes(year)
+    ? [year, ...years.filter((y) => y !== year).sort((a, b) => b - a)]
+    : [...years].sort((a, b) => b - a);
 
   if (years.length === 0) {
     return (<div className="bg-white border rounded-lg p-10 text-center text-sm" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>Loading yearly data…</div>);
@@ -56,7 +76,7 @@ export default function StatementYearlyTable({
       <div className="flex items-center justify-between px-4 py-3 border-b gap-3 flex-wrap" style={{ borderColor: 'var(--border)', background: 'var(--muted)' }}>
         <div>
           <div className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{heading} · Yearly</div>
-          <div className="text-base font-bold" style={{ color: 'var(--primary)' }}>{scenario} vs Budget vs LY — full-year per year</div>
+          <div className="text-base font-bold" style={{ color: 'var(--primary)' }}>{scenarioLabel(scenario)} vs Budget vs LY — full-year per year</div>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex rounded-lg p-[3px] gap-0.5" style={{ background: 'white', border: '1px solid var(--border)' }}>
@@ -76,12 +96,12 @@ export default function StatementYearlyTable({
           <thead>
             <tr style={{ background: '#FAFAFA', borderBottom: '1px solid var(--border)' }}>
               <th className={`${padLabel} text-left text-[0.6875rem] font-semibold uppercase tracking-wider sticky left-0 bg-[#FAFAFA] z-10`} style={{ color: 'var(--text-secondary)' }} />
-              {years.map((y) => (<th key={y} className={`${padCell} text-right text-[0.6875rem] font-semibold uppercase tracking-wider`} style={{ color: 'var(--text-secondary)' }}>{y}</th>))}
+              {cols.map((y) => (<th key={y} className={`${padCell} text-right text-[0.6875rem] font-semibold uppercase tracking-wider`} style={{ color: 'var(--text-secondary)' }}>{y}</th>))}
             </tr>
           </thead>
           <tbody>
             {rows.map((row, i) => (
-              <YearRow key={`${i}-${row.label ?? 'spacer'}`} row={row} layer={layer} allRows={allRows} allRowsNoXR={allRowsNoXR} years={years} scenario={scenario} padCell={padCell} padLabel={padLabel} />
+              <YearRow key={`${i}-${row.label ?? 'spacer'}`} row={row} layer={layer} allRows={allRows} allRowsNoXR={allRowsNoXR} years={cols} scenario={scenario} basis={basis} padCell={padCell} padLabel={padLabel} expanded={expanded} onToggle={toggle} depth={0} />
             ))}
           </tbody>
         </table>
@@ -90,9 +110,10 @@ export default function StatementYearlyTable({
   );
 }
 
-function YearRow({ row, layer, allRows, allRowsNoXR, years, scenario, padCell, padLabel }: {
+function YearRow({ row, layer, allRows, allRowsNoXR, years, scenario, basis, padCell, padLabel, expanded, onToggle, depth }: {
   row: TableRow; layer: Layer; allRows: ForecastRow[]; allRowsNoXR: ForecastRow[];
-  years: number[]; scenario: Scenario; padCell: string; padLabel: string;
+  years: number[]; scenario: Scenario; basis: Basis; padCell: string; padLabel: string;
+  expanded: Set<string>; onToggle: (label: string) => void; depth: number;
 }) {
   const totalCols = 1 + years.length;
 
@@ -119,9 +140,9 @@ function YearRow({ row, layer, allRows, allRowsNoXR, years, scenario, padCell, p
     else if (layer === 'varLy' || layer === 'varLyPct') { cells = slicesByYear.map(({ cur, ly }) => flowThruPct(cur, ly)); }
     else { cells = years.map(() => null); }
     return (
-      <tr className="border-t" style={{ borderColor: 'var(--border-light)' }}>
-        <td className={`${padLabel} font-normal sticky left-0 bg-white z-10`} style={{ color: 'var(--text-secondary)' }}>
-          <span className="inline-flex items-center gap-1.5">{row.label}<FormulaInfo text={FLOW_THRU_FORMULA} /></span>
+      <tr className="border-t" style={{ borderColor: 'var(--border-light)', background: isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : undefined) }}>
+        <td className={`${padLabel} ${labelClass} sticky left-0 z-10`} style={{ color: labelColor, background: isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : 'white') }}>
+          <span className="inline-flex items-center gap-1.5 align-middle"><span className="inline-block w-3" />{row.label}<FormulaInfo text={FLOW_THRU_FORMULA} /></span>
         </td>
         {cells.map((v, i) => (
           <td key={`y-${i}`} className={`${padCell} text-right tabular-nums`}>
@@ -132,22 +153,36 @@ function YearRow({ row, layer, allRows, allRowsNoXR, years, scenario, padCell, p
     );
   }
 
-  const format = row.format ?? 'integer';
-  const calc = row.calc ?? (() => 0);
+  const format = basisFormat(row, basis);
+  const calc = basisCalc(row, basis);
   const isPercentRow = format === 'pct';
   const cells = slicesByYear.map(({ cur, bud, ly }) => computeCell(layer, isPercentRow, calc(cur), calc(bud), calc(ly)));
 
   const trBg = isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : undefined);
   const stickyBg = isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : 'white');
   const outColor = 'var(--primary)';
+  const isGroup = row.kind === 'group';
+  const isOpen = isGroup && expanded.has(row.label!);
+  const Chevron = isOpen ? ChevronDown : ChevronRight;
+  const indentPx = depth * 16;
   return (
-    <tr className="border-t hover:bg-[var(--bg-hover)]" style={{ borderColor: 'var(--border-light)', background: trBg }}>
-      <td className={`${padLabel} ${labelClass} sticky left-0 z-10`} style={{ color: labelColor, background: stickyBg }}>{row.label}</td>
-      {cells.map((cell, i) => (
-        <td key={`y-${i}`} className={`${padCell} text-right tabular-nums ${valueClass}`} style={layer === 'out' ? { color: outColor } : undefined}>
-          {renderCell(layer, cell, format, isPercentRow, row.higherIsBetter)}
+    <>
+      <tr className={`border-t hover:bg-[var(--bg-hover)] ${isGroup ? 'cursor-pointer' : ''}`} style={{ borderColor: 'var(--border-light)', background: trBg }} onClick={isGroup ? () => onToggle(row.label!) : undefined}>
+        <td className={`${padLabel} ${labelClass} sticky left-0 z-10`} style={{ color: labelColor, background: stickyBg, paddingLeft: indentPx ? `${indentPx + 12}px` : undefined }}>
+          <span className="inline-flex items-center gap-1.5 align-middle">
+            {isGroup ? <Chevron size={12} style={{ color: 'var(--text-secondary)' }} /> : <span className="inline-block w-3" />}
+            {row.label}
+          </span>
         </td>
+        {cells.map((cell, i) => (
+          <td key={`y-${i}`} className={`${padCell} text-right tabular-nums ${valueClass}`} style={layer === 'out' ? { color: outColor } : undefined}>
+            {renderCell(layer, cell, format, isPercentRow, row.higherIsBetter)}
+          </td>
+        ))}
+      </tr>
+      {isGroup && isOpen && row.children?.map((child, ci) => (
+        <YearRow key={`${row.label}-${ci}`} row={child} layer={layer} allRows={allRows} allRowsNoXR={allRowsNoXR} years={years} scenario={scenario} basis={basis} padCell={padCell} padLabel={padLabel} expanded={expanded} onToggle={onToggle} depth={depth + 1} />
       ))}
-    </tr>
+    </>
   );
 }

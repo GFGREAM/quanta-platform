@@ -5,17 +5,18 @@ import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { selectStyle } from '@/lib/selectStyle';
-import { fmtMetric, METRIC_DEFS, SCOPES, scopeLabel, type MetricKey, type Month } from './data';
-import { useStatement, type ComparisonScenario, type ViewMode } from './useStatement';
+import { fmtMetric, METRIC_DEFS, SCOPES, scopeLabel, scenarioLabel, type MetricKey, type Month } from './data';
+import { useStatement, type ViewMode } from './useStatement';
 import StatementTable from './StatementTable';
 import StatementPortfolioTable from './StatementPortfolioTable';
 import StatementSummaryTable from './StatementSummaryTable';
 import StatementMonthlyTable from './StatementMonthlyTable';
+import StatementQuarterlyTable from './StatementQuarterlyTable';
 import StatementYearlyTable from './StatementYearlyTable';
 import {
   MultiSelect,
   COLOR_COMPARISON, COLOR_BUDGET, COLOR_LY,
-  VIEW_ORDER, VIEW_LABELS, SCOPE_LABELS, CURRENCY_LABELS,
+  VIEW_ORDER, VIEW_LABELS, SCOPE_LABELS, CURRENCY_LABELS, BASIS_LABELS,
   LegendDot, formatAxis,
 } from './ui';
 
@@ -24,14 +25,15 @@ export default function StatementDesktop() {
     year, setYear,
     hotel, setHotel,
     metric, setMetric,
-    scenario, setScenario,
+    scenario,
     scope, setScope,
     periodMonth, setPeriodMonth,
     viewMode, setViewMode,
     currency, setCurrency,
+    basis, setBasis,
     portfolioHotels, setPortfolioHotels,
     metricDef,
-    monthlySeries,
+    chartSeries,
     weeklyOutlookSeries,
     periodCurrent, periodBudget, periodLy,
     periodCurrentNoXR, periodBudgetNoXR, periodLyNoXR,
@@ -39,8 +41,8 @@ export default function StatementDesktop() {
     currentScenarioRowsNoXR, currentBudgetRowsNoXR, lyActualRowsNoXR,
     allYearsHotelRows, allYearsHotelRowsNoXR, availableYears,
     portfolio,
-    hotelOptions, yearOptions, scenarioOptions, monthOptions,
-    portfolioHotelOptions, currencyOptions,
+    hotelOptions, yearOptions, monthOptions,
+    portfolioHotelOptions, currencyOptions, basisOptions,
   } = useStatement();
 
   return (
@@ -60,7 +62,7 @@ export default function StatementDesktop() {
           P&amp;L Statement
         </h1>
         <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-          {scenario} vs Budget vs LY — full-year view
+          {scenarioLabel(scenario)} vs Budget vs LY — full-year view
         </p>
       </div>
 
@@ -90,15 +92,6 @@ export default function StatementDesktop() {
               {hotelOptions.map((h) => <option key={h} value={h}>{h}</option>)}
             </select>
           )}
-          <select
-            className="h-9 w-36 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
-            style={selectStyle}
-            value={scenario}
-            onChange={(e) => setScenario(e.target.value as ComparisonScenario)}
-            title="Actual: closed months only · Outlook: weekly refresh · Forecast: monthly refresh"
-          >
-            {scenarioOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
           <select
             className="h-9 w-28 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
             style={selectStyle}
@@ -145,9 +138,23 @@ export default function StatementDesktop() {
               </button>
             ))}
           </div>
+          {/* Presentation basis — Total $ / per occupied (POR) / per available (PAR) room */}
+          <div className="flex rounded-lg p-[3px] gap-0.5" style={{ background: 'var(--muted)' }}>
+            {basisOptions.map((b) => (
+              <button
+                key={b}
+                onClick={() => setBasis(b)}
+                className={`px-3 py-1.5 rounded-md text-[0.75rem] font-medium border-none cursor-pointer transition-all ${basis === b ? 'bg-white shadow-sm' : 'bg-transparent'}`}
+                style={{ color: basis === b ? 'var(--primary)' : 'var(--text-secondary)' }}
+                title={b === 'total' ? 'Total dollars' : b === 'por' ? 'Per Occupied Room (rooms sold + comp)' : 'Per Available Room'}
+              >
+                {BASIS_LABELS[b]}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="flex items-center gap-3 text-[0.75rem]" style={{ color: 'var(--text-secondary)' }}>
-          <LegendDot color={COLOR_COMPARISON} label={scenario} />
+          <LegendDot color={COLOR_COMPARISON} label={scenarioLabel(scenario)} />
           <LegendDot color={COLOR_BUDGET} label="Budget" />
           <LegendDot color={COLOR_LY} label="LY" />
         </div>
@@ -162,6 +169,7 @@ export default function StatementDesktop() {
           year={year}
           scenario={scenario}
           currency={currency}
+          basis={basis}
           current={periodCurrent}
           budget={periodBudget}
           ly={periodLy}
@@ -177,6 +185,7 @@ export default function StatementDesktop() {
           year={year}
           scenario={scenario}
           currency={currency}
+          basis={basis}
           current={periodCurrent}
           budget={periodBudget}
           ly={periodLy}
@@ -190,6 +199,21 @@ export default function StatementDesktop() {
           year={year}
           scenario={scenario}
           currency={currency}
+          basis={basis}
+          current={currentScenarioRows}
+          budget={currentBudgetRows}
+          ly={lyActualRows}
+          currentNoXR={currentScenarioRowsNoXR}
+          budgetNoXR={currentBudgetRowsNoXR}
+          lyNoXR={lyActualRowsNoXR}
+        />
+      ) : viewMode === 'quarter' ? (
+        <StatementQuarterlyTable
+          hotel={hotel}
+          year={year}
+          scenario={scenario}
+          currency={currency}
+          basis={basis}
           current={currentScenarioRows}
           budget={currentBudgetRows}
           ly={lyActualRows}
@@ -202,6 +226,8 @@ export default function StatementDesktop() {
           hotel={hotel}
           scenario={scenario}
           currency={currency}
+          basis={basis}
+          year={year}
           allRows={allYearsHotelRows}
           allRowsNoXR={allYearsHotelRowsNoXR}
           years={availableYears}
@@ -217,23 +243,28 @@ export default function StatementDesktop() {
           year={year}
           scenario={scenario}
           currency={currency}
+          basis={basis}
           portfolio={portfolio}
         />
       )}
 
       {/* Chart panel — Monthly trend (single/monthly) or WoW Outlook (portfolio).
-          Hidden in Summary because the same view exists in Detailed/Monthly. */}
+          Hidden in Summary because the same view exists in Expanded/Monthly. */}
       {viewMode !== 'summary' && (
       <div className="bg-white border rounded-lg shadow-sm p-5" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-start justify-between mb-4 gap-4">
           <div>
             <div className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-              {viewMode === 'portfolio' ? 'Outlook · Week over Week' : 'Monthly trend'}
+              {viewMode === 'portfolio'
+                ? 'Outlook · Week over Week'
+                : viewMode === 'quarter' ? 'Quarterly trend'
+                : viewMode === 'yearly' ? 'Yearly trend'
+                : 'Monthly trend'}
             </div>
             <div className="text-base font-semibold" style={{ color: 'var(--primary)' }}>
               {viewMode === 'portfolio'
                 ? `${metricDef.label} — Outlook progression (${scopeLabel(scope, periodMonth, year)})`
-                : `${metricDef.label} — ${scenario} vs Budget vs LY`}
+                : `${metricDef.label} — ${scenarioLabel(scenario)} vs Budget vs LY`}
             </div>
           </div>
           <select
@@ -249,10 +280,10 @@ export default function StatementDesktop() {
         <div className="h-[420px]">
           {viewMode !== 'portfolio' ? (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthlySeries} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
+              <LineChart data={chartSeries} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
                 <CartesianGrid stroke="#E5E5E5" strokeDasharray="3 3" vertical={false} />
                 <XAxis
-                  dataKey="month"
+                  dataKey="label"
                   tick={{ fill: '#6B7280', fontSize: 12 }}
                   tickLine={false}
                   axisLine={{ stroke: '#E5E5E5' }}
@@ -301,7 +332,7 @@ export default function StatementDesktop() {
                 <Line
                   type="monotone"
                   dataKey="comparison"
-                  name={scenario}
+                  name={scenarioLabel(scenario)}
                   stroke={COLOR_COMPARISON}
                   strokeWidth={2.5}
                   dot={{ r: 3, fill: COLOR_COMPARISON }}

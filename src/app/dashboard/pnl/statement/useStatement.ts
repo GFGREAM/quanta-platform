@@ -7,20 +7,24 @@ import {
   PORTFOLIO_HOTELS,
   YEARS,
   MONTHS,
+  QUARTERS,
   METRICS_BY_KEY,
   COMPARISON_SCENARIOS,
   CURRENCIES,
+  BASES,
   WEEKLY_OUTLOOK_DRIFTS,
   filterByPeriod,
+  type Basis,
   type Currency,
   type ForecastRow,
   type Month,
+  type MetricDef,
   type MetricKey,
   type Scenario,
   type Scope,
 } from './data';
 
-export type ViewMode = 'summary' | 'single' | 'monthly' | 'yearly' | 'portfolio';
+export type ViewMode = 'summary' | 'single' | 'monthly' | 'quarter' | 'yearly' | 'portfolio';
 
 export interface PortfolioHotelGroup {
   hotel: string;
@@ -52,22 +56,29 @@ export interface WeeklyOutlookPoint {
 
 export type ComparisonScenario = (typeof COMPARISON_SCENARIOS)[number];
 
-export interface MonthlyPoint {
-  month: Month;
+export interface ChartPoint {
+  label: string;
   comparison: number | null;
   budget: number | null;
   ly: number | null;
 }
 
-function aggregateMonth(
-  rows: ForecastRow[],
-  scenario: Scenario,
-  month: Month,
-  calc: (r: ForecastRow) => number,
-): number | null {
-  const matches = rows.filter((r) => r.scenario === scenario && r.month === month);
-  if (matches.length === 0) return null;
-  return matches.reduce((sum, r) => sum + calc(r), 0);
+// Aggregate a metric over a set of rows. Money/integer metrics sum; ratio
+// metrics (occupancy, ADR) are recomputed from their components so quarter and
+// year rollups stay correct instead of summing rates.
+function aggregateRowsMetric(rows: ForecastRow[], def: MetricDef): number | null {
+  if (rows.length === 0) return null;
+  if (def.key === 'occupancy') {
+    const avail = rows.reduce((s, r) => s + r.availability, 0);
+    const sold = rows.reduce((s, r) => s + r.roomsSold, 0);
+    return avail ? (sold / avail) * 100 : 0;
+  }
+  if (def.key === 'adr') {
+    const sold = rows.reduce((s, r) => s + r.roomsSold, 0);
+    const rev = rows.reduce((s, r) => s + r.roomsRevenue, 0);
+    return sold ? rev / sold : 0;
+  }
+  return rows.reduce((s, r) => s + def.calc(r), 0);
 }
 
 export function useStatement() {
@@ -79,6 +90,7 @@ export function useStatement() {
   const [periodMonth, setPeriodMonth] = useState<Month>('Mar');
   const [viewMode, setViewMode] = useState<ViewMode>('summary');
   const [currency, setCurrency] = useState<Currency>('USD');
+  const [basis, setBasis] = useState<Basis>('total');
   // Hotels selected for the portfolio table. Default = all available hotels,
   // displayed in the canonical PORTFOLIO_HOTELS order.
   const [portfolioHotels, setPortfolioHotels] = useState<string[]>(() => [...PORTFOLIO_HOTELS]);
@@ -188,13 +200,25 @@ export function useStatement() {
 
   const metricDef = METRICS_BY_KEY[metric];
 
-  const monthlySeries = useMemo<MonthlyPoint[]>(
+  const monthlySeries = useMemo<ChartPoint[]>(
     () =>
       MONTHS.map((m) => ({
-        month: m,
-        comparison: aggregateMonth(currentYearRows, scenario, m, metricDef.calc),
-        budget: aggregateMonth(currentYearRows, 'Budget', m, metricDef.calc),
-        ly: aggregateMonth(lyYearRows, 'Actual', m, metricDef.calc),
+        label: m,
+        comparison: aggregateRowsMetric(currentYearRows.filter((r) => r.scenario === scenario && r.month === m), metricDef),
+        budget: aggregateRowsMetric(currentYearRows.filter((r) => r.scenario === 'Budget' && r.month === m), metricDef),
+        ly: aggregateRowsMetric(lyYearRows.filter((r) => r.scenario === 'Actual' && r.month === m), metricDef),
+      })),
+    [currentYearRows, lyYearRows, metricDef, scenario],
+  );
+
+  // Quarterly rollup (Q1–Q4) of the current year vs Budget vs prior-year Actual.
+  const quarterlySeries = useMemo<ChartPoint[]>(
+    () =>
+      QUARTERS.map((q) => ({
+        label: q.label,
+        comparison: aggregateRowsMetric(currentYearRows.filter((r) => r.scenario === scenario && q.months.includes(r.month)), metricDef),
+        budget: aggregateRowsMetric(currentYearRows.filter((r) => r.scenario === 'Budget' && q.months.includes(r.month)), metricDef),
+        ly: aggregateRowsMetric(lyYearRows.filter((r) => r.scenario === 'Actual' && q.months.includes(r.month)), metricDef),
       })),
     [currentYearRows, lyYearRows, metricDef, scenario],
   );
@@ -246,6 +270,11 @@ export function useStatement() {
   }, [convertedRows]);
 
   const restateAtBudgetFx = useCallback((r: ForecastRow): ForecastRow => {
+    // In Local (peso) view, expenses are already in their native currency, so a
+    // peso/dollar swing doesn't change them — there's no FX impact to strip and
+    // the "w/o XR" figures must equal the reported ones. The restatement only
+    // applies when values are expressed in USD.
+    if (currency === 'Local') return r;
     const refFx = budgetFxByKey.get(`${r.hotel}|${r.year}|${r.month}`);
     if (!refFx || refFx === 0) return r;
     const factor = r.fxRate / refFx;
@@ -256,7 +285,7 @@ export function useStatement() {
       otherExpenses: r.otherExpenses * factor,
       nonOperating: r.nonOperating * factor,
     };
-  }, [budgetFxByKey]);
+  }, [budgetFxByKey, currency]);
 
   const periodCurrentNoXR = useMemo(
     () => periodCurrent.map(restateAtBudgetFx),
@@ -294,6 +323,8 @@ export function useStatement() {
   }, [allYearsRows]);
 
   const restateAllAtBudgetFx = useCallback((r: ForecastRow): ForecastRow => {
+    // Local (peso) view carries no FX impact — see restateAtBudgetFx above.
+    if (currency === 'Local') return r;
     const refFx = allYearsBudgetFxByKey.get(`${r.hotel}|${r.year}|${r.month}`);
     if (!refFx || refFx === 0) return r;
     const factor = r.fxRate / refFx;
@@ -304,7 +335,7 @@ export function useStatement() {
       otherExpenses: r.otherExpenses * factor,
       nonOperating: r.nonOperating * factor,
     };
-  }, [allYearsBudgetFxByKey]);
+  }, [allYearsBudgetFxByKey, currency]);
 
   const allYearsHotelRows = useMemo(
     () => allYearsRows.filter((r) => hotel === '' || r.hotel === hotel),
@@ -321,6 +352,25 @@ export function useStatement() {
     for (const r of allYearsHotelRows) set.add(r.year);
     return [...set].sort((a, b) => a - b);
   }, [allYearsHotelRows]);
+
+  // Per-year rollup for the Yearly chart: each year's scenario vs its Budget vs
+  // the prior year's Actual (same convention as the Yearly table).
+  const yearlySeries = useMemo<ChartPoint[]>(
+    () =>
+      availableYears.map((y) => ({
+        label: String(y),
+        comparison: aggregateRowsMetric(allYearsHotelRows.filter((r) => r.year === y && r.scenario === scenario), metricDef),
+        budget: aggregateRowsMetric(allYearsHotelRows.filter((r) => r.year === y && r.scenario === 'Budget'), metricDef),
+        ly: aggregateRowsMetric(allYearsHotelRows.filter((r) => r.year === y - 1 && r.scenario === 'Actual'), metricDef),
+      })),
+    [allYearsHotelRows, availableYears, metricDef, scenario],
+  );
+
+  // Chart series mirrors the active table's time granularity (month/quarter/year).
+  const chartSeries = useMemo<ChartPoint[]>(
+    () => (viewMode === 'quarter' ? quarterlySeries : viewMode === 'yearly' ? yearlySeries : monthlySeries),
+    [viewMode, quarterlySeries, yearlySeries, monthlySeries],
+  );
 
   // Portfolio rows are independent of the single-hotel filter. The selection
   // is driven by `portfolioHotels`, ordered by PORTFOLIO_HOTELS so the column
@@ -384,9 +434,10 @@ export function useStatement() {
     periodMonth, setPeriodMonth,
     viewMode, setViewMode,
     currency, setCurrency,
+    basis, setBasis,
     portfolioHotels, setPortfolioHotels,
     metricDef,
-    monthlySeries,
+    chartSeries,
     periodCurrent,
     periodBudget,
     periodLy,
@@ -411,5 +462,6 @@ export function useStatement() {
     scenarioOptions: COMPARISON_SCENARIOS,
     monthOptions: MONTHS,
     currencyOptions: CURRENCIES,
+    basisOptions: BASES,
   };
 }

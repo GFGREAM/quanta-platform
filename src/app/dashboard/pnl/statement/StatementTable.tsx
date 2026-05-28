@@ -6,6 +6,7 @@ import {
   currencyLabel,
   scenarioAbbrev,
   scopeLabel,
+  type Basis,
   type Currency,
   type ForecastRow,
   type Month,
@@ -15,6 +16,8 @@ import {
 import {
   FLOW_THRU_FORMULA,
   TABLE_ROWS,
+  basisCalc,
+  basisFormat,
   fmtValue,
   fmtVar,
   fmtVarPct,
@@ -38,6 +41,8 @@ interface Props {
   currentNoXR: ForecastRow[];
   budgetNoXR: ForecastRow[];
   lyNoXR: ForecastRow[];
+  /** Presentation basis — Total $ / per occupied (POR) / per available (PAR) room. */
+  basis: Basis;
   /** Compact density for mobile — smaller padding/font. */
   compact?: boolean;
 }
@@ -46,6 +51,7 @@ export default function StatementTable({
   hotel, scope, periodMonth, year, scenario, currency,
   current, budget, ly,
   currentNoXR, budgetNoXR, lyNoXR,
+  basis,
   compact,
 }: Props) {
   const curAbbr = scenarioAbbrev(scenario);
@@ -134,6 +140,7 @@ export default function StatementTable({
                 currentNoXR={currentNoXR}
                 budgetNoXR={budgetNoXR}
                 lyNoXR={lyNoXR}
+                basis={basis}
                 padCell={padCell}
                 padLabel={padLabel}
                 expanded={expanded}
@@ -156,6 +163,7 @@ interface RowProps {
   currentNoXR: ForecastRow[];
   budgetNoXR: ForecastRow[];
   lyNoXR: ForecastRow[];
+  basis: Basis;
   padCell: string;
   padLabel: string;
   expanded: Set<string>;
@@ -165,7 +173,7 @@ interface RowProps {
 
 function Row(props: RowProps) {
   const {
-    row, current, budget, ly, currentNoXR, budgetNoXR, lyNoXR,
+    row, current, budget, ly, currentNoXR, budgetNoXR, lyNoXR, basis,
     padCell, padLabel, expanded, onToggle, depth,
   } = props;
 
@@ -200,10 +208,14 @@ function Row(props: RowProps) {
   if (row.kind === 'flow_thru') {
     const vsBud = flowThruPct(curRows, budRows);
     const vsLy = flowThruPct(curRows, lyRows);
+    const isHiFt = !!row.highlight;
+    const ftLabelClass = row.bold || isHiFt ? 'font-bold' : 'font-normal';
+    const ftLabelColor = (row.bold || isHiFt) ? 'var(--primary)' : 'var(--text-secondary)';
+    const ftBg = isHiFt ? 'var(--border)' : (row.bold ? 'var(--muted)' : undefined);
     return (
-      <tr className="border-t" style={{ borderColor: 'var(--border-light)' }}>
-        <td className={`${padLabel} font-normal`} style={{ color: 'var(--text-secondary)' }}>
-          <span className="inline-flex items-center gap-1.5">
+      <tr className="border-t" style={{ borderColor: 'var(--border-light)', background: ftBg }}>
+        <td className={`${padLabel} ${ftLabelClass}`} style={{ color: ftLabelColor }}>
+          <span className="inline-flex items-center gap-1.5 align-middle">
             <span className="inline-block w-3" />
             {row.label}
             <FormulaInfo text={FLOW_THRU_FORMULA} />
@@ -240,8 +252,8 @@ function Row(props: RowProps) {
   // additionally show a chevron, are clickable, and reveal their children.
   const isGroup = row.kind === 'group';
   const isOpen = isGroup && expanded.has(row.label!);
-  const format = row.format ?? 'integer';
-  const calc = row.calc ?? (() => 0);
+  const format = basisFormat(row, basis);
+  const calc = basisCalc(row, basis);
   const cur = calc(curRows);
   const bud = calc(budRows);
   const lyVal = calc(lyRows);
@@ -266,7 +278,7 @@ function Row(props: RowProps) {
         onClick={isGroup ? () => onToggle(row.label!) : undefined}
       >
         <td className={`${padLabel} ${labelClass}`} style={{ color: labelColor, paddingLeft: indentPx ? `${indentPx + 12}px` : undefined }}>
-          <span className="inline-flex items-center gap-1.5">
+          <span className="inline-flex items-center gap-1.5 align-middle">
             {isGroup ? (
               <Chevron size={12} style={{ color: 'var(--text-secondary)' }} />
             ) : (
@@ -315,6 +327,7 @@ function Row(props: RowProps) {
           currentNoXR={currentNoXR}
           budgetNoXR={budgetNoXR}
           lyNoXR={lyNoXR}
+          basis={basis}
           padCell={padCell}
           padLabel={padLabel}
           expanded={expanded}

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import {
-  MONTHS,
+  QUARTERS,
   currencyLabel,
   scenarioAbbrev,
   type Basis,
@@ -45,7 +45,7 @@ interface Props {
   basis: Basis;
 }
 
-export default function StatementMonthlyTable({
+export default function StatementQuarterlyTable({
   hotel, year, scenario, currency,
   current, budget, ly,
   currentNoXR, budgetNoXR, lyNoXR,
@@ -75,7 +75,7 @@ export default function StatementMonthlyTable({
     <div className="bg-white border rounded-lg shadow-sm overflow-hidden" style={{ borderColor: 'var(--border)' }}>
       <div className="flex items-center justify-between px-4 py-3 border-b gap-3 flex-wrap" style={{ borderColor: 'var(--border)', background: 'var(--muted)' }}>
         <div>
-          <div className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{heading} · Monthly</div>
+          <div className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{heading} · Quarterly</div>
           <div className="text-base font-bold" style={{ color: 'var(--primary)' }}>{curAbbr} {year} vs Budget vs {lyAbbr} {year - 1}</div>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
@@ -96,13 +96,13 @@ export default function StatementMonthlyTable({
           <thead>
             <tr style={{ background: '#FAFAFA', borderBottom: '1px solid var(--border)' }}>
               <th className={`${padLabel} text-left text-[0.6875rem] font-semibold uppercase tracking-wider sticky left-0 bg-[#FAFAFA] z-10`} style={{ color: 'var(--text-secondary)' }} />
-              {MONTHS.map((m) => (<th key={m} className={`${padCell} text-right text-[0.6875rem] font-semibold uppercase tracking-wider`} style={{ color: 'var(--text-secondary)' }}>{m}</th>))}
+              {QUARTERS.map((q) => (<th key={q.label} className={`${padCell} text-right text-[0.6875rem] font-semibold uppercase tracking-wider`} style={{ color: 'var(--text-secondary)' }}>{q.label}</th>))}
               <th className={`${padCell} text-right text-[0.6875rem] font-semibold uppercase tracking-wider border-l`} style={{ color: 'var(--text-secondary)', borderColor: 'var(--border)' }}>FY</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row, i) => (
-              <MonthRow key={`${i}-${row.label ?? 'spacer'}`} row={row} layer={layer} current={current} budget={budget} ly={ly} currentNoXR={currentNoXR} budgetNoXR={budgetNoXR} lyNoXR={lyNoXR} basis={basis} padCell={padCell} padLabel={padLabel} expanded={expanded} onToggle={toggle} depth={0} />
+              <QuarterRow key={`${i}-${row.label ?? 'spacer'}`} row={row} layer={layer} current={current} budget={budget} ly={ly} currentNoXR={currentNoXR} budgetNoXR={budgetNoXR} lyNoXR={lyNoXR} basis={basis} padCell={padCell} padLabel={padLabel} expanded={expanded} onToggle={toggle} depth={0} />
             ))}
           </tbody>
         </table>
@@ -111,12 +111,12 @@ export default function StatementMonthlyTable({
   );
 }
 
-function MonthRow({ row, layer, current, budget, ly, currentNoXR, budgetNoXR, lyNoXR, basis, padCell, padLabel, expanded, onToggle, depth }: {
+function QuarterRow({ row, layer, current, budget, ly, currentNoXR, budgetNoXR, lyNoXR, basis, padCell, padLabel, expanded, onToggle, depth }: {
   row: TableRow; layer: Layer; current: ForecastRow[]; budget: ForecastRow[]; ly: ForecastRow[];
   currentNoXR: ForecastRow[]; budgetNoXR: ForecastRow[]; lyNoXR: ForecastRow[]; basis: Basis; padCell: string; padLabel: string;
   expanded: Set<string>; onToggle: (label: string) => void; depth: number;
 }) {
-  const totalCols = 1 + MONTHS.length + 1;
+  const totalCols = 1 + QUARTERS.length + 1;
 
   if (row.kind === 'spacer') return (<tr aria-hidden="true"><td colSpan={totalCols} className="h-2" /></tr>);
   if (row.kind === 'section_header') {
@@ -133,21 +133,21 @@ function MonthRow({ row, layer, current, budget, ly, currentNoXR, budgetNoXR, ly
   const valueClass = row.bold || isHi ? 'font-bold' : 'font-normal';
 
   if (row.kind === 'flow_thru') {
-    const flowFor = (refRows: ForecastRow[]) => MONTHS.map((m) => flowThruPct(filterMonth(curRows, m), filterMonth(refRows, m)));
+    const flowFor = (refRows: ForecastRow[]) => QUARTERS.map((q) => flowThruPct(filterQuarter(curRows, q), filterQuarter(refRows, q)));
     const flowFY = (refRows: ForecastRow[]) => flowThruPct(curRows, refRows);
-    let cellsByMonth: (number | null)[] = [];
+    let cellsByQuarter: (number | null)[] = [];
     let cellFY: number | null = null;
-    if (layer === 'varBud' || layer === 'varBudPct') { cellsByMonth = flowFor(budRows); cellFY = flowFY(budRows); }
-    else if (layer === 'varLy' || layer === 'varLyPct') { cellsByMonth = flowFor(lyRows); cellFY = flowFY(lyRows); }
-    else { cellsByMonth = MONTHS.map(() => null); cellFY = null; }
+    if (layer === 'varBud' || layer === 'varBudPct') { cellsByQuarter = flowFor(budRows); cellFY = flowFY(budRows); }
+    else if (layer === 'varLy' || layer === 'varLyPct') { cellsByQuarter = flowFor(lyRows); cellFY = flowFY(lyRows); }
+    else { cellsByQuarter = QUARTERS.map(() => null); cellFY = null; }
 
     return (
       <tr className="border-t" style={{ borderColor: 'var(--border-light)', background: isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : undefined) }}>
         <td className={`${padLabel} ${labelClass} sticky left-0 z-10`} style={{ color: labelColor, background: isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : 'white') }}>
           <span className="inline-flex items-center gap-1.5 align-middle"><span className="inline-block w-3" />{row.label}<FormulaInfo text={FLOW_THRU_FORMULA} /></span>
         </td>
-        {cellsByMonth.map((v, i) => (
-          <td key={`m-${i}`} className={`${padCell} text-right tabular-nums`}>
+        {cellsByQuarter.map((v, i) => (
+          <td key={`q-${i}`} className={`${padCell} text-right tabular-nums`}>
             {v === null ? <span style={{ color: 'var(--text-muted)' }}>{fmtFlow(v)}</span> : <VariancePill varValue={v} higherIsBetter={row.higherIsBetter}>{fmtFlow(v)}</VariancePill>}
           </td>
         ))}
@@ -163,10 +163,10 @@ function MonthRow({ row, layer, current, budget, ly, currentNoXR, budgetNoXR, ly
   const isPercentRow = format === 'pct';
   const sumOver = (rs: ForecastRow[]) => calc(rs);
 
-  const monthCells = MONTHS.map((m) => {
-    const cur = sumOver(filterMonth(curRows, m));
-    const bud = sumOver(filterMonth(budRows, m));
-    const lyV = sumOver(filterMonth(lyRows, m));
+  const quarterCells = QUARTERS.map((q) => {
+    const cur = sumOver(filterQuarter(curRows, q));
+    const bud = sumOver(filterQuarter(budRows, q));
+    const lyV = sumOver(filterQuarter(lyRows, q));
     return computeCell(layer, isPercentRow, cur, bud, lyV);
   });
   const fyCur = sumOver(curRows);
@@ -190,8 +190,8 @@ function MonthRow({ row, layer, current, budget, ly, currentNoXR, budgetNoXR, ly
             {row.label}
           </span>
         </td>
-        {monthCells.map((cell, i) => (
-          <td key={`m-${i}`} className={`${padCell} text-right tabular-nums ${valueClass}`} style={layer === 'out' ? { color: outColor } : undefined}>
+        {quarterCells.map((cell, i) => (
+          <td key={`q-${i}`} className={`${padCell} text-right tabular-nums ${valueClass}`} style={layer === 'out' ? { color: outColor } : undefined}>
             {renderCell(layer, cell, format, isPercentRow, row.higherIsBetter)}
           </td>
         ))}
@@ -200,12 +200,12 @@ function MonthRow({ row, layer, current, budget, ly, currentNoXR, budgetNoXR, ly
         </td>
       </tr>
       {isGroup && isOpen && row.children?.map((child, ci) => (
-        <MonthRow key={`${row.label}-${ci}`} row={child} layer={layer} current={current} budget={budget} ly={ly} currentNoXR={currentNoXR} budgetNoXR={budgetNoXR} lyNoXR={lyNoXR} basis={basis} padCell={padCell} padLabel={padLabel} expanded={expanded} onToggle={onToggle} depth={depth + 1} />
+        <QuarterRow key={`${row.label}-${ci}`} row={child} layer={layer} current={current} budget={budget} ly={ly} currentNoXR={currentNoXR} budgetNoXR={budgetNoXR} lyNoXR={lyNoXR} basis={basis} padCell={padCell} padLabel={padLabel} expanded={expanded} onToggle={onToggle} depth={depth + 1} />
       ))}
     </>
   );
 }
 
-function filterMonth(rows: ForecastRow[], m: Month): ForecastRow[] {
-  return rows.filter((r) => r.month === m);
+function filterQuarter(rows: ForecastRow[], q: { months: Month[] }): ForecastRow[] {
+  return rows.filter((r) => q.months.includes(r.month));
 }

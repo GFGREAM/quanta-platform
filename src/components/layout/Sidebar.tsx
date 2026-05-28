@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
-import { Home, DollarSign, FileText, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, ChevronLeft, ChevronRight, X, Target, Radar, PlaneTakeoff, ClipboardCheck } from 'lucide-react';
+import { Home, DollarSign, FileText, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, ChevronLeft, ChevronRight, X, Target, Radar, PlaneTakeoff, ClipboardCheck, Workflow, LineChart, Receipt, Banknote, HardHat } from 'lucide-react';
 
 interface MenuItem {
   label: string;
@@ -28,12 +28,18 @@ const menuItems: MenuEntry[] = [
     { label: 'Rooms Rev$ (Pack)', icon: DollarSign, href: '/dashboard/topline/rooms-rev' },
     { label: 'Other Rev$ (Non Pack)', icon: DollarSign, href: '/dashboard/topline/other-rev' },
     { label: 'On the Books', icon: BarChart3, href: '/dashboard/topline/on-the-books' },
+    { label: 'Group Pipeline', icon: Workflow, href: '/dashboard/topline/group-pipeline' },
   ]},
   { category: 'BOTTOM LINE', items: [
+    { label: 'Profitability', icon: LineChart, href: '/dashboard/bottomline/profitability' },
     { label: 'Expenses', icon: DollarSign, href: '/dashboard/bottomline/expenses' },
     { label: 'Staffing', icon: Users, href: '/dashboard/bottomline/staffing' },
     { label: 'Utilities', icon: Wrench, href: '/dashboard/bottomline/utilities' },
-    { label: 'Capex', icon: FileText, href: '/dashboard/bottomline/projects' },
+  ]},
+  { category: 'OWNER STATEMENT', items: [
+    { label: 'Owner Expenses', icon: Receipt, href: '/dashboard/owner/expenses' },
+    { label: 'Cash Flow', icon: Banknote, href: '/dashboard/owner/cash-flow' },
+    { label: 'Capex', icon: HardHat, href: '/dashboard/bottomline/projects' },
   ]},
   { category: 'GUEST EXPERIENCE', items: [
     { label: 'Guest Satisfaction Performance', icon: Star, href: '/dashboard/guest/satisfaction' },

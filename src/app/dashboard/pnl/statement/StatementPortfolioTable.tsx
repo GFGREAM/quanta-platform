@@ -6,6 +6,7 @@ import {
   currencyLabel,
   scenarioAbbrev,
   scopeLabel,
+  type Basis,
   type Currency,
   type Month,
   type Scenario,
@@ -15,9 +16,10 @@ import {
   FLOW_THRU_FORMULA,
   SUMMARY_ROWS,
   TABLE_ROWS,
+  basisCalc,
+  basisFormat,
   fmtValue,
   fmtVar,
-  flattenRows,
   flowThruPct,
   type TableRow,
 } from './tableConfig';
@@ -31,11 +33,12 @@ interface Props {
   scenario: Scenario;
   currency: Currency;
   portfolio: PortfolioData;
+  basis: Basis;
   compact?: boolean;
 }
 
 export default function StatementPortfolioTable({
-  scope, periodMonth, year, scenario, currency, portfolio, compact,
+  scope, periodMonth, year, scenario, currency, portfolio, basis, compact,
 }: Props) {
   const curAbbr = scenarioAbbrev(scenario);
   const periodTitle = scopeLabel(scope, periodMonth, year);
@@ -47,9 +50,17 @@ export default function StatementPortfolioTable({
   const fontMain = compact ? 'text-[0.6875rem]' : 'text-[0.75rem]';
   const fontHeader = compact ? 'text-[0.625rem]' : 'text-[0.6875rem]';
 
-  // Toggle between Summary subset (default) and the full Detailed row set.
+  // Toggle between Summary subset (default) and the full Expanded row set.
   const [showDetail, setShowDetail] = useState(false);
-  const rows = flattenRows(showDetail ? TABLE_ROWS : SUMMARY_ROWS);
+  // Drill-down state — group rows start collapsed; click toggles their children.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const toggle = (label: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label); else next.add(label);
+      return next;
+    });
+  const rows = showDetail ? TABLE_ROWS : SUMMARY_ROWS;
   const ToggleIcon = showDetail ? ChevronDown : ChevronRight;
 
   return (
@@ -133,8 +144,12 @@ export default function StatementPortfolioTable({
                 key={`${i}-${row.label ?? 'spacer'}`}
                 row={row}
                 portfolio={portfolio}
+                basis={basis}
                 padCell={padCell}
                 padLabel={padLabel}
+                expanded={expanded}
+                onToggle={toggle}
+                depth={0}
               />
             ))}
           </tbody>
@@ -169,12 +184,16 @@ function GroupHeaderCells({
 }
 
 function PortfolioRow({
-  row, portfolio, padCell, padLabel,
+  row, portfolio, basis, padCell, padLabel, expanded, onToggle, depth,
 }: {
   row: TableRow;
   portfolio: PortfolioData;
+  basis: Basis;
   padCell: string;
   padLabel: string;
+  expanded: Set<string>;
+  onToggle: (label: string) => void;
+  depth: number;
 }) {
   const numHotels = portfolio.groups.length;
   const totalCols = 1 + 3 * (numHotels + 1);
@@ -209,10 +228,15 @@ function PortfolioRow({
   const totalLyRows = row.useNoXR ? portfolio.total.lyNoXR : portfolio.total.ly;
 
   if (row.kind === 'flow_thru') {
+    const isHiFt = !!row.highlight;
+    const ftLabelClass = row.bold || isHiFt ? 'font-bold' : 'font-normal';
+    const ftLabelColor = (row.bold || isHiFt) ? 'var(--primary)' : 'var(--text-secondary)';
+    const ftBg = isHiFt ? 'var(--border)' : (row.bold ? 'var(--muted)' : undefined);
     return (
-      <tr className="border-t" style={{ borderColor: 'var(--border-light)' }}>
-        <td className={`${padLabel} font-normal`} style={{ color: 'var(--text-secondary)' }}>
-          <span className="inline-flex items-center gap-1.5">
+      <tr className="border-t" style={{ borderColor: 'var(--border-light)', background: ftBg }}>
+        <td className={`${padLabel} ${ftLabelClass}`} style={{ color: ftLabelColor }}>
+          <span className="inline-flex items-center gap-1.5 align-middle">
+            <span className="inline-block w-3" />
             {row.label}
             <FormulaInfo text={FLOW_THRU_FORMULA} />
           </span>
@@ -288,13 +312,17 @@ function PortfolioRow({
     );
   }
 
-  const format = row.format ?? 'integer';
-  const calc = row.calc ?? (() => 0);
+  const format = basisFormat(row, basis);
+  const calc = basisCalc(row, basis);
   const isHi = !!row.highlight;
   const labelClass = row.bold || isHi ? 'font-bold' : 'font-normal';
   const labelColor = (row.bold || isHi) ? 'var(--primary)' : 'var(--text-primary)';
   const valuePrimary = 'var(--primary)';
   const isPercentRow = format === 'pct';
+  const isGroup = row.kind === 'group';
+  const isOpen = isGroup && expanded.has(row.label!);
+  const Chevron = isOpen ? ChevronDown : ChevronRight;
+  const indentPx = depth * 16;
 
   // Compute per-hotel + TOTAL for each group
   const cur = portfolio.groups.map((g) => calc(pickCur(g)));
@@ -312,9 +340,13 @@ function PortfolioRow({
   const totalVarLy = totalCur - totalLy;
 
   return (
-    <tr className="border-t hover:bg-[var(--bg-hover)]" style={{ borderColor: 'var(--border-light)', background: isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : undefined) }}>
-      <td className={`${padLabel} ${labelClass}`} style={{ color: labelColor }}>
-        {row.label}
+    <>
+    <tr className={`border-t hover:bg-[var(--bg-hover)] ${isGroup ? 'cursor-pointer' : ''}`} style={{ borderColor: 'var(--border-light)', background: isHi ? 'var(--border)' : (row.bold ? 'var(--muted)' : undefined) }} onClick={isGroup ? () => onToggle(row.label!) : undefined}>
+      <td className={`${padLabel} ${labelClass}`} style={{ color: labelColor, paddingLeft: indentPx ? `${indentPx + 12}px` : undefined }}>
+        <span className="inline-flex items-center gap-1.5 align-middle">
+          {isGroup ? <Chevron size={12} style={{ color: 'var(--text-secondary)' }} /> : <span className="inline-block w-3" />}
+          {row.label}
+        </span>
       </td>
       {/* Group 1: current values per hotel + TOTAL */}
       {cur.map((v, i) => (
@@ -360,6 +392,10 @@ function PortfolioRow({
         </VariancePill>
       </td>
     </tr>
+    {isGroup && isOpen && row.children?.map((child, ci) => (
+      <PortfolioRow key={`${row.label}-${ci}`} row={child} portfolio={portfolio} basis={basis} padCell={padCell} padLabel={padLabel} expanded={expanded} onToggle={onToggle} depth={depth + 1} />
+    ))}
+    </>
   );
 }
 
