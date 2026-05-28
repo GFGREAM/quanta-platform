@@ -66,10 +66,11 @@ interface SidebarProps {
   pinned: boolean;
   hovered: boolean;
   onPinToggle: () => void;
+  onMenuSelect: () => void;
   onHoverChange: (h: boolean) => void;
 }
 
-export default function Sidebar({ mobileOpen, onMobileClose, pinned, hovered, onPinToggle, onHoverChange }: SidebarProps) {
+export default function Sidebar({ mobileOpen, onMobileClose, pinned, hovered, onPinToggle, onMenuSelect, onHoverChange }: SidebarProps) {
   const expanded = pinned || hovered;
   const pathname = usePathname();
 
@@ -79,7 +80,7 @@ export default function Sidebar({ mobileOpen, onMobileClose, pinned, hovered, on
     const Icon = item.icon;
     const isActive = pathname === item.href;
     return (
-      <Link key={key} href={item.href} onClick={() => { onMobileClose?.(); if (pinned) onPinToggle(); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all duration-200 mb-0.5 ${isActive ? 'text-[var(--primary)] bg-[#F0FFFE] border-l-[3px] border-[var(--accent)]' : 'text-[var(--text-secondary)] hover:text-[var(--primary)] hover:bg-[var(--bg-hover)]'}`}>
+      <Link key={key} href={item.href} onClick={() => { onMobileClose?.(); onMenuSelect(); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all duration-200 mb-0.5 ${isActive ? 'text-[var(--primary)] bg-[#F0FFFE] border-l-[3px] border-[var(--accent)]' : 'text-[var(--text-secondary)] hover:text-[var(--primary)] hover:bg-[var(--bg-hover)]'}`}>
         <Icon size={20} />{(expanded || mobileOpen) && <span>{item.label}</span>}
       </Link>
     );

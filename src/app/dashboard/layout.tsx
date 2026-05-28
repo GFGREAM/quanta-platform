@@ -16,6 +16,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         pinned={pinned}
         hovered={hovered}
         onPinToggle={() => setPinned(p => !p)}
+        onMenuSelect={() => { setPinned(false); setHovered(false); }}
         onHoverChange={setHovered}
       />
       <main className={`${pinned ? 'md:ml-60' : 'md:ml-16'} mt-32 p-6 transition-all duration-300`}>
