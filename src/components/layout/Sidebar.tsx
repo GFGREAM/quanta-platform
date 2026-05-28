@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
-import { Home, DollarSign, FileText, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, ChevronLeft, ChevronRight, X, Target, Radar, PlaneTakeoff, Workflow, LineChart, Receipt, Banknote, HardHat } from 'lucide-react';
+import { Home, DollarSign, FileText, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, ChevronLeft, ChevronRight, X, Target, Radar, PlaneTakeoff, ClipboardCheck, Workflow, LineChart, Receipt, Banknote, HardHat } from 'lucide-react';
 
 interface MenuItem {
   label: string;
@@ -42,7 +42,7 @@ const menuItems: MenuEntry[] = [
     { label: 'Capex', icon: HardHat, href: '/dashboard/bottomline/projects' },
   ]},
   { category: 'GUEST EXPERIENCE', items: [
-    { label: 'Guest Satisfaction', icon: Star, href: '/dashboard/guest/satisfaction' },
+    { label: 'Guest Satisfaction Performance', icon: Star, href: '/dashboard/guest/satisfaction' },
     { label: 'Hotel META Positioning', icon: Hotel, href: '/dashboard/guest/meta-positioning' },
     { label: 'Competitive Set Radar', icon: Radar, href: '/dashboard/guest/ops-radar' },
   ]},
@@ -53,6 +53,10 @@ const menuItems: MenuEntry[] = [
   { category: 'MARKET TRENDS', items: [
     { label: 'Airport Passengers', icon: PlaneTakeoff, href: '/dashboard/market/airport-passengers' },
     { label: 'Market Demand', icon: BarChart3, href: '/dashboard/market/market-demand' },
+  ]},
+  { category: 'TOOLS', items: [
+    { label: 'GFG Hotel Audits', icon: ClipboardCheck, href: '/dashboard/tools/hotel-audits' },
+    { label: 'Hotel META Snapshot', icon: FileText, href: '/dashboard/tools/hotel-meta-snapshot' },
   ]},
 ];
 

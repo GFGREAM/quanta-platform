@@ -48,3 +48,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# One-shot setup scripts (not part of the application)
+setup_audits_complete.sh
+setup_gfg_hotel_audits_backend.sh
+update_audits_db_connection.sh
