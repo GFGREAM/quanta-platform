@@ -13,7 +13,7 @@
  */
 
 export type Source = 'Hotel' | 'D360';
-export type Snapshot = 'Snap-Ene' | 'Snap-Feb' | 'Snap-Mar' | 'Snap-Apr' | 'Snap-May-11' | 'Snap-May-18';
+export type Snapshot = 'Snap-Ene' | 'Snap-Feb' | 'Snap-Mar' | 'Snap-Apr' | 'Snap-May-11' | 'Snap-May-18' | 'Snap-May-25';
 export type Status = 'Prospect' | 'Tentative' | 'Definite';
 export type Level = 'My Hotel' | 'Comp Set' | 'Market';
 export type Metric = 'RN' | 'ADR' | 'REV' | 'BKGS' | 'OCC' | 'RevPAR';
@@ -22,7 +22,7 @@ export type Visual = 'V1' | 'V2';
 export const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] as const;
 export type Month = typeof MONTHS[number];
 
-export const SNAPSHOTS: Snapshot[] = ['Snap-Ene','Snap-Feb','Snap-Mar','Snap-Apr','Snap-May-11','Snap-May-18'];
+export const SNAPSHOTS: Snapshot[] = ['Snap-Ene','Snap-Feb','Snap-Mar','Snap-Apr','Snap-May-11','Snap-May-18','Snap-May-25'];
 
 export const SNAPSHOT_DATES: Record<Snapshot, string> = {
   'Snap-Ene': '2026-01-14',
@@ -31,6 +31,7 @@ export const SNAPSHOT_DATES: Record<Snapshot, string> = {
   'Snap-Apr': '2026-04-06',
   'Snap-May-11': '2026-05-11',
   'Snap-May-18': '2026-05-18',
+  'Snap-May-25': '2026-05-25',
 };
 
 export const STATUSES: Status[] = ['Prospect','Tentative','Definite'];
@@ -144,6 +145,19 @@ export const HOTEL_DATA: Record<HotelKey, V12> = {
   'Snap-May-18|Definite|ADR':  [0,1486.39,1219.29,1252.44,1121.11,701.51,0,0,508.29,0,492.36,650],
   'Snap-May-18|Definite|REV':  [0,1146005,1253429,1211105,632306,350554,0,0,178410,0,125059,48100],
   'Snap-May-18|Definite|BKGS': N,
+  // Snap-May-25
+  'Snap-May-25|Prospect|RN':   [0,0,0,0,0,0,50,415,84,1562,1513,540],
+  'Snap-May-25|Prospect|ADR':  [0,0,0,0,0,0,650,611.57,600,575.66,691.17,644.17],
+  'Snap-May-25|Prospect|REV':  [0,0,0,0,0,0,32500,253802,50400,899181,1045740,319250],
+  'Snap-May-25|Prospect|BKGS': N,
+  'Snap-May-25|Tentative|RN':   Z,
+  'Snap-May-25|Tentative|ADR':  Z,
+  'Snap-May-25|Tentative|REV':  Z,
+  'Snap-May-25|Tentative|BKGS': N,
+  'Snap-May-25|Definite|RN':   [0,771,1028,990,564,504,0,0,351,0,254,74],
+  'Snap-May-25|Definite|ADR':  [0,1486.39,1219.29,1252.44,1121.11,701.51,0,0,508.29,0,492.36,650],
+  'Snap-May-25|Definite|REV':  [0,1146005,1253429,1211105,632306,357033,0,0,178410,0,125059,48100],
+  'Snap-May-25|Definite|BKGS': N,
 };
 
 // ─── D360 source data (Tentative & Definite only) ────────────────────
@@ -300,6 +314,31 @@ export const D360_DATA: Record<D360Key, V12> = {
   'Snap-May-18|Tentative|Market|RN':      [0,0,0,0,157,1622,4550,3065,3223,3032,4389,4674],
   'Snap-May-18|Tentative|Market|ADR':     N,
   'Snap-May-18|Tentative|Market|RevPAR':  N,
+  // ─── Snap-May-25 ─────────────────────────────────────────────
+  'Snap-May-25|Definite|My Hotel|OCC':    [0,0.147,0.176,0.175,0.097,0.089,0,0,0,0,0,0.011],
+  'Snap-May-25|Definite|My Hotel|RN':     [0,772,1028,987,564,504,0,0,0,0,0,62],
+  'Snap-May-25|Definite|My Hotel|ADR':    [672,595,744,728,null,null,null,null,null,null,null,null],
+  'Snap-May-25|Definite|My Hotel|RevPAR': [164,125,157,199,null,null,null,null,null,null,null,null],
+  'Snap-May-25|Definite|Comp Set|OCC':    [0.245,0.21,0.211,0.273,0.241,0.124,0.026,0.035,0.003,0.006,0.024,0.017],
+  'Snap-May-25|Definite|Comp Set|RN':     [8205,6375,7072,8874,8085,4036,881,1184,111,208,794,558],
+  'Snap-May-25|Definite|Comp Set|ADR':    [672,754,802,785,null,null,null,null,null,null,null,null],
+  'Snap-May-25|Definite|Comp Set|RevPAR': [113,135,131,182,null,null,null,null,null,null,null,null],
+  'Snap-May-25|Definite|Market|OCC':      [0.169,0.178,0.163,0.231,0.254,0.144,0.024,0.028,0.003,0.009,0.018,0.015],
+  'Snap-May-25|Definite|Market|RN':       [8795,8396,8473,11666,13215,7282,1254,1446,176,476,930,785],
+  'Snap-May-25|Definite|Market|ADR':      [0,0,0,0,0.12,0.868,0,0,0,0,0,0],
+  'Snap-May-25|Definite|Market|RevPAR':   [0,0,0,0,0.486,18.617,0,0,0,0,0,0],
+  'Snap-May-25|Tentative|My Hotel|OCC':   [0,0,0,0,0,0,0,0,0.069,0,0.053,0.006],
+  'Snap-May-25|Tentative|My Hotel|RN':    [0,0,0,0,0,0,0,0,390,0,297,36],
+  'Snap-May-25|Tentative|My Hotel|ADR':   N,
+  'Snap-May-25|Tentative|My Hotel|RevPAR':N,
+  'Snap-May-25|Tentative|Comp Set|OCC':   [0,0,0,0,0.002,0.015,0.102,0.035,0.04,0.064,0.121,0.1],
+  'Snap-May-25|Tentative|Comp Set|RN':    [0,0,0,0,82,502,3406,1179,1299,2132,3913,3362],
+  'Snap-May-25|Tentative|Comp Set|ADR':   N,
+  'Snap-May-25|Tentative|Comp Set|RevPAR':N,
+  'Snap-May-25|Tentative|Market|OCC':     [0,0,0,0,0.002,0.013,0.089,0.058,0.063,0.057,0.089,0.092],
+  'Snap-May-25|Tentative|Market|RN':      [0,0,0,0,115,669,4648,3042,3192,2994,4467,4777],
+  'Snap-May-25|Tentative|Market|ADR':     N,
+  'Snap-May-25|Tentative|Market|RevPAR':  N,
 };
 
 // ─── Lookup ──────────────────────────────────────────────────────────

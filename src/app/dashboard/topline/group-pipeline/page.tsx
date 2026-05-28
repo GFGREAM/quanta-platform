@@ -59,13 +59,22 @@ function statusLabel(status: Status): string {
   return status.toUpperCase();
 }
 
+// "Snap-May-18" → "May 18". Year is dropped to keep selectors and headers compact.
+function snapLabel(s: Snapshot): string {
+  const [, mm, dd] = SNAPSHOT_DATES[s].split('-');
+  return `${MONTHS[Number(mm) - 1]} ${Number(dd)}`;
+}
+
 export default function GroupPipelinePage() {
   const [visual, setVisual] = useState<Visual>('V1');
+  const [view, setView] = useState<'Summary' | 'Expanded'>('Summary');
   const [snapshot, setSnapshot] = useState<Snapshot>('Snap-May-18');
   const [metric, setMetric] = useState<Metric>('RN');
-  const [weighted, setWeighted] = useState(false);
+  const [weighted, setWeighted] = useState(true);
   const [fromSnap, setFromSnap] = useState<Snapshot>(SNAPSHOTS[0]);
-  const [toSnap, setToSnap] = useState<Snapshot>(SNAPSHOTS[SNAPSHOTS.length - 1]);
+  // Conversion "To" is always the Matrix snapshot — same point-in-time as what
+  // the rest of the page is showing — so it doesn't need its own control.
+  const toSnap = snapshot;
   const [isFavorite, setIsFavorite] = useState(false);
 
   // Available metrics depend on which sources are mixed in current visual.
@@ -76,9 +85,12 @@ export default function GroupPipelinePage() {
   // Weighted mode rescales CS/Market RN to MyHotel inventory:
   //   weighted CS/Market RN[m] = INVENTORY_2026[m] × OCC_level_status[m]
   // Only applies to RN metric and Tentative/Definite (Prospect doesn't have D360 OCC).
+  // Memoized so it stays referentially stable as a useMemo dep below.
+  const visibleLevels = useMemo<Level[]>(() => (view === 'Summary' ? ['My Hotel'] : LEVELS), [view]);
+
   const rows = useMemo(() => {
     return STATUSES.flatMap((status) =>
-      LEVELS.map((level) => {
+      visibleLevels.map((level) => {
         let series = getSeries(visual, snapshot, status, level, metric);
         if (
           weighted &&
@@ -95,13 +107,13 @@ export default function GroupPipelinePage() {
         return { status, level, series };
       })
     );
-  }, [visual, snapshot, metric, weighted]);
+  }, [visual, snapshot, metric, weighted, visibleLevels]);
 
   // Combined row: Tentative + Definite per level (per month).
   // Null cells are treated as 0 when at least one of the two has a value;
   // both-null stays null so the cell renders "—".
   const combinedRows = useMemo(() => {
-    return LEVELS.map((level) => {
+    return visibleLevels.map((level) => {
       const tent = rows.find((r) => r.status === 'Tentative' && r.level === level)?.series ?? [];
       const def = rows.find((r) => r.status === 'Definite' && r.level === level)?.series ?? [];
       const series = MONTHS.map((_, i) => {
@@ -112,7 +124,7 @@ export default function GroupPipelinePage() {
       });
       return { status: 'Booked' as const, level, series };
     });
-  }, [rows]);
+  }, [rows, visibleLevels]);
 
   // Conversion section (rendered as another group inside the matrix table):
   // how much of MyHotel's Prospects at fromSnap materialized as Tentative + Definite
@@ -140,8 +152,8 @@ export default function GroupPipelinePage() {
       deltaRN: myDelta,
     });
 
-    // CS / Market — only when Weighted ON is active.
-    if (weighted) {
+    // CS / Market — only under Weighted ON and the Expanded view.
+    if (weighted && view === 'Expanded') {
       for (const lv of ['Comp Set', 'Market'] as Level[]) {
         const occT_from = getSeries(visual, fromSnap, 'Tentative', lv, 'OCC').map((v) => v ?? 0);
         const occD_from = getSeries(visual, fromSnap, 'Definite', lv, 'OCC').map((v) => v ?? 0);
@@ -155,7 +167,45 @@ export default function GroupPipelinePage() {
       }
     }
     return { rows: out, prospectBase };
-  }, [visual, fromSnap, toSnap, weighted]);
+  }, [visual, fromSnap, toSnap, weighted, view]);
+
+  // Pick-up between fromSnap and toSnap — raw Δ (can be negative if a bucket shrunk).
+  // Prospect is shown as Δ MyHotel Prospect RN; MyHotel/CS/Market are Δ(Tent+Def) RN.
+  // CS/Market only render under Weighted ON (otherwise their raw RN aren't comparable
+  // to MyHotel-scale figures, same rule as the Conversion ratios).
+  const pickUp = useMemo(() => {
+    const seriesFor = (s: Snapshot, st: Status, lv: Level, m: Metric) =>
+      getSeries(visual, s, st, lv, m).map((v) => v ?? 0);
+
+    const pFrom = seriesFor(fromSnap, 'Prospect', 'My Hotel', 'RN');
+    const pTo = seriesFor(toSnap, 'Prospect', 'My Hotel', 'RN');
+    const prospect = pTo.map((v, i) => v - pFrom[i]);
+
+    const tdDelta = (lv: Level) => {
+      const tFrom = seriesFor(fromSnap, 'Tentative', lv, 'RN');
+      const dFrom = seriesFor(fromSnap, 'Definite', lv, 'RN');
+      const tTo = seriesFor(toSnap, 'Tentative', lv, 'RN');
+      const dTo = seriesFor(toSnap, 'Definite', lv, 'RN');
+      return tTo.map((_, i) => tTo[i] + dTo[i] - tFrom[i] - dFrom[i]);
+    };
+    const tdDeltaWeighted = (lv: Level) => {
+      const oTFrom = seriesFor(fromSnap, 'Tentative', lv, 'OCC');
+      const oDFrom = seriesFor(fromSnap, 'Definite', lv, 'OCC');
+      const oTTo = seriesFor(toSnap, 'Tentative', lv, 'OCC');
+      const oDTo = seriesFor(toSnap, 'Definite', lv, 'OCC');
+      return INVENTORY_2026.map((inv, i) => inv * (oTTo[i] + oDTo[i] - oTFrom[i] - oDFrom[i]));
+    };
+
+    const rows: { label: string; series: number[] }[] = [
+      { label: 'Prospect', series: prospect },
+      { label: 'My Hotel', series: tdDelta('My Hotel') },
+    ];
+    if (weighted && view === 'Expanded') {
+      rows.push({ label: 'Comp Set', series: tdDeltaWeighted('Comp Set') });
+      rows.push({ label: 'Market', series: tdDeltaWeighted('Market') });
+    }
+    return rows;
+  }, [visual, fromSnap, toSnap, weighted, view]);
 
   // My Hotel actual (on-the-books = Tentative + Definite) vs Budget 2026.
   // Always reads the Hotel source (V1 My Hotel) so REV is available regardless of
@@ -342,65 +392,73 @@ export default function GroupPipelinePage() {
         </TabButton>
       </div>
 
-      {/* Controls — all filters consolidated at the top so both tables can be viewed together below */}
+      {/* Controls — single row with Matrix and Conversion separated by a vertical
+          divider so each group stays visually distinct without stacking. */}
       <div
-        className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 text-sm rounded-lg border px-3 py-3"
-        style={{ borderColor: 'var(--border)', backgroundColor: 'white' }}
+        className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border bg-white px-3 py-2.5 text-sm"
+        style={{ borderColor: 'var(--border)' }}
       >
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-[10px] uppercase tracking-wider font-semibold pr-1" style={{ color: 'var(--text-secondary)' }}>Matrix</span>
-          <ControlSelect label="Snapshot" value={snapshot} onChange={(v) => setSnapshot(v as Snapshot)}>
-            {SNAPSHOTS.map((s) => (
-              <option key={s} value={s}>{s} ({SNAPSHOT_DATES[s]})</option>
-            ))}
-          </ControlSelect>
-          <ControlSelect label="Metric" value={metric} onChange={(v) => setMetric(v as Metric)}>
-            {visibleMetrics.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </ControlSelect>
-          <ControlSelect label="Year" value="2026" onChange={() => {}}>
-            <option value="2026">2026</option>
-          </ControlSelect>
-          <button
-            onClick={() => setWeighted(!weighted)}
-            disabled={metric !== 'RN'}
-            title={
-              metric === 'RN'
-                ? 'Rescales CS/Market to your MyHotel inventory (equivalent RN)'
-                : 'Only applies to the RN metric'
-            }
-            className="px-3 py-1.5 rounded-md border text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{
-              borderColor: weighted && metric === 'RN' ? 'var(--accent)' : 'var(--border)',
-              backgroundColor: weighted && metric === 'RN' ? 'var(--primary)' : 'white',
-              color: weighted && metric === 'RN' ? 'white' : 'var(--text-secondary)',
-            }}
-          >
-            Weighted (INV × OCC) {weighted && metric === 'RN' ? 'ON' : 'OFF'}
-          </button>
-        </div>
-        <div className="h-6 border-l" style={{ borderColor: 'var(--border)' }} />
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-[10px] uppercase tracking-wider font-semibold pr-1" style={{ color: 'var(--text-secondary)' }}>Conversion</span>
-          <ControlSelect label="From snap" value={fromSnap} onChange={(v) => setFromSnap(v as Snapshot)}>
-            {SNAPSHOTS.map((s) => <option key={s} value={s}>{s} ({SNAPSHOT_DATES[s]})</option>)}
-          </ControlSelect>
-          <ControlSelect label="To snap" value={toSnap} onChange={(v) => setToSnap(v as Snapshot)}>
-            {SNAPSHOTS.map((s) => <option key={s} value={s}>{s} ({SNAPSHOT_DATES[s]})</option>)}
-          </ControlSelect>
-        </div>
+        <span
+          className="text-[10px] uppercase tracking-wider font-semibold shrink-0"
+          style={{ color: 'var(--text-secondary)' }}
+        >
+          Matrix
+        </span>
+        <SegToggle
+          label="View"
+          value={view}
+          onChange={(v) => setView(v as 'Summary' | 'Expanded')}
+          options={['Summary', 'Expanded']}
+        />
+        <ControlSelect label="Snapshot" value={snapshot} onChange={(v) => setSnapshot(v as Snapshot)}>
+          {SNAPSHOTS.map((s) => (
+            <option key={s} value={s}>{snapLabel(s)}</option>
+          ))}
+        </ControlSelect>
+        <ControlSelect label="Metric" value={metric} onChange={(v) => setMetric(v as Metric)}>
+          {visibleMetrics.map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </ControlSelect>
+        <ControlSelect label="Year" value="2026" onChange={() => {}}>
+          <option value="2026">2026</option>
+        </ControlSelect>
+        <button
+          onClick={() => setWeighted(!weighted)}
+          disabled={metric !== 'RN'}
+          title={
+            metric === 'RN'
+              ? 'Rescales CS/Market to your MyHotel inventory (equivalent RN)'
+              : 'Only applies to the RN metric'
+          }
+          className="px-3 py-1.5 rounded-md border text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{
+            borderColor: weighted && metric === 'RN' ? 'var(--accent)' : 'var(--border)',
+            backgroundColor: weighted && metric === 'RN' ? 'var(--primary)' : 'white',
+            color: weighted && metric === 'RN' ? 'white' : 'var(--text-secondary)',
+          }}
+        >
+          Weighted {weighted && metric === 'RN' ? 'ON' : 'OFF'}
+        </button>
+        <div className="h-6 border-l mx-1" style={{ borderColor: 'var(--border)' }} />
+        <span
+          className="text-[10px] uppercase tracking-wider font-semibold shrink-0"
+          style={{ color: 'var(--text-secondary)' }}
+        >
+          Conversion
+        </span>
+        <ControlSelect label="From" value={fromSnap} onChange={(v) => setFromSnap(v as Snapshot)}>
+          {SNAPSHOTS.map((s) => <option key={s} value={s}>{snapLabel(s)}</option>)}
+        </ControlSelect>
+        <span className="text-[11px] italic" style={{ color: 'var(--text-secondary)' }}>
+          → {snapLabel(toSnap)} <span className="opacity-60">(matrix snapshot)</span>
+        </span>
       </div>
 
       {weighted && metric === 'RN' && (
-        <div
-          className="rounded-md border px-3 py-2 mb-3 text-xs leading-relaxed"
-          style={{ borderColor: 'var(--accent)', backgroundColor: '#F0FFFE', color: 'var(--primary)' }}
-        >
-          <b>Weighted ON:</b> Comp Set and Market in Tentative/Definite show <b>equivalent RN</b> against your
-          inventory ({PROPERTY.rooms} rooms) — computed as <code>reported OCC × MyHotel INV</code>.
-          MyHotel and Prospect stay unchanged.
-        </div>
+        <p className="mb-2 text-[11px] italic" style={{ color: 'var(--text-secondary)' }}>
+          Weighted: CS/Market RN rescaled to MyHotel inventory ({PROPERTY.rooms} rooms) as <code>OCC × INV</code>.
+        </p>
       )}
 
       {/* Both tables wrapped together so PNG / PDF export captures them as one visual */}
@@ -410,7 +468,7 @@ export default function GroupPipelinePage() {
           <span className="font-semibold" style={{ color: 'var(--primary)' }}>Group Pipeline</span>
           <span className="opacity-50">·</span><span>{PROPERTY.name}</span>
           <span className="opacity-50">·</span><span>{visualLabel}</span>
-          <span className="opacity-50">·</span><span>Snapshot {snapshot} ({SNAPSHOT_DATES[snapshot]})</span>
+          <span className="opacity-50">·</span><span>Snapshot {snapLabel(snapshot)}</span>
           <span className="opacity-50">·</span><span>Metric {metric}{weighted && metric === 'RN' ? ' · Weighted (INV×OCC)' : ''}</span>
         </div>
 
@@ -441,12 +499,17 @@ export default function GroupPipelinePage() {
               <StatusGroup
                 key={status}
                 status={status}
-                rows={rows.filter((r) => r.status === status)}
+                rows={
+                  status === 'Prospect'
+                    ? rows.filter((r) => r.status === 'Prospect' && r.level === 'My Hotel')
+                    : rows.filter((r) => r.status === status)
+                }
                 metric={metric}
                 isLast={false}
               />
             ))}
             <CombinedGroup rows={combinedRows} metric={metric} />
+            <PickUpGroup rows={pickUp} fromSnap={fromSnap} toSnap={toSnap} />
             <ConversionGroup
               rows={conversion.rows}
               prospectBase={conversion.prospectBase}
@@ -467,8 +530,8 @@ export default function GroupPipelinePage() {
       <div className="mt-4 text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
         <p>
           <sup>¹</sup> <b>Prospect</b>: only in the Hotel&apos;s internal report (Demand360 doesn&apos;t track it).
-          The <i>Comp Set</i> and <i>Market</i> rows under Prospect repeat the Hotel data —
-          they represent <i>in-market demand</i> that may materialize at any property.
+          Represents <i>in-market demand</i> that may materialize at any property — shown as a single row
+          since the source doesn&apos;t split it across Comp Set / Market.
         </p>
         <p className="mt-1">
           <sup>²</sup> For D360, <b>ADR/REV/RevPAR</b> in Comp Set and Market may show as 0 or empty for future months
@@ -525,7 +588,7 @@ function ConversionGroup({
         >
           PROSPECT → (TENT + DEF) CONVERSION
           <span className="ml-2 font-normal normal-case opacity-70">
-            {fromSnap.replace('Snap-', '')} → {toSnap.replace('Snap-', '')}
+            {snapLabel(fromSnap)} → {snapLabel(toSnap)}
           </span>
         </td>
       </tr>
@@ -548,28 +611,73 @@ function ConversionGroup({
           </td>
         </tr>
       ))}
-      {/* Supporting RN rows — the numerator/denominator behind each ratio. */}
-      <tr className="border-t" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--muted)' }}>
-        <td className="sticky left-0 z-10 px-3 py-2 text-[11px] uppercase tracking-wider" style={{ backgroundColor: 'var(--muted)', color: 'var(--text-secondary)' }}>
-          Prospect MyHotel base (RN)
-        </td>
-        {prospectBase.map((v, i) => (
-          <td key={i} className="text-right px-2 py-2 tabular-nums text-[11px]" style={{ color: 'var(--text-secondary)' }}>{fmtNum(v)}</td>
-        ))}
-        <td className="text-right px-3 py-2 tabular-nums text-[11px]" style={{ color: 'var(--text-secondary)' }}>{fmtNum(sumBase)}</td>
-      </tr>
-      {rows.map((row) => (
-        <tr key={`delta-${row.level}`} className="border-t" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--muted)' }}>
-          <td className="sticky left-0 z-10 px-3 py-2 text-[11px] uppercase tracking-wider" style={{ backgroundColor: 'var(--muted)', color: 'var(--text-secondary)' }}>
-            Δ(Tent+Def) · {row.level} (RN)
-          </td>
-          {row.deltaRN.map((v, i) => (
-            <td key={i} className="text-right px-2 py-2 tabular-nums text-[11px]" style={{ color: 'var(--text-secondary)' }}>{fmtNum(v)}</td>
-          ))}
-          <td className="text-right px-3 py-2 tabular-nums text-[11px]" style={{ color: 'var(--text-secondary)' }}>{fmtNum(row.deltaRN.reduce((a, b) => a + b, 0))}</td>
-        </tr>
-      ))}
     </>
+  );
+}
+
+// ─── Pick-up group ──────────────────────────────────────────────────
+// Raw Δ in RN between fromSnap and toSnap, per source.
+// Prospect = Δ MyHotel Prospect RN; My Hotel/CS/Market = Δ(Tent+Def) RN.
+// Negative cells (a bucket shrunk) render in red so the read stays honest.
+function PickUpGroup({
+  rows,
+  fromSnap,
+  toSnap,
+}: {
+  rows: { label: string; series: number[] }[];
+  fromSnap: Snapshot;
+  toSnap: Snapshot;
+}) {
+  return (
+    <>
+      <tr>
+        <td
+          colSpan={MONTHS.length + 2}
+          className="px-3 py-2 text-[11px] uppercase tracking-wider font-semibold border-t"
+          style={{ backgroundColor: 'var(--bg-hover)', color: 'var(--primary)', borderColor: 'var(--border)' }}
+        >
+          PICK-UP (RN)
+          <span className="ml-2 font-normal normal-case opacity-70">
+            {snapLabel(fromSnap)} → {snapLabel(toSnap)}
+          </span>
+        </td>
+      </tr>
+      {rows.map((row) => {
+        const total = row.series.reduce((a, b) => a + b, 0);
+        return (
+          <tr key={row.label} className="border-t" style={{ borderColor: 'var(--border)' }}>
+            <td className="sticky left-0 z-10 px-3 py-2 bg-white" style={{ color: 'var(--primary)' }}>
+              <span className="pl-2">{row.label}</span>
+            </td>
+            {row.series.map((v, i) => (
+              <td key={i} className="text-right px-2 py-2 tabular-nums">
+                <PickUpPill value={Math.round(v)} />
+              </td>
+            ))}
+            <td className="text-right px-3 py-2 tabular-nums">
+              <PickUpPill value={Math.round(total)} />
+            </td>
+          </tr>
+        );
+      })}
+    </>
+  );
+}
+
+// Same look-and-feel as the Budget variance pill, but tuned for raw RN counts
+// (no metric-specific formatting; 0 collapses to a dash).
+function PickUpPill({ value }: { value: number }) {
+  if (value === 0 || !Number.isFinite(value)) {
+    return <span style={{ color: 'var(--text-secondary)' }}>—</span>;
+  }
+  const good = value > 0;
+  return (
+    <span
+      className="inline-block px-2 py-0.5 rounded-sm font-semibold tabular-nums -mr-2"
+      style={{ color: good ? 'var(--success)' : 'var(--danger)', background: good ? VAR_BG_GOOD : VAR_BG_BAD }}
+    >
+      {good ? '+' : '-'}{fmtNum(Math.abs(value))}
+    </span>
   );
 }
 
@@ -620,9 +728,11 @@ function VarPill({ value, metric }: { value: number | null; metric: 'RN' | 'ADR'
     return <span style={{ color: 'var(--text-secondary)' }}>{value === 0 ? fmtBudget(0, metric) : '—'}</span>;
   }
   const good = value > 0; // higher is better for RN / ADR / REV
+  // Negative margin cancels the pill's inner px-2 so its digits land at the
+  // same right edge as the plain-number rows above (Actual / Budget).
   return (
     <span
-      className="inline-block px-2 py-0.5 rounded-sm font-semibold"
+      className="inline-block px-2 py-0.5 rounded-sm font-semibold tabular-nums -mr-2"
       style={{ color: good ? 'var(--success)' : 'var(--danger)', background: good ? VAR_BG_GOOD : VAR_BG_BAD }}
     >
       {good ? '+' : '-'}{fmtBudget(Math.abs(value), metric)}
@@ -646,7 +756,7 @@ function BudgetComparison({ snapshot, metrics }: { snapshot: Snapshot; metrics: 
       <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
         <h3 className="text-sm font-semibold" style={{ color: 'var(--primary)' }}>My Hotel vs Budget 2026</h3>
         <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-          On-the-books (Tentative + Definite) at {snapshot} vs annual Budget · RN · ADR · REV (000s) — higher is better
+          On-the-books (Tentative + Definite) at {snapLabel(snapshot)} vs annual Budget · RN · ADR · REV (000s) — higher is better
         </p>
       </div>
       <div className="overflow-auto">
@@ -730,6 +840,43 @@ function TabButton({ active, onClick, children, title }: { active: boolean; onCl
   );
 }
 
+function SegToggle({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: readonly string[];
+}) {
+  return (
+    <label className="flex items-center gap-2">
+      <span className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>{label}</span>
+      <div className="inline-flex rounded-md border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+        {options.map((opt, idx) => {
+          const active = opt === value;
+          return (
+            <button
+              key={opt}
+              onClick={() => onChange(opt)}
+              className={`px-3 py-1.5 text-xs transition-colors ${idx > 0 ? 'border-l' : ''}`}
+              style={{
+                backgroundColor: active ? 'var(--primary)' : 'white',
+                color: active ? 'white' : 'var(--text-secondary)',
+                borderColor: 'var(--border)',
+              }}
+            >
+              {opt}
+            </button>
+          );
+        })}
+      </div>
+    </label>
+  );
+}
+
 function ControlSelect({ label, value, onChange, children }: { label: string; value: string; onChange: (v: string) => void; children: React.ReactNode }) {
   return (
     <label className="flex items-center gap-2">
@@ -781,10 +928,7 @@ function StatusGroup({
             style={{ borderColor: 'var(--border)' }}
           >
             <td className="sticky left-0 z-10 px-3 py-2 bg-white" style={{ color: 'var(--primary)' }}>
-              <span className="pl-2">{row.level}</span>
-              {status === 'Prospect' && row.level !== 'My Hotel' && (
-                <sup className="ml-1 text-[10px] opacity-60">2</sup>
-              )}
+              {status !== 'Prospect' && <span className="pl-2">{row.level}</span>}
             </td>
             {row.series.map((v, i) => (
               <td
