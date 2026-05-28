@@ -1,9 +1,9 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
-import { Home, DollarSign, FileText, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, ChevronLeft, ChevronRight, X, Target, Radar, PlaneTakeoff, ClipboardCheck, Workflow, LineChart, Receipt, Banknote, HardHat } from 'lucide-react';
+import { Home, DollarSign, FileText, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, Pin, PinOff, X, Target, Radar, PlaneTakeoff, ClipboardCheck, Workflow, LineChart, Receipt, Banknote, HardHat } from 'lucide-react';
 
 interface MenuItem {
   label: string;
@@ -60,8 +60,17 @@ const menuItems: MenuEntry[] = [
   ]},
 ];
 
-export default function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {
-  const [collapsed, setCollapsed] = useState(false);
+interface SidebarProps {
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+  pinned: boolean;
+  hovered: boolean;
+  onPinToggle: () => void;
+  onHoverChange: (h: boolean) => void;
+}
+
+export default function Sidebar({ mobileOpen, onMobileClose, pinned, hovered, onPinToggle, onHoverChange }: SidebarProps) {
+  const expanded = pinned || hovered;
   const pathname = usePathname();
 
   useEffect(() => { if (mobileOpen && onMobileClose) { const handleResize = () => { if (window.innerWidth >= 768) onMobileClose(); }; window.addEventListener('resize', handleResize); return () => window.removeEventListener('resize', handleResize); } }, [mobileOpen, onMobileClose]);
@@ -70,8 +79,8 @@ export default function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: bo
     const Icon = item.icon;
     const isActive = pathname === item.href;
     return (
-      <Link key={key} href={item.href} onClick={onMobileClose} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all duration-200 mb-0.5 ${isActive ? 'text-[var(--primary)] bg-[#F0FFFE] border-l-[3px] border-[var(--accent)]' : 'text-[var(--text-secondary)] hover:text-[var(--primary)] hover:bg-[var(--bg-hover)]'}`}>
-        <Icon size={20} />{!(collapsed && !mobileOpen) && <span>{item.label}</span>}
+      <Link key={key} href={item.href} onClick={() => { onMobileClose?.(); if (pinned) onPinToggle(); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all duration-200 mb-0.5 ${isActive ? 'text-[var(--primary)] bg-[#F0FFFE] border-l-[3px] border-[var(--accent)]' : 'text-[var(--text-secondary)] hover:text-[var(--primary)] hover:bg-[var(--bg-hover)]'}`}>
+        <Icon size={20} />{(expanded || mobileOpen) && <span>{item.label}</span>}
       </Link>
     );
   };
@@ -83,15 +92,15 @@ export default function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: bo
           if ('href' in item) return renderLink(item as MenuItem, index);
           return (
             <div key={index} className="mb-2">
-              {!(collapsed && !mobileOpen) && <p className="text-[10px] font-semibold tracking-wider text-[var(--text-secondary)] px-3 pt-4 pb-1">{item.category}</p>}
-              {collapsed && !mobileOpen && <div className="border-t my-2" style={{ borderColor: 'var(--border)' }} />}
+              {(expanded || mobileOpen) && <p className="text-[10px] font-semibold tracking-wider text-[var(--text-secondary)] px-3 pt-4 pb-1">{item.category}</p>}
+              {!expanded && !mobileOpen && <div className="border-t my-2" style={{ borderColor: 'var(--border)' }} />}
               {item.items.map((subItem, subIndex) => renderLink(subItem, subIndex))}
             </div>
           );
         })}
       </nav>
-      <button onClick={() => setCollapsed(!collapsed)} className="hidden md:flex items-center justify-center py-3 border-t text-[var(--text-secondary)] hover:text-[var(--primary)] transition-colors" style={{ borderColor: 'var(--border)' }}>
-        {collapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+      <button onClick={onPinToggle} className="hidden md:flex items-center justify-center py-3 border-t text-[var(--text-secondary)] hover:text-[var(--primary)] transition-colors" style={{ borderColor: 'var(--border)' }}>
+        {pinned ? <Pin size={18} /> : <PinOff size={18} />}
       </button>
     </div>
   );
@@ -99,7 +108,12 @@ export default function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: bo
   return (
     <>
       {mobileOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={onMobileClose} />}
-      <aside className={`fixed top-32 left-0 h-[calc(100vh-128px)] bg-white border-r transition-all duration-300 z-50 ${mobileOpen ? 'w-60 translate-x-0' : '-translate-x-full'} md:translate-x-0 ${collapsed ? 'md:w-16' : 'md:w-60'}`} style={{ borderColor: 'var(--border)' }}>
+      <aside
+        onMouseEnter={() => onHoverChange(true)}
+        onMouseLeave={() => onHoverChange(false)}
+        className={`fixed top-32 left-0 h-[calc(100vh-128px)] bg-white border-r transition-all duration-300 z-50 ${mobileOpen ? 'w-60 translate-x-0' : '-translate-x-full'} md:translate-x-0 ${expanded ? 'md:w-60' : 'md:w-16'} ${!pinned && hovered ? 'shadow-lg' : ''}`}
+        style={{ borderColor: 'var(--border)' }}
+      >
         {mobileOpen && (
           <button onClick={onMobileClose} className="absolute top-2 right-2 p-1 rounded-md hover:bg-[var(--bg-hover)] md:hidden"><X size={20} style={{ color: 'var(--text-secondary)' }} /></button>
         )}
