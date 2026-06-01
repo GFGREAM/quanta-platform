@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
-import { Action, SEED_ACTIONS } from './data';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Action } from './data';
 
 type Mode = 'macro' | 'detail';
 export type FilterKey = 'hotel' | 'project' | 'area' | 'status' | 'priority' | 'owner';
@@ -9,7 +9,31 @@ export type FilterKey = 'hotel' | 'project' | 'area' | 'status' | 'priority' | '
 // The hook returns the cross-filtered `optionsFor` helper so callers can
 // decide whether to cascade the dropdowns or just show every distinct value.
 export function useActionPlan() {
-  const [actions] = useState<Action[]>(SEED_ACTIONS);
+  const [actions, setActions] = useState<Action[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchActions = useCallback(async (signal: AbortSignal) => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/action-tracker', { signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data: Action[] = await res.json();
+      if (!signal.aborted) setActions(data);
+    } catch (err) {
+      if (!(err instanceof DOMException && err.name === 'AbortError')) {
+        console.error('[useActionPlan] failed to load actions:', err);
+      }
+    } finally {
+      if (!signal.aborted) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchActions(controller.signal);
+    return () => controller.abort();
+  }, [fetchActions]);
+
   const [mode, setMode] = useState<Mode>('macro');
   const [filterHotel, setFilterHotel] = useState('');
   const [filterProject, setFilterProject] = useState('');
@@ -123,6 +147,7 @@ export function useActionPlan() {
     stats,
     detailAction,
     optionsFor,
+    loading,
     clearAll,
   };
 }
