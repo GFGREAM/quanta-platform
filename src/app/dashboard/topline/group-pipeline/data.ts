@@ -57,6 +57,31 @@ export const BUDGET_2026: Record<'RN' | 'ADR' | 'REV', number[]> = {
   REV: [0, 1156668, 1138324, 1171075, 989385, 723791, 294794, 181871, 152675, 177491, 711058, 242283],
 };
 
+// ─── Comparison baselines (My Hotel) ─────────────────────────────────
+// The Budget table can compare on-the-books against any of these baselines.
+// LY (2025 actuals) and Forecast are left blank (all null) for now — the
+// selector works and their rows/variance render empty until the real
+// figures are loaded here.
+export type Baseline = 'Budget' | 'LY' | 'Forecast';
+
+export const BASELINE_LABELS: Record<Baseline, string> = {
+  Budget: 'Budget 2026',
+  LY: 'Last Year',
+  Forecast: 'Forecast',
+};
+
+const BLANK_BASELINE: Record<'RN' | 'ADR' | 'REV', (number | null)[]> = {
+  RN: Array(12).fill(null),
+  ADR: Array(12).fill(null),
+  REV: Array(12).fill(null),
+};
+
+export const BASELINES: Record<Baseline, Record<'RN' | 'ADR' | 'REV', (number | null)[]>> = {
+  Budget: BUDGET_2026,
+  LY: BLANK_BASELINE,
+  Forecast: BLANK_BASELINE,
+};
+
 type V = number | null;
 type V12 = [V,V,V,V,V,V,V,V,V,V,V,V];
 
