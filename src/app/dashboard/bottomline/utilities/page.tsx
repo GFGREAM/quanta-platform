@@ -20,6 +20,16 @@ type RoomMetric = 'POR' | 'PAR';
 
 const UTILITIES_ORDER: Utility[] = ['water', 'electricity', 'gas'];
 
+// Chart series palette — same three blues used everywhere on the board.
+// Each series (Actual / Budget / LY) carries its own color regardless of
+// which utility or sum is being plotted, so the chart always reads with
+// the same three-color key.
+const CHART_SERIES = [
+  { key: 'actual', label: 'Actual', color: '#1e3a8a' }, // blue-900 (navy)
+  { key: 'budget', label: 'Budget', color: '#3b82f6' }, // blue-500
+  { key: 'ly',     label: 'LY',     color: '#93c5fd' }, // blue-300
+] as const;
+
 // Range driven by the View toggle:
 //   MTD → just the selected month
 //   YTD → January through the selected month, inclusive
@@ -111,19 +121,34 @@ export default function UtilitiesPage() {
     return { cost, budget, ly };
   }, [totals]);
 
-  // Chart data — actual $ per month per utility, plus occupancy on the
-  // hidden right axis.
+  // Chart data — per-utility series for the single-utility case + summed
+  // series across the active utilities for the multi-utility case. The
+  // bars rendered below pick which set to read based on how many filters
+  // are on, so re-deriving here keeps both branches symmetrical.
   const chartData = useMemo(() => {
+    const selected = UTILITIES_ORDER.filter((u) => utilitiesOn[u]);
     return MONTHS_SHORT.map((m, i) => {
       const row: Record<string, number | string> = { month: m };
-      for (const u of UTILITIES_ORDER) {
-        row[`${u}_actual`] = UTILITIES[u].costCY[i];
+      let sumActual = 0;
+      let sumBudget = 0;
+      let sumLy = 0;
+      for (const u of selected) {
+        const s = UTILITIES[u];
+        row[`${u}_actual`] = s.costCY[i];
+        row[`${u}_budget`] = s.costBudget[i];
+        row[`${u}_ly`] = s.costLY[i];
+        sumActual += s.costCY[i];
+        sumBudget += s.costBudget[i];
+        sumLy += s.costLY[i];
       }
+      row.sum_actual = sumActual;
+      row.sum_budget = sumBudget;
+      row.sum_ly = sumLy;
       row.occupancy =
         ROOMS_AVAILABLE[i] > 0 ? ROOMS_OCCUPIED[i] / ROOMS_AVAILABLE[i] : 0;
       return row;
     });
-  }, []);
+  }, [utilitiesOn]);
 
   // ─── Export (PNG / PDF) ──────────────────────────────────────
   const exportRef = useRef<HTMLDivElement>(null);
@@ -444,18 +469,35 @@ export default function UtilitiesPage() {
                   labelStyle={{ fontWeight: 600 }}
                 />
                 <RLegend wrapperStyle={{ fontSize: 12 }} />
-                {UTILITIES_ORDER
-                  .filter((u) => utilitiesOn[u])
-                  .map((u) => (
+                {(() => {
+                  const selected = UTILITIES_ORDER.filter((u) => utilitiesOn[u]);
+                  // 1 active → per-utility bars; 2+ → summed bars. Either
+                  // way the bar palette is driven by the series, so the
+                  // three blues stay consistent across all filter states.
+                  if (selected.length === 1) {
+                    const u = selected[0];
+                    return CHART_SERIES.map((s) => (
+                      <Bar
+                        key={`${u}_${s.key}`}
+                        yAxisId="left"
+                        dataKey={`${u}_${s.key}`}
+                        name={`${UTILITY_META[u].label}${s.key === 'actual' ? '' : ` · ${s.label}`}`}
+                        fill={s.color}
+                        radius={[3, 3, 0, 0]}
+                      />
+                    ));
+                  }
+                  return CHART_SERIES.map((s) => (
                     <Bar
-                      key={`${u}_actual`}
+                      key={`sum_${s.key}`}
                       yAxisId="left"
-                      dataKey={`${u}_actual`}
-                      name={UTILITY_META[u].label}
-                      fill={UTILITY_META[u].color}
+                      dataKey={`sum_${s.key}`}
+                      name={`Total${s.key === 'actual' ? '' : ` · ${s.label}`}`}
+                      fill={s.color}
                       radius={[3, 3, 0, 0]}
                     />
-                  ))}
+                  ));
+                })()}
                 <Line
                   yAxisId="right"
                   type="monotone"

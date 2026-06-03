@@ -76,10 +76,12 @@ export const UTILITIES: Record<Utility, UtilitySeries> = {
   gas: GAS,
 };
 
-// Azul aqua → azul marino → azul verde. Spread across lightness + hue so
-// the three remain distinct on the chart and on the KPI accent bars.
+// Single blue palette shared with the Total / Total·Budget / Total·LY
+// sum bars: navy → mid blue → light blue. Same three values everywhere
+// (KPI accents, per-utility bars, sum bars) so the dashboard reads as
+// one palette across every filter.
 export const UTILITY_META = {
-  water:       { label: 'Agua',        unit: 'm³',  color: '#06b6d4' }, // cyan-500 (azul aqua)
-  electricity: { label: 'Electricidad', unit: 'kWh', color: '#1e3a8a' }, // blue-900 (azul marino)
-  gas:         { label: 'Gas',         unit: 'L',   color: '#0d9488' }, // teal-600 (azul verde)
+  water:       { label: 'Agua',        unit: 'm³',  color: '#1e3a8a' }, // blue-900 (navy)
+  electricity: { label: 'Electricidad', unit: 'kWh', color: '#3b82f6' }, // blue-500
+  gas:         { label: 'Gas',         unit: 'L',   color: '#93c5fd' }, // blue-300
 } as const satisfies Record<Utility, { label: string; unit: string; color: string }>;
