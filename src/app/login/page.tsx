@@ -3,6 +3,8 @@ import Image from 'next/image';
 import { Mail } from 'lucide-react';
 import { signIn } from 'next-auth/react';
 
+const BYPASS_ENABLED = process.env.NEXT_PUBLIC_AUTH_BYPASS_LOCAL === 'true';
+
 export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--background)' }}>
@@ -18,6 +20,15 @@ export default function LoginPage() {
           <Mail size={20} />
           Iniciar sesion con correo corporativo
         </button>
+        {BYPASS_ENABLED && (
+          <button
+            onClick={() => signIn('dev-bypass', { callbackUrl: '/dashboard' })}
+            className="w-full flex items-center justify-center gap-3 px-4 py-3.5 mt-3 rounded-lg font-medium text-sm border-2 border-dashed transition-all hover:opacity-90"
+            style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+          >
+            Entrar como Dev (bypass local)
+          </button>
+        )}
         <p className="text-xs mt-10 italic tracking-wide" style={{ color: 'var(--text-secondary)' }}>by GFG AM</p>
       </div>
     </div>
