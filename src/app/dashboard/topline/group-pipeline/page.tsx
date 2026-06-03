@@ -1,19 +1,21 @@
 'use client';
-import { useState, useMemo, useRef } from 'react';
-import { Star, RefreshCw, Maximize2, ChevronRight, ChevronDown, Download } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { Star, RefreshCw, Maximize2, ChevronRight, ChevronDown, Download, Info } from 'lucide-react';
 import {
-  SNAPSHOTS,
-  SNAPSHOT_DATES,
   METRICS,
   STATUSES,
   LEVELS,
   MONTHS,
-  PROPERTY,
-  INVENTORY_2026,
-  BASELINES,
+  PROPERTIES,
   BASELINE_LABELS,
   HOTEL_METRICS,
   D360_METRICS,
+  getProperty,
+  getSnapshots,
+  getSnapshotDates,
+  getYears,
+  getInventory,
+  getBaselines,
   getSeries,
   type Snapshot,
   type Metric,
@@ -63,30 +65,62 @@ function statusLabel(status: Status): string {
 }
 
 // "Snap-May-18" → "May 18". Year is dropped to keep selectors and headers compact.
-function snapLabel(s: Snapshot): string {
-  const [, mm, dd] = SNAPSHOT_DATES[s].split('-');
+// Takes the property's snapshot→date map (snapshot sets differ per property).
+function snapLabel(dates: Record<string, string>, s: Snapshot): string {
+  const d = dates[s];
+  if (!d) return s;
+  const [, mm, dd] = d.split('-');
   return `${MONTHS[Number(mm) - 1]} ${Number(dd)}`;
 }
 
 // Calendar month index (0–11) of the selected Week — the YTD / ROY boundary:
 // YTD = months 0..idx (inclusive, "Year To Date"), ROY = months idx+1..11
 // ("Rest Of Year"). Same index used for the Prospect growth elapsed/future split.
-function weekMonthIndex(s: Snapshot): number {
-  return Number(SNAPSHOT_DATES[s].split('-')[1]) - 1;
+function weekMonthIndex(dates: Record<string, string>, s: Snapshot): number {
+  const d = dates[s];
+  return d ? Number(d.split('-')[1]) - 1 : 0;
 }
 
 export default function GroupPipelinePage() {
+  const [propertyCode, setPropertyCode] = useState<string>(PROPERTIES[0].code);
+  const [year, setYear] = useState<number>(getYears(PROPERTIES[0].code)[0]);
   const [visual, setVisual] = useState<Visual>('V1');
   const [view, setView] = useState<'Summary' | 'Expanded'>('Summary');
-  const [snapshot, setSnapshot] = useState<Snapshot>('Snap-May-18');
+  // Snapshot defaults seeded from the initial property: latest week / first week.
+  const [snapshot, setSnapshot] = useState<Snapshot>(() => {
+    const s = getSnapshots(PROPERTIES[0].code);
+    return s[s.length - 1];
+  });
+  const [fromSnap, setFromSnap] = useState<Snapshot>(() => getSnapshots(PROPERTIES[0].code)[0]);
   const [metric, setMetric] = useState<Metric>('RN');
   const [baseline, setBaseline] = useState<Baseline>('Budget');
   const [weighted, setWeighted] = useState(true);
-  const [fromSnap, setFromSnap] = useState<Snapshot>(SNAPSHOTS[0]);
   // Conversion "To" is always the Matrix snapshot — same point-in-time as what
   // the rest of the page is showing — so it doesn't need its own control.
   const toSnap = snapshot;
   const [isFavorite, setIsFavorite] = useState(false);
+
+  // Property-scoped lookups derived from the selected property/year.
+  const prop = useMemo(() => getProperty(propertyCode), [propertyCode]);
+  const snapshots = useMemo(() => getSnapshots(propertyCode), [propertyCode]);
+  const snapDates = useMemo(() => getSnapshotDates(propertyCode), [propertyCode]);
+  const inventory = useMemo(() => getInventory(propertyCode), [propertyCode]);
+  const years = useMemo(() => getYears(propertyCode), [propertyCode]);
+  const baselines = useMemo(() => getBaselines(propertyCode, year), [propertyCode, year]);
+  const series = useCallback(
+    (v: Visual, snap: Snapshot, status: Status, level: Level, m: Metric) =>
+      getSeries(propertyCode, year, v, snap, status, level, m),
+    [propertyCode, year]
+  );
+
+  // When the property changes, reset week/from-week to its snapshots and the year
+  // to its first available year (snapshot sets and years differ per property).
+  useEffect(() => {
+    const s = getSnapshots(propertyCode);
+    setSnapshot(s[s.length - 1]);
+    setFromSnap(s[0]);
+    setYear(getYears(propertyCode)[0]);
+  }, [propertyCode]);
 
   // Available metrics depend on which sources are mixed in current visual.
   // To keep things consistent, always show all 6 metrics; cells without data show "—".
@@ -94,51 +128,99 @@ export default function GroupPipelinePage() {
 
   // Build all 9 cells once per render (3 statuses × 3 levels), with 12-month series each.
   // Weighted mode rescales CS/Market RN to MyHotel inventory:
-  //   weighted CS/Market RN[m] = INVENTORY_2026[m] × OCC_level_status[m]
+  //   weighted CS/Market RN[m] = inventory[m] × OCC_level_status[m]
   // Only applies to RN metric and Tentative/Definite (Prospect doesn't have D360 OCC).
   // Memoized so it stays referentially stable as a useMemo dep below.
   const visibleLevels = useMemo<Level[]>(() => (view === 'Summary' ? ['My Hotel'] : LEVELS), [view]);
 
+  // Prospect / Hotel reference series for the growth section, all metric-aware:
+  //   • prospectBaseMetric — per-month average of the selected metric across the
+  //     period's base weeks (From→Week, excluding the Week, weeks that reported a
+  //     prospect i.e. RN > 0). Used to backfill the elapsed/closed months of the
+  //     "Prospect All" matrix row (replacing the old peak backfill).
+  //   • prospectMax / hotelMax — per-month PEAK of the selected metric across ALL
+  //     weeks (the most a month ever held). Shown as their own rows above the base
+  //     rows, for every month (elapsed and future). Hotel = Tentative + Definite
+  //     My Hotel (combined the same way as the matrix's "Tentative + Definite").
+  const prospectExtras = useMemo(() => {
+    const fromIdx = snapshots.indexOf(fromSnap);
+    const toIdx = snapshots.indexOf(toSnap);
+    const period = snapshots.slice(Math.min(fromIdx, toIdx), Math.max(fromIdx, toIdx) + 1);
+    const baseWeeks = period.filter((s) => s !== toSnap);
+    const weeksForBase = baseWeeks.length > 0 ? baseWeeks : period;
+
+    const prospectBaseMetric = MONTHS.map((_, i) => {
+      const reported = weeksForBase
+        .map((s) => ({
+          rn: series(visual, s, 'Prospect', 'My Hotel', 'RN')[i] ?? 0,
+          m: series(visual, s, 'Prospect', 'My Hotel', metric)[i],
+        }))
+        .filter((x) => x.rn > 0 && x.m !== null && x.m !== undefined)
+        .map((x) => x.m as number);
+      return reported.length > 0 ? reported.reduce((a, b) => a + b, 0) / reported.length : null;
+    });
+
+    const prospectMax = MONTHS.map((_, i) => {
+      const vals = snapshots
+        .map((s) => ({
+          rn: series(visual, s, 'Prospect', 'My Hotel', 'RN')[i] ?? 0,
+          m: series(visual, s, 'Prospect', 'My Hotel', metric)[i],
+        }))
+        .filter((x) => x.rn > 0 && x.m !== null && x.m !== undefined)
+        .map((x) => x.m as number);
+      return vals.length > 0 ? Math.max(...vals) : null;
+    });
+
+    const hotelMax = MONTHS.map((_, i) => {
+      const vals = snapshots
+        .map((s) => {
+          const tRN = series(visual, s, 'Tentative', 'My Hotel', 'RN')[i] ?? 0;
+          const dRN = series(visual, s, 'Definite', 'My Hotel', 'RN')[i] ?? 0;
+          const tM = series(visual, s, 'Tentative', 'My Hotel', metric)[i];
+          const dM = series(visual, s, 'Definite', 'My Hotel', metric)[i];
+          const combinedM = tM === null && dM === null ? null : (tM ?? 0) + (dM ?? 0);
+          return { rn: tRN + dRN, m: combinedM };
+        })
+        .filter((x) => x.rn > 0 && x.m !== null && x.m !== undefined)
+        .map((x) => x.m as number);
+      return vals.length > 0 ? Math.max(...vals) : null;
+    });
+
+    return { prospectBaseMetric, prospectMax, hotelMax };
+  }, [visual, metric, fromSnap, toSnap, snapshots, series]);
+
   const rows = useMemo(() => {
     return STATUSES.flatMap((status) =>
       visibleLevels.map((level) => {
-        let series = getSeries(visual, snapshot, status, level, metric);
+        let cells = series(visual, snapshot, status, level, metric);
         if (
           weighted &&
           metric === 'RN' &&
           (level === 'Comp Set' || level === 'Market') &&
           status !== 'Prospect'
         ) {
-          const occ = getSeries(visual, snapshot, status, level, 'OCC');
-          series = INVENTORY_2026.map((inv, i) => {
+          const occ = series(visual, snapshot, status, level, 'OCC');
+          cells = inventory.map((inv, i) => {
             const o = occ[i];
             return o === null || o === undefined ? null : inv * o;
-          }) as typeof series;
+          }) as typeof cells;
         }
-        // Prospect All: closed months (where My Hotel reports no Prospect at the
-        // Week — RN === 0 because the month already passed) carry no data at the
-        // Week. We backfill them with a fixed "close" figure for the month: the
-        // MAX (peak) of the selected metric across ALL weeks that reported it
-        // (RN > 0) — the most demand the month ever held, i.e. the most that could
-        // have converted. Independent of the From/Week selectors. Open months keep
-        // the Week's live data.
+        // Prospect All: closed/elapsed months (where My Hotel reports no Prospect at
+        // the Week — RN === 0 because the month already passed) carry no live data at
+        // the Week. We backfill them with the period average (Prospect base) for the
+        // month. The peak ("max") figure is no longer shown here — it lives in the
+        // dedicated "Prospect max" row of the growth section. Open months keep the
+        // Week's live data.
         if (status === 'Prospect' && level === 'My Hotel') {
-          const weekRN = getSeries(visual, snapshot, 'Prospect', 'My Hotel', 'RN');
-          const closeSeries = MONTHS.map((_, i) => {
-            const vals = SNAPSHOTS.map((s) => ({
-              rn: getSeries(visual, s, 'Prospect', 'My Hotel', 'RN')[i] ?? 0,
-              m: getSeries(visual, s, 'Prospect', 'My Hotel', metric)[i],
-            }))
-              .filter((x) => x.rn > 0 && x.m !== null && x.m !== undefined)
-              .map((x) => x.m as number);
-            return vals.length > 0 ? Math.max(...vals) : null;
-          });
-          series = series.map((v, i) => ((weekRN[i] ?? 0) === 0 ? closeSeries[i] : v)) as typeof series;
+          const weekRN = series(visual, snapshot, 'Prospect', 'My Hotel', 'RN');
+          cells = cells.map((v, i) =>
+            (weekRN[i] ?? 0) === 0 ? prospectExtras.prospectBaseMetric[i] : v
+          ) as typeof cells;
         }
-        return { status, level, series };
+        return { status, level, series: cells };
       })
     );
-  }, [visual, snapshot, metric, weighted, visibleLevels]);
+  }, [visual, snapshot, metric, weighted, visibleLevels, series, inventory, snapshots, prospectExtras]);
 
   // Combined row: Tentative + Definite per level (per month).
   // Null cells are treated as 0 when at least one of the two has a value;
@@ -174,9 +256,9 @@ export default function GroupPipelinePage() {
   //   CS/Market numerator: INV × max(0, Δ(OCC_Tent + OCC_Def)_level)  (Weighted ON)
   const conversion = useMemo(() => {
     // Weeks that fall inside the selected period, regardless of selector order.
-    const fromIdx = SNAPSHOTS.indexOf(fromSnap);
-    const toIdx = SNAPSHOTS.indexOf(toSnap);
-    const periodSnaps = SNAPSHOTS.slice(Math.min(fromIdx, toIdx), Math.max(fromIdx, toIdx) + 1);
+    const fromIdx = snapshots.indexOf(fromSnap);
+    const toIdx = snapshots.indexOf(toSnap);
+    const periodSnaps = snapshots.slice(Math.min(fromIdx, toIdx), Math.max(fromIdx, toIdx) + 1);
     // Drop the Week itself; keep the weeks before it as the convertible base.
     const baseWeeks = periodSnaps.filter((s) => s !== toSnap);
     const weeksForBase = baseWeeks.length > 0 ? baseWeeks : periodSnaps;
@@ -186,7 +268,7 @@ export default function GroupPipelinePage() {
     // would divide across 5 weeks instead of the 2 that really had Feb prospects).
     const prospectBase = MONTHS.map((_, i) => {
       const reported = weeksForBase
-        .map((s) => getSeries(visual, s, 'Prospect', 'My Hotel', 'RN')[i] ?? 0)
+        .map((s) => series(visual, s, 'Prospect', 'My Hotel', 'RN')[i] ?? 0)
         .filter((v) => v > 0);
       return reported.length > 0 ? reported.reduce((a, b) => a + b, 0) / reported.length : 0;
     });
@@ -197,8 +279,8 @@ export default function GroupPipelinePage() {
     const hotelBase = MONTHS.map((_, i) => {
       const reported = weeksForBase
         .map((s) => {
-          const t = getSeries(visual, s, 'Tentative', 'My Hotel', 'RN')[i] ?? 0;
-          const d = getSeries(visual, s, 'Definite', 'My Hotel', 'RN')[i] ?? 0;
+          const t = series(visual, s, 'Tentative', 'My Hotel', 'RN')[i] ?? 0;
+          const d = series(visual, s, 'Definite', 'My Hotel', 'RN')[i] ?? 0;
           return t + d;
         })
         .filter((v) => v > 0);
@@ -212,9 +294,9 @@ export default function GroupPipelinePage() {
       MONTHS.map((_, i) => {
         const reported = weeksForBase
           .map((s) => {
-            const ot = getSeries(visual, s, 'Tentative', lv, 'OCC')[i] ?? 0;
-            const od = getSeries(visual, s, 'Definite', lv, 'OCC')[i] ?? 0;
-            return INVENTORY_2026[i] * (ot + od);
+            const ot = series(visual, s, 'Tentative', lv, 'OCC')[i] ?? 0;
+            const od = series(visual, s, 'Definite', lv, 'OCC')[i] ?? 0;
+            return inventory[i] * (ot + od);
           })
           .filter((v) => v > 0);
         return reported.length > 0 ? reported.reduce((a, b) => a + b, 0) / reported.length : 0;
@@ -225,10 +307,10 @@ export default function GroupPipelinePage() {
     const out: { level: Level; ratios: (number | null)[]; deltaRN: number[] }[] = [];
 
     // MyHotel — Δ(Tent + Def) in actual RN.
-    const myTentFrom = getSeries(visual, fromSnap, 'Tentative', 'My Hotel', 'RN').map((v) => v ?? 0);
-    const myDefFrom = getSeries(visual, fromSnap, 'Definite', 'My Hotel', 'RN').map((v) => v ?? 0);
-    const myTentTo = getSeries(visual, toSnap, 'Tentative', 'My Hotel', 'RN').map((v) => v ?? 0);
-    const myDefTo = getSeries(visual, toSnap, 'Definite', 'My Hotel', 'RN').map((v) => v ?? 0);
+    const myTentFrom = series(visual, fromSnap, 'Tentative', 'My Hotel', 'RN').map((v) => v ?? 0);
+    const myDefFrom = series(visual, fromSnap, 'Definite', 'My Hotel', 'RN').map((v) => v ?? 0);
+    const myTentTo = series(visual, toSnap, 'Tentative', 'My Hotel', 'RN').map((v) => v ?? 0);
+    const myDefTo = series(visual, toSnap, 'Definite', 'My Hotel', 'RN').map((v) => v ?? 0);
     const myDelta = myTentFrom.map((_, i) =>
       Math.max(0, myTentTo[i] + myDefTo[i] - (myTentFrom[i] + myDefFrom[i]))
     );
@@ -241,11 +323,11 @@ export default function GroupPipelinePage() {
     // CS / Market — only under Weighted ON and the Expanded view.
     if (weighted && view === 'Expanded') {
       for (const lv of ['Comp Set', 'Market'] as Level[]) {
-        const occT_from = getSeries(visual, fromSnap, 'Tentative', lv, 'OCC').map((v) => v ?? 0);
-        const occD_from = getSeries(visual, fromSnap, 'Definite', lv, 'OCC').map((v) => v ?? 0);
-        const occT_to = getSeries(visual, toSnap, 'Tentative', lv, 'OCC').map((v) => v ?? 0);
-        const occD_to = getSeries(visual, toSnap, 'Definite', lv, 'OCC').map((v) => v ?? 0);
-        const deltaRN = INVENTORY_2026.map((inv, i) =>
+        const occT_from = series(visual, fromSnap, 'Tentative', lv, 'OCC').map((v) => v ?? 0);
+        const occD_from = series(visual, fromSnap, 'Definite', lv, 'OCC').map((v) => v ?? 0);
+        const occT_to = series(visual, toSnap, 'Tentative', lv, 'OCC').map((v) => v ?? 0);
+        const occD_to = series(visual, toSnap, 'Definite', lv, 'OCC').map((v) => v ?? 0);
+        const deltaRN = inventory.map((inv, i) =>
           inv * Math.max(0, occT_to[i] + occD_to[i] - (occT_from[i] + occD_from[i]))
         );
         const ratios = prospectBase.map((p, i) => (p > 0 ? deltaRN[i] / p : null));
@@ -253,7 +335,7 @@ export default function GroupPipelinePage() {
       }
     }
     return { rows: out, prospectBase, hotelBase, compSetBase, marketBase, baseWeeks: weeksForBase };
-  }, [visual, fromSnap, toSnap, weighted, view]);
+  }, [visual, fromSnap, toSnap, weighted, view, series, inventory, snapshots]);
 
   // Pick-up between fromSnap and toSnap — raw Δ (can be negative if a bucket shrunk).
   // Prospect is shown as Δ MyHotel Prospect RN; MyHotel/CS/Market are Δ(Tent+Def) RN.
@@ -261,7 +343,7 @@ export default function GroupPipelinePage() {
   // to MyHotel-scale figures, same rule as the Conversion ratios).
   const pickUp = useMemo(() => {
     const seriesFor = (s: Snapshot, st: Status, lv: Level, m: Metric) =>
-      getSeries(visual, s, st, lv, m).map((v) => v ?? 0);
+      series(visual, s, st, lv, m).map((v) => v ?? 0);
 
     const pFrom = seriesFor(fromSnap, 'Prospect', 'My Hotel', 'RN');
     const pTo = seriesFor(toSnap, 'Prospect', 'My Hotel', 'RN');
@@ -284,7 +366,7 @@ export default function GroupPipelinePage() {
       const oDFrom = seriesFor(fromSnap, 'Definite', lv, 'OCC');
       const oTTo = seriesFor(toSnap, 'Tentative', lv, 'OCC');
       const oDTo = seriesFor(toSnap, 'Definite', lv, 'OCC');
-      return INVENTORY_2026.map((inv, i) => inv * (oTTo[i] + oDTo[i] - oTFrom[i] - oDFrom[i]));
+      return inventory.map((inv, i) => inv * (oTTo[i] + oDTo[i] - oTFrom[i] - oDFrom[i]));
     };
 
     const rows: { label: string; series: number[] }[] = [
@@ -296,7 +378,7 @@ export default function GroupPipelinePage() {
       rows.push({ label: 'Market', series: tdDeltaWeighted('Market') });
     }
     return rows;
-  }, [visual, fromSnap, toSnap, weighted, view]);
+  }, [visual, fromSnap, toSnap, weighted, view, series, inventory]);
 
   // My Hotel actual (on-the-books = Tentative + Definite) vs the selected baseline
   // (Budget / LY / Forecast). Always reads the Hotel source (V1 My Hotel) so REV is
@@ -305,11 +387,11 @@ export default function GroupPipelinePage() {
   // (blended for the Total). Baselines left blank (all null) render empty rows and
   // blank variance — nothing is invented from a missing baseline.
   const budgetComparison = useMemo(() => {
-    const base = BASELINES[baseline];
-    const tentRN = getSeries('V1', snapshot, 'Tentative', 'My Hotel', 'RN');
-    const defRN = getSeries('V1', snapshot, 'Definite', 'My Hotel', 'RN');
-    const tentREV = getSeries('V1', snapshot, 'Tentative', 'My Hotel', 'REV');
-    const defREV = getSeries('V1', snapshot, 'Definite', 'My Hotel', 'REV');
+    const base = baselines[baseline];
+    const tentRN = series('V1', snapshot, 'Tentative', 'My Hotel', 'RN');
+    const defRN = series('V1', snapshot, 'Definite', 'My Hotel', 'RN');
+    const tentREV = series('V1', snapshot, 'Tentative', 'My Hotel', 'REV');
+    const defREV = series('V1', snapshot, 'Definite', 'My Hotel', 'REV');
 
     const bookedRN = MONTHS.map((_, i) => (tentRN[i] ?? 0) + (defRN[i] ?? 0));
     const bookedREV = MONTHS.map((_, i) => (tentREV[i] ?? 0) + (defREV[i] ?? 0));
@@ -323,7 +405,7 @@ export default function GroupPipelinePage() {
       return vals.length ? vals.reduce((s, v) => s + v, 0) : null;
     };
     // YTD / ROY boundary at the selected Week's month.
-    const splitIdx = weekMonthIndex(snapshot);
+    const splitIdx = weekMonthIndex(snapDates, snapshot);
 
     // Aggregate actual / baseline / variance over a month range [lo, hi). ADR isn't
     // additive, so it's blended as REV ÷ RN over the range; RN/REV simply sum.
@@ -377,7 +459,7 @@ export default function GroupPipelinePage() {
     };
 
     return [build('RN', bookedRN), build('ADR', bookedADR), build('REV', bookedREV)];
-  }, [snapshot, baseline]);
+  }, [snapshot, baseline, series, baselines, snapDates]);
 
   // ─── Export (both tables → PNG / PDF) ───────────────────────────────
   const exportRef = useRef<HTMLDivElement>(null);
@@ -475,7 +557,7 @@ export default function GroupPipelinePage() {
         <div>
           <h1 className="text-xl font-semibold" style={{ color: 'var(--primary)' }}>Group Pipeline</h1>
           <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-            {PROPERTY.name} <span className="opacity-60">· Amadeus {PROPERTY.id}</span>
+            {prop.name}{prop.amadeusId ? <span className="opacity-60"> · Amadeus {prop.amadeusId}</span> : null}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -527,6 +609,11 @@ export default function GroupPipelinePage() {
         className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border bg-white px-3 py-2.5 text-sm"
         style={{ borderColor: 'var(--border)' }}
       >
+        <ControlSelect label="Property" value={propertyCode} onChange={(v) => setPropertyCode(v)}>
+          {PROPERTIES.map((p) => (
+            <option key={p.code} value={p.code}>{p.name}</option>
+          ))}
+        </ControlSelect>
         <SegToggle
           label=""
           value={view}
@@ -534,20 +621,22 @@ export default function GroupPipelinePage() {
           options={['Summary', 'Expanded']}
         />
         <ControlSelect label="Week" value={snapshot} onChange={(v) => setSnapshot(v as Snapshot)}>
-          {SNAPSHOTS.map((s) => (
-            <option key={s} value={s}>{snapLabel(s)}</option>
+          {snapshots.map((s) => (
+            <option key={s} value={s}>{snapLabel(snapDates, s)}</option>
           ))}
         </ControlSelect>
         <ControlSelect label="From Week" value={fromSnap} onChange={(v) => setFromSnap(v as Snapshot)}>
-          {SNAPSHOTS.map((s) => <option key={s} value={s}>{snapLabel(s)}</option>)}
+          {snapshots.map((s) => <option key={s} value={s}>{snapLabel(snapDates, s)}</option>)}
         </ControlSelect>
         <ControlSelect label="Metric" value={metric} onChange={(v) => setMetric(v as Metric)}>
           {visibleMetrics.map((m) => (
             <option key={m} value={m}>{m}</option>
           ))}
         </ControlSelect>
-        <ControlSelect label="Year" value="2026" onChange={() => {}}>
-          <option value="2026">2026</option>
+        <ControlSelect label="Year" value={String(year)} onChange={(v) => setYear(Number(v))}>
+          {years.map((y) => (
+            <option key={y} value={y}>{y}</option>
+          ))}
         </ControlSelect>
         <button
           onClick={() => setWeighted(!weighted)}
@@ -573,9 +662,9 @@ export default function GroupPipelinePage() {
         {/* Export caption — gives the downloaded image/PDF standalone context */}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1 pb-2 text-[11px]" style={{ color: 'var(--text-secondary)' }}>
           <span className="font-semibold" style={{ color: 'var(--primary)' }}>Group Pipeline</span>
-          <span className="opacity-50">·</span><span>{PROPERTY.name}</span>
+          <span className="opacity-50">·</span><span>{prop.name}</span>
           <span className="opacity-50">·</span><span>{visualLabel}</span>
-          <span className="opacity-50">·</span><span>Week {snapLabel(snapshot)}</span>
+          <span className="opacity-50">·</span><span>Week {snapLabel(snapDates, snapshot)}</span>
           <span className="opacity-50">·</span><span>Metric {metric}{weighted && metric === 'RN' ? ' · Weighted (INV×OCC)' : ''}</span>
         </div>
 
@@ -618,12 +707,15 @@ export default function GroupPipelinePage() {
                     : rows.filter((r) => r.status === status)
                 }
                 metric={metric}
-                splitIdx={weekMonthIndex(snapshot)}
+                splitIdx={weekMonthIndex(snapDates, snapshot)}
                 isLast={false}
               />
             ))}
-            <CombinedGroup rows={combinedRows} metric={metric} splitIdx={weekMonthIndex(snapshot)} />
+            <CombinedGroup rows={combinedRows} metric={metric} splitIdx={weekMonthIndex(snapDates, snapshot)} />
             <ConversionGroup
+              prospectMax={prospectExtras.prospectMax}
+              hotelMax={prospectExtras.hotelMax}
+              metric={metric}
               prospectBase={conversion.prospectBase}
               hotelBase={conversion.hotelBase}
               prospectAll={rows.find((r) => r.status === 'Prospect' && r.level === 'My Hotel')?.series ?? []}
@@ -639,14 +731,16 @@ export default function GroupPipelinePage() {
               baseWeeks={conversion.baseWeeks}
               fromSnap={fromSnap}
               toSnap={toSnap}
+              snapDates={snapDates}
             />
-            <PickUpGroup rows={pickUp} fromSnap={fromSnap} toSnap={toSnap} splitIdx={weekMonthIndex(snapshot)} />
+            <PickUpGroup rows={pickUp} fromSnap={fromSnap} toSnap={toSnap} splitIdx={weekMonthIndex(snapDates, snapshot)} snapDates={snapDates} />
             <ConversionLevelsGroup
               rows={conversion.rows}
               prospectBase={conversion.prospectBase}
-              splitIdx={weekMonthIndex(snapshot)}
+              splitIdx={weekMonthIndex(snapDates, snapshot)}
               fromSnap={fromSnap}
               toSnap={toSnap}
+              snapDates={snapDates}
             />
           </tbody>
         </table>
@@ -659,6 +753,7 @@ export default function GroupPipelinePage() {
           metrics={budgetComparison}
           baseline={baseline}
           onBaselineChange={setBaseline}
+          snapDates={snapDates}
         />
       </div>
       </div>
@@ -681,7 +776,7 @@ export default function GroupPipelinePage() {
           <p className="mt-1">Note: <b>REV</b> is only available in the Hotel source. CS/Market in Tentative/Definite will be empty under Visual 1, and everything under Visual 2 except the Prospect row.</p>
         )}
         {metric === 'OCC' && (
-          <p className="mt-1">Note: <b>OCC</b>. In <b>Visual 1</b>, <i>My Hotel</i> OCC is computed as <code>RN ÷ inventory</code> ({PROPERTY.rooms} rooms × days in month), because the hotel report doesn&apos;t report OCC; <i>Comp Set</i> and <i>Market</i> come from D360. In <b>Visual 2</b>, My Hotel uses the OCC reported by D360. In <b>Prospect</b>, only My Hotel shows OCC (derived); Comp Set/Market stay empty.</p>
+          <p className="mt-1">Note: <b>OCC</b>. In <b>Visual 1</b>, <i>My Hotel</i> OCC is computed as <code>RN ÷ inventory</code> ({prop.rooms} rooms × days in month), because the hotel report doesn&apos;t report OCC; <i>Comp Set</i> and <i>Market</i> come from D360. In <b>Visual 2</b>, My Hotel uses the OCC reported by D360. In <b>Prospect</b>, only My Hotel shows OCC (derived); Comp Set/Market stay empty.</p>
         )}
         {metric === 'RevPAR' && (
           <p className="mt-1">Note: <b>RevPAR</b> is only available in the D360 source. The Prospect row will be empty.</p>
@@ -690,7 +785,7 @@ export default function GroupPipelinePage() {
           <p className="mt-1">Note: <b>BKGS</b> is only available in the Hotel source and only in Snap-Feb and Snap-Mar.</p>
         )}
         {weighted && metric === 'RN' && (
-          <p className="mt-1">Note: <b>Weighted</b>: CS/Market RN rescaled to MyHotel inventory ({PROPERTY.rooms} rooms) as <code>OCC × INV</code>.</p>
+          <p className="mt-1">Note: <b>Weighted</b>: CS/Market RN rescaled to MyHotel inventory ({prop.rooms} rooms) as <code>OCC × INV</code>.</p>
         )}
       </div>
 
@@ -703,6 +798,9 @@ export default function GroupPipelinePage() {
 // per level, an overall % in the aggregate column, then the supporting RN rows
 // (Prospect base = denominator, Δ(Tent+Def) = numerator).
 function ConversionGroup({
+  prospectMax,
+  hotelMax,
+  metric,
   prospectBase,
   hotelBase,
   prospectAll,
@@ -711,7 +809,11 @@ function ConversionGroup({
   baseWeeks,
   fromSnap,
   toSnap,
+  snapDates,
 }: {
+  prospectMax: (number | null)[];
+  hotelMax: (number | null)[];
+  metric: Metric;
   prospectBase: number[];
   hotelBase: number[];
   prospectAll: (number | null)[];
@@ -720,12 +822,16 @@ function ConversionGroup({
   baseWeeks: Snapshot[];
   fromSnap: Snapshot;
   toSnap: Snapshot;
+  snapDates: Record<string, string>;
 }) {
   const sumBase = prospectBase.reduce((a, b) => a + b, 0);
   const sumHotel = hotelBase.reduce((a, b) => a + b, 0);
   // YTD / ROY boundary (same Week month index that splits the Prospect growth).
-  const splitIdx = weekMonthIndex(toSnap);
+  const splitIdx = weekMonthIndex(snapDates, toSnap);
   const sumRange = (arr: number[], lo: number, hi: number) => arr.slice(lo, hi).reduce((a, b) => a + b, 0);
+  // Same range sum but null-tolerant, for the metric-aware max rows.
+  const sumRangeN = (arr: (number | null)[], lo: number, hi: number) =>
+    arr.slice(lo, hi).reduce<number>((a, b) => a + (b ?? 0), 0);
   // Growth over a month range — (ΣAll − Σbase) / Σbase on the slice (the close/future
   // formula used for the FY Total), applied to YTD and ROY columns.
   const growthRange = (all: (number | null)[], base: number[], lo: number, hi: number) => {
@@ -733,43 +839,28 @@ function ConversionGroup({
     const sBase = base.slice(lo, hi).reduce((s, v) => s + v, 0);
     return sBase > 0 ? (sAll - sBase) / sBase : null;
   };
-  // Prospect YTD covers the elapsed months, whose per-month cells use the elapsed
-  // reference (base − All) / All (All as denominator). The YTD aggregate must follow
-  // the same direction — unlike ROY and the FY Total, which use the future formula.
-  const prospectElapsedRange = (lo: number, hi: number) => {
-    const sAll = prospectAll.slice(lo, hi).reduce<number>((s, v) => s + (v ?? 0), 0);
-    const sBase = prospectBase.slice(lo, hi).reduce((s, v) => s + v, 0);
-    return sAll > 0 ? (sBase - sAll) / sAll : null;
-  };
-
-  // Prospect: the formula switches per month around the selected Week. The Week's own
-  // month index splits elapsed from future months:
-  //   • Elapsed months (index ≤ Week's month, e.g. Jan–May at a May Week): the
-  //     current Prospect All rules as the reference → (base − All) / All.
-  //   • Future months (index > Week's month, e.g. Jun–Dec): the average rules as the
-  //     reference → (All − base) / base.
-  // The Total blends both: each month contributes its own signed change over its own
-  // reference, so the forward months aren't distorted by the elapsed ones.
-  const prospectGrowth = (() => {
-    const weekMonthIdx = Number(SNAPSHOT_DATES[toSnap].split('-')[1]) - 1;
-    const ratios = prospectBase.map((b, i) => {
-      const a = prospectAll[i] ?? 0;
-      if (i <= weekMonthIdx) {
-        // Elapsed → Prospect All rules → (base − All) / All
-        if (a === 0) return null;
-        return (b - a) / a;
-      }
-      // Future → average rules → (All − base) / base
-      if (!b) return null;
-      return (a - b) / b;
+  // Growth vs the per-month PEAK (max across all weeks): (X − Max) / Max for every
+  // month, where X is the matrix value (Prospect All / Tentative + Definite). Uniform
+  // — no elapsed/future split. Since Max is the ceiling, X ≤ Max, so this reads ≤ 0:
+  // how far below its peak the value currently sits. YTD / ROY / Total all use the
+  // same (ΣX − ΣMax) / ΣMax over their range, so they reconcile cleanly.
+  const growthVsMax = (all: (number | null)[], max: (number | null)[]) => {
+    const ratios = max.map((mx, i) => {
+      const a = all[i];
+      if (mx === null || mx === 0 || a === null || a === undefined) return null;
+      return (a - mx) / mx;
     });
-    // FY Total uses the future formula uniformly — (ΣAll − Σbase) / Σbase — so the
-    // Total column reads consistently with Hotel / Comp Set / Market.
-    const sAll = prospectAll.reduce<number>((s, v) => s + (v ?? 0), 0);
-    const sBase = prospectBase.reduce((s, v) => s + v, 0);
-    const total = sBase > 0 ? (sAll - sBase) / sBase : null;
+    const sAll = all.reduce<number>((s, v) => s + (v ?? 0), 0);
+    const sMax = max.reduce<number>((s, v) => s + (v ?? 0), 0);
+    const total = sMax > 0 ? (sAll - sMax) / sMax : null;
     return { ratios, total };
-  })();
+  };
+  const rangeVsMax = (all: (number | null)[], max: (number | null)[], lo: number, hi: number) => {
+    const sAll = all.slice(lo, hi).reduce<number>((s, v) => s + (v ?? 0), 0);
+    const sMax = max.slice(lo, hi).reduce<number>((s, v) => s + (v ?? 0), 0);
+    return sMax > 0 ? (sAll - sMax) / sMax : null;
+  };
+  const prospectGrowth = growthVsMax(prospectAll, prospectMax);
   // On-the-books is a close, so growth is measured over the average base —
   // (All − base) / base. Positive = the All grew vs its average; negative = shrank.
   // Used for Hotel and (Expanded + Weighted) for Comp Set / Market.
@@ -784,7 +875,7 @@ function ConversionGroup({
     const total = sBase > 0 ? (sAll - sBase) / sBase : null;
     return { ratios, total };
   };
-  const hotelGrowth = growthVsBase(hotelAll, hotelBase);
+  const hotelGrowth = growthVsMax(hotelAll, hotelMax);
   const extraGrowth = extraLevels.map((l) => ({
     level: l.level,
     ...growthVsBase(l.all, l.base),
@@ -794,8 +885,8 @@ function ConversionGroup({
   // Label the base by the weeks actually averaged (the Week itself is excluded).
   const baseLabel =
     baseWeeks.length <= 1
-      ? snapLabel(baseWeeks[0] ?? fromSnap)
-      : `avg ${snapLabel(baseWeeks[0])} → ${snapLabel(baseWeeks[baseWeeks.length - 1])}`;
+      ? snapLabel(snapDates, baseWeeks[0] ?? fromSnap)
+      : `avg ${snapLabel(snapDates, baseWeeks[0])} → ${snapLabel(snapDates, baseWeeks[baseWeeks.length - 1])}`;
   return (
     <>
       <tr>
@@ -804,10 +895,51 @@ function ConversionGroup({
           className="px-3 py-2 text-[11px] uppercase tracking-wider font-semibold border-t"
           style={{ backgroundColor: 'var(--bg-hover)', color: 'var(--primary)', borderColor: 'var(--border)' }}
         >
-          GROWTH VS PERIOD AVG
+          GROWTH VS MAX VALUE
           <span className="ml-2 font-normal normal-case opacity-70">
-            {snapLabel(fromSnap)} → {snapLabel(toSnap)}
+            {snapLabel(snapDates, fromSnap)} → {snapLabel(snapDates, toSnap)}
           </span>
+        </td>
+      </tr>
+      {/* Peak (max) of the selected metric per month, across ALL weeks — the most a
+          month ever held. Shown for every month (elapsed and future); these are the
+          ceilings that sit above the period-average base rows below. */}
+      <tr className="border-t" style={{ borderColor: 'var(--border)' }}>
+        <td className="sticky left-0 z-10 px-3 py-2 bg-white" style={{ color: 'var(--text-secondary)' }}>
+          <span className="pl-2 italic">Prospect max · all weeks</span>
+        </td>
+        {prospectMax.map((v, i) => (
+          <td key={i} className="text-right px-2 py-2 tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+            {fmt(v, metric)}
+          </td>
+        ))}
+        <td className="text-right px-2 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+          {fmt(sumRangeN(prospectMax, 0, splitIdx + 1), metric)}
+        </td>
+        <td className="text-right px-2 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+          {fmt(sumRangeN(prospectMax, splitIdx + 1, MONTHS.length), metric)}
+        </td>
+        <td className="text-right px-3 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+          {fmt(sumRangeN(prospectMax, 0, MONTHS.length), metric)}
+        </td>
+      </tr>
+      <tr className="border-t" style={{ borderColor: 'var(--border)' }}>
+        <td className="sticky left-0 z-10 px-3 py-2 bg-white" style={{ color: 'var(--text-secondary)' }}>
+          <span className="pl-2 italic">Hotel max · all weeks</span>
+        </td>
+        {hotelMax.map((v, i) => (
+          <td key={i} className="text-right px-2 py-2 tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+            {fmt(v, metric)}
+          </td>
+        ))}
+        <td className="text-right px-2 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+          {fmt(sumRangeN(hotelMax, 0, splitIdx + 1), metric)}
+        </td>
+        <td className="text-right px-2 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+          {fmt(sumRangeN(hotelMax, splitIdx + 1, MONTHS.length), metric)}
+        </td>
+        <td className="text-right px-3 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+          {fmt(sumRangeN(hotelMax, 0, MONTHS.length), metric)}
         </td>
       </tr>
       {/* Denominator: average Prospect RN across the weeks in the period. Muted so it
@@ -876,8 +1008,15 @@ function ConversionGroup({
       ))}
       {/* Growth of the current All vs its average base (gained/lost vs the average). */}
       <tr className="border-t" style={{ borderColor: 'var(--border)' }}>
-        <td className="sticky left-0 z-10 px-3 py-2 bg-white" style={{ color: 'var(--primary)' }}>
-          <span className="pl-2">Prospect growth</span>
+        <td
+          className="sticky left-0 z-10 px-3 py-2 bg-white cursor-help"
+          style={{ color: 'var(--primary)' }}
+          title="Prospect All vs its peak — the most that month ever held (Max across all weeks). Same formula every month: (value − max) / max. So it reads ≤ 0: 0 = sitting at its peak, red = the % it currently falls short of that peak."
+        >
+          <span className="pl-2 inline-flex items-center gap-1">
+            Prospect growth
+            <Info size={13} className="opacity-60" style={{ color: 'var(--text-secondary)' }} />
+          </span>
         </td>
         {prospectGrowth.ratios.map((v, i) => (
           <td key={i} className="text-right px-2 py-2 tabular-nums">
@@ -885,18 +1024,25 @@ function ConversionGroup({
           </td>
         ))}
         <td className="text-right px-2 py-2 tabular-nums">
-          <GrowthPct value={prospectElapsedRange(0, splitIdx + 1)} />
+          <GrowthPct value={rangeVsMax(prospectAll, prospectMax, 0, splitIdx + 1)} />
         </td>
         <td className="text-right px-2 py-2 tabular-nums">
-          <GrowthPct value={growthRange(prospectAll, prospectBase, splitIdx + 1, MONTHS.length)} />
+          <GrowthPct value={rangeVsMax(prospectAll, prospectMax, splitIdx + 1, MONTHS.length)} />
         </td>
         <td className="text-right px-3 py-2 tabular-nums">
           <GrowthPct value={prospectGrowth.total} />
         </td>
       </tr>
       <tr className="border-t" style={{ borderColor: 'var(--border)' }}>
-        <td className="sticky left-0 z-10 px-3 py-2 bg-white" style={{ color: 'var(--primary)' }}>
-          <span className="pl-2">Hotel growth · All vs base</span>
+        <td
+          className="sticky left-0 z-10 px-3 py-2 bg-white cursor-help"
+          style={{ color: 'var(--primary)' }}
+          title="Hotel (Tentative + Definite) vs its peak — the most on-the-books that month ever held (Max across all weeks). Same formula every month: (value − max) / max. So it reads ≤ 0: 0 = sitting at its peak, red = the % it currently falls short of that peak."
+        >
+          <span className="pl-2 inline-flex items-center gap-1">
+            Hotel growth
+            <Info size={13} className="opacity-60" style={{ color: 'var(--text-secondary)' }} />
+          </span>
         </td>
         {hotelGrowth.ratios.map((v, i) => (
           <td key={i} className="text-right px-2 py-2 tabular-nums">
@@ -904,10 +1050,10 @@ function ConversionGroup({
           </td>
         ))}
         <td className="text-right px-2 py-2 tabular-nums">
-          <GrowthPct value={growthRange(hotelAll, hotelBase, 0, splitIdx + 1)} />
+          <GrowthPct value={rangeVsMax(hotelAll, hotelMax, 0, splitIdx + 1)} />
         </td>
         <td className="text-right px-2 py-2 tabular-nums">
-          <GrowthPct value={growthRange(hotelAll, hotelBase, splitIdx + 1, MONTHS.length)} />
+          <GrowthPct value={rangeVsMax(hotelAll, hotelMax, splitIdx + 1, MONTHS.length)} />
         </td>
         <td className="text-right px-3 py-2 tabular-nums">
           <GrowthPct value={hotelGrowth.total} />
@@ -948,12 +1094,14 @@ function ConversionLevelsGroup({
   splitIdx,
   fromSnap,
   toSnap,
+  snapDates,
 }: {
   rows: { level: Level; ratios: (number | null)[]; deltaRN: number[] }[];
   prospectBase: number[];
   splitIdx: number;
   fromSnap: Snapshot;
   toSnap: Snapshot;
+  snapDates: Record<string, string>;
 }) {
   if (rows.length === 0) return null;
   // Ratio over a month range: Σ Δ(Tent+Def) ÷ Σ Prospect base, both summed on the slice.
@@ -973,7 +1121,7 @@ function ConversionLevelsGroup({
         >
           PROSPECT → (TENT + DEF) CONVERSION
           <span className="ml-2 font-normal normal-case opacity-70">
-            {snapLabel(fromSnap)} → {snapLabel(toSnap)}
+            {snapLabel(snapDates, fromSnap)} → {snapLabel(snapDates, toSnap)}
           </span>
         </td>
       </tr>
@@ -1015,11 +1163,13 @@ function PickUpGroup({
   fromSnap,
   toSnap,
   splitIdx,
+  snapDates,
 }: {
   rows: { label: string; series: number[] }[];
   fromSnap: Snapshot;
   toSnap: Snapshot;
   splitIdx: number;
+  snapDates: Record<string, string>;
 }) {
   const sumRange = (arr: number[], lo: number, hi: number) => arr.slice(lo, hi).reduce((a, b) => a + b, 0);
   return (
@@ -1032,7 +1182,7 @@ function PickUpGroup({
         >
           PICK-UP (RN)
           <span className="ml-2 font-normal normal-case opacity-70">
-            {snapLabel(fromSnap)} → {snapLabel(toSnap)}
+            {snapLabel(snapDates, fromSnap)} → {snapLabel(snapDates, toSnap)}
           </span>
         </td>
       </tr>
@@ -1186,11 +1336,13 @@ function BudgetComparison({
   metrics,
   baseline,
   onBaselineChange,
+  snapDates,
 }: {
   snapshot: Snapshot;
   metrics: BudgetMetricRow[];
   baseline: Baseline;
   onBaselineChange: (b: Baseline) => void;
+  snapDates: Record<string, string>;
 }) {
   const baselineLabel = BASELINE_LABELS[baseline];
   return (
@@ -1199,7 +1351,7 @@ function BudgetComparison({
         <div>
           <h3 className="text-sm font-semibold" style={{ color: 'var(--primary)' }}>My Hotel vs {baselineLabel}</h3>
           <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-            On-the-books (Tentative + Definite) at {snapLabel(snapshot)} vs {baselineLabel} · RN · ADR · REV (000s) — higher is better
+            On-the-books (Tentative + Definite) at {snapLabel(snapDates, snapshot)} vs {baselineLabel} · RN · ADR · REV (000s) — higher is better
           </p>
         </div>
         {/* Baseline selector — switches what the variance is measured against. */}
