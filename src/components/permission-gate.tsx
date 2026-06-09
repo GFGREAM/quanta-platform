@@ -15,10 +15,17 @@ export default function PermissionGate({ children }: { children: React.ReactNode
   // Full-access users see everything
   if (hasFullAccess) return <>{children}</>;
 
+  // No sections at all → denied everywhere
+  const sectionKeys = Object.keys(sections);
+  if (sectionKeys.length === 0) {
+    return <AccessDeniedModal email={email} allowedSections={allowedSections} />;
+  }
+
   // Check if the current route requires specific section_keys
   const required = getSectionsForRoute(pathname);
 
-  // Route with empty required array (e.g. /dashboard home) → always accessible
+  // Route with empty required array (e.g. /dashboard home) → accessible for
+  // any user that has at least one section (already checked above).
   if (required !== null && required.length === 0) return <>{children}</>;
 
   // Route has no mapping (unknown route) → block restricted users
