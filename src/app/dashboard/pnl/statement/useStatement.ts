@@ -81,19 +81,36 @@ function aggregateRowsMetric(rows: ForecastRow[], def: MetricDef): number | null
   return rows.reduce((s, r) => s + def.calc(r), 0);
 }
 
-export function useStatement() {
+export interface UseStatementOptions {
+  /** If provided, only these view modes are available. Omit for full access. */
+  allowedViewModes?: ViewMode[];
+  /** If provided, only these properties appear in the hotel dropdown. Omit for all. */
+  allowedProperties?: string[];
+}
+
+export function useStatement(opts?: UseStatementOptions) {
+  const allowedModes = opts?.allowedViewModes;
+  const allowedProps = opts?.allowedProperties;
+
+  const defaultView = allowedModes && allowedModes.length > 0 ? allowedModes[0] : 'summary';
   const [year, setYear] = useState<number>(YEARS[0]);
-  const [hotel, setHotel] = useState<string>(''); // '' = all hotels
+  const [hotel, setHotel] = useState<string>('');
   const [metric, setMetric] = useState<MetricKey>('totalRevenue');
   const [scenario, setScenario] = useState<ComparisonScenario>('Outlook');
   const [scope, setScope] = useState<Scope>('ytd');
   const [periodMonth, setPeriodMonth] = useState<Month>('Mar');
-  const [viewMode, setViewMode] = useState<ViewMode>('summary');
+  const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
   const [currency, setCurrency] = useState<Currency>('USD');
   const [basis, setBasis] = useState<Basis>('total');
   // Hotels selected for the portfolio table. Default = all available hotels,
   // displayed in the canonical PORTFOLIO_HOTELS order.
   const [portfolioHotels, setPortfolioHotels] = useState<string[]>(() => [...PORTFOLIO_HOTELS]);
+
+  // Guard: ignore attempts to set a view mode that's not allowed
+  const safeSetViewMode = useCallback((v: ViewMode) => {
+    if (allowedModes && !allowedModes.includes(v)) return;
+    setViewMode(v);
+  }, [allowedModes]);
   const [forecastRows, setForecastRows] = useState<ForecastRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [dynamicHotels, setDynamicHotels] = useState<string[]>([]);
@@ -425,6 +442,24 @@ export function useStatement() {
     }));
   }, [portfolio, metricDef]);
 
+  // ─── Property filtering ───────────────────────────────────────
+  const baseHotels = dynamicHotels.length > 0 ? dynamicHotels : HOTELS;
+  const basePortfolioHotels = dynamicHotels.length > 0 ? dynamicHotels : PORTFOLIO_HOTELS;
+
+  const filteredHotels = allowedProps
+    ? baseHotels.filter((h) => allowedProps.includes(h))
+    : baseHotels;
+  const filteredPortfolioHotels = allowedProps
+    ? basePortfolioHotels.filter((h) => allowedProps.includes(h))
+    : basePortfolioHotels;
+
+  // Auto-select hotel when there's only one allowed property
+  useEffect(() => {
+    if (allowedProps && allowedProps.length === 1 && hotel !== allowedProps[0]) {
+      setHotel(allowedProps[0]);
+    }
+  }, [allowedProps, hotel]);
+
   return {
     year, setYear,
     hotel, setHotel,
@@ -432,7 +467,7 @@ export function useStatement() {
     scenario, setScenario,
     scope, setScope,
     periodMonth, setPeriodMonth,
-    viewMode, setViewMode,
+    viewMode, setViewMode: safeSetViewMode,
     currency, setCurrency,
     basis, setBasis,
     portfolioHotels, setPortfolioHotels,
@@ -456,12 +491,14 @@ export function useStatement() {
     portfolio,
     weeklyOutlookSeries,
     loading,
-    hotelOptions: dynamicHotels.length > 0 ? dynamicHotels : HOTELS,
-    portfolioHotelOptions: dynamicHotels.length > 0 ? dynamicHotels : PORTFOLIO_HOTELS,
+    hotelOptions: filteredHotels,
+    portfolioHotelOptions: filteredPortfolioHotels,
     yearOptions: dynamicYears.length > 0 ? dynamicYears : YEARS,
     scenarioOptions: COMPARISON_SCENARIOS,
     monthOptions: MONTHS,
     currencyOptions: CURRENCIES,
     basisOptions: BASES,
+    allowedViewModes: allowedModes,
+    singlePropertyLock: allowedProps && allowedProps.length === 1,
   };
 }

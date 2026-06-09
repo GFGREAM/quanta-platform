@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { selectStyle } from '@/lib/selectStyle';
 import { fmtMetric, METRIC_DEFS, SCOPES, scopeLabel, scenarioLabel, type MetricKey, type Month } from './data';
-import { useStatement, type ViewMode } from './useStatement';
+import { useStatement, type ViewMode, type UseStatementOptions } from './useStatement';
 import StatementTable from './StatementTable';
 import StatementPortfolioTable from './StatementPortfolioTable';
 import StatementSummaryTable from './StatementSummaryTable';
@@ -20,7 +20,7 @@ import {
   LegendDot, formatAxis,
 } from './ui';
 
-export default function StatementMobile() {
+export default function StatementMobile({ permissionOpts }: { permissionOpts?: UseStatementOptions }) {
   const {
     year, setYear,
     hotel, setHotel,
@@ -43,7 +43,9 @@ export default function StatementMobile() {
     portfolio,
     hotelOptions, yearOptions, monthOptions,
     portfolioHotelOptions, currencyOptions, basisOptions,
-  } = useStatement();
+    allowedViewModes,
+    singlePropertyLock,
+  } = useStatement(permissionOpts);
 
   return (
     <div className="flex flex-col gap-4" style={{ color: 'var(--text-primary)' }}>
@@ -64,7 +66,7 @@ export default function StatementMobile() {
             {scenarioLabel(scenario)} vs Budget vs LY
           </p>
         </div>
-        <ViewToggleMobile viewMode={viewMode} setViewMode={setViewMode} />
+        <ViewToggleMobile viewMode={viewMode} setViewMode={setViewMode} allowedViewModes={allowedViewModes} />
       </div>
 
       {/* Filters — stacked native selects */}
@@ -81,12 +83,13 @@ export default function StatementMobile() {
           />
         ) : (
           <select
-            className="h-10 px-3 pr-8 rounded-md border text-sm bg-white appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
+            className="h-10 px-3 pr-8 rounded-md border text-sm bg-white appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] disabled:opacity-60 disabled:cursor-not-allowed"
             style={selectStyle}
             value={hotel}
             onChange={(e) => setHotel(e.target.value)}
+            disabled={!!singlePropertyLock}
           >
-            <option value="">All hotels</option>
+            {!singlePropertyLock && <option value="">All hotels</option>}
             {hotelOptions.map((h) => <option key={h} value={h}>{h}</option>)}
           </select>
         )}
@@ -401,10 +404,11 @@ export default function StatementMobile() {
   );
 }
 
-function ViewToggleMobile({ viewMode, setViewMode }: { viewMode: ViewMode; setViewMode: (v: ViewMode) => void }) {
+function ViewToggleMobile({ viewMode, setViewMode, allowedViewModes }: { viewMode: ViewMode; setViewMode: (v: ViewMode) => void; allowedViewModes?: ViewMode[] }) {
+  const modes = allowedViewModes ?? VIEW_ORDER;
   return (
     <div className="flex rounded-lg p-[3px] gap-0.5" style={{ background: 'var(--muted)' }}>
-      {VIEW_ORDER.map((v) => (
+      {modes.map((v) => (
         <button
           key={v}
           onClick={() => setViewMode(v)}
