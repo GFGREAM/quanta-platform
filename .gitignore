@@ -56,3 +56,7 @@ next-env.d.ts
 setup_audits_complete.sh
 setup_gfg_hotel_audits_backend.sh
 update_audits_db_connection.sh
+
+# Raw source data exports — kept local only; the app reads the generated dataset.ts,
+# and the real figures will come from the SQL connection. (On the Books pace CSVs)
+src/app/dashboard/topline/on-the-books/*.csv
