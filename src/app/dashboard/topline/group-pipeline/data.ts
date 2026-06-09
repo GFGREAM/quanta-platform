@@ -168,6 +168,127 @@ export function getBaselines(code: string, year: number): Record<Baseline, Recor
   return { Budget: budget, LY: BLANK_BASELINE(), Forecast: BLANK_BASELINE() };
 }
 
+// ─── Growth Analysis ─────────────────────────────────────────────────────────
+// Five growth angles for Prospect / Definite (Hotel source, My Hotel level),
+// month by month, all anchored at the selected snapshot ("Actual"):
+//   vs1w    — previous snapshot chronologically (weekly pulse)
+//   vs4w    — snapshot closest to 28 days before (monthly trend; prefers the
+//             earlier side when there is no exact match)
+//   vsAvg   — average across ALL snapshots up to and including the current one
+//   vsMax   — historical peak across the same window (distance to the peak)
+//   vsStart — first snapshot of the current snapshot's calendar year
+// Delta = (Actual − Base) / Base × 100, rounded to 1 decimal. Zero handling:
+//   Base = 0 & Actual = 0 → null (nothing to compare)
+//   Base = 0 & Actual > 0 → 'new' (demand appeared from nothing)
+// When the current snapshot is the first of its year, vs1w / vs4w / vsStart are
+// null (their bases don't exist yet).
+export type GrowthDelta = number | 'new' | null;
+export type GrowthRow = {
+  status: Status;
+  month: Month;
+  actual: number;
+  bases: {
+    weekAgo: number | null;
+    fourWAgo: number | null;
+    avg: number | null;
+    max: number | null;
+    start: number | null;
+  };
+  deltas: {
+    vs1w: GrowthDelta;
+    vs4w: GrowthDelta;
+    vsAvg: GrowthDelta;
+    vsMax: GrowthDelta;
+    vsStart: GrowthDelta;
+  };
+};
+export type GrowthAnalysis = {
+  rows: GrowthRow[];
+  // Reference snapshots actually used for each base, for labelling in the UI.
+  refSnaps: { weekAgo: Snapshot | null; fourWAgo: Snapshot | null; start: Snapshot | null };
+};
+
+export const GROWTH_STATUSES: Status[] = ['Prospect', 'Definite'];
+export const GROWTH_METRICS: Metric[] = ['RN', 'ADR', 'REV', 'OCC'];
+
+function growthDelta(actual: number, base: number | null): GrowthDelta {
+  if (base === null) return null;
+  if (base === 0) return actual > 0 ? 'new' : null;
+  return Math.round(((actual - base) / base) * 1000) / 10;
+}
+
+export function getGrowthAnalysis(
+  code: string,
+  year: number,
+  snapshot: Snapshot,
+  metric: Metric
+): GrowthAnalysis {
+  const snaps = getSnapshots(code);
+  const idx = snaps.indexOf(snapshot);
+  const empty: GrowthAnalysis = { rows: [], refSnaps: { weekAgo: null, fourWAgo: null, start: null } };
+  if (idx < 0) return empty;
+  const dates = getSnapshotDates(code);
+  const upTo = snaps.slice(0, idx + 1); // chronological window: start → current (inclusive)
+
+  // First snapshot of the current snapshot's calendar year (by as_of_date).
+  const curYear = (dates[snapshot] ?? '').slice(0, 4);
+  const startSnap = snaps.find((s) => (dates[s] ?? '').slice(0, 4) === curYear) ?? snaps[0];
+  const isFirstOfYear = startSnap === snapshot;
+
+  const weekAgoSnap = !isFirstOfYear && idx > 0 ? snaps[idx - 1] : null;
+
+  // Closest snapshot to 28 days before the current one. With no exact match,
+  // prefer the latest one at-or-before the target; only fall forward (the
+  // earliest one after the target) when nothing earlier exists.
+  let fourWAgoSnap: Snapshot | null = null;
+  if (!isFirstOfYear && idx > 0) {
+    const target = Date.parse(dates[snapshot]) - 28 * 24 * 3600 * 1000;
+    const prior = snaps.slice(0, idx);
+    const atOrBefore = prior.filter((s) => Date.parse(dates[s]) <= target);
+    fourWAgoSnap = atOrBefore.length > 0 ? atOrBefore[atOrBefore.length - 1] : prior[0];
+  }
+
+  // Hotel source, My Hotel level — V1 reads exactly that for RN/ADR/REV and
+  // derives OCC as RN ÷ inventory (the hotel report has no OCC).
+  const seriesAt = (snap: Snapshot, status: Status) =>
+    getSeries(code, year, 'V1', snap, status, 'My Hotel', metric);
+
+  const rows: GrowthRow[] = [];
+  for (const status of GROWTH_STATUSES) {
+    const cur = seriesAt(snapshot, status);
+    const week = weekAgoSnap ? seriesAt(weekAgoSnap, status) : null;
+    const fourW = fourWAgoSnap ? seriesAt(fourWAgoSnap, status) : null;
+    const start = isFirstOfYear ? null : seriesAt(startSnap, status);
+    const hist = upTo.map((s) => seriesAt(s, status));
+
+    MONTHS.forEach((month, i) => {
+      const actual = cur[i] ?? 0;
+      const vals = hist.map((s) => s[i] ?? 0);
+      const bases = {
+        weekAgo: week ? week[i] ?? 0 : null,
+        fourWAgo: fourW ? fourW[i] ?? 0 : null,
+        avg: vals.reduce((a, b) => a + b, 0) / vals.length,
+        max: Math.max(...vals),
+        start: start ? start[i] ?? 0 : null,
+      };
+      rows.push({
+        status,
+        month,
+        actual,
+        bases,
+        deltas: {
+          vs1w: growthDelta(actual, bases.weekAgo),
+          vs4w: growthDelta(actual, bases.fourWAgo),
+          vsAvg: growthDelta(actual, bases.avg),
+          vsMax: growthDelta(actual, bases.max),
+          vsStart: growthDelta(actual, bases.start),
+        },
+      });
+    });
+  }
+  return { rows, refSnaps: { weekAgo: weekAgoSnap, fourWAgo: fourWAgoSnap, start: isFirstOfYear ? null : startSnap } };
+}
+
 // ─── Series lookup ──────────────────────────────────────────────────────────
 // My Hotel OCC from the hotel's own report: the report carries RN but no OCC,
 // so we derive it as RN ÷ inventory (rooms × days in month).
