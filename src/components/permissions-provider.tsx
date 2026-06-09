@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import type { AllowedMenu } from '@/lib/section-keys';
 
 export interface PermissionsData {
   email: string;
@@ -8,6 +9,8 @@ export interface PermissionsData {
   /** section_key → allowed_properties (empty array = all properties) */
   sections: Record<string, string[]>;
   allowedSections: { key: string; label: string }[];
+  /** Menu-level list for modal / sidebar (deduplicated by route) */
+  allowedMenus: AllowedMenu[];
   loading: boolean;
 }
 
@@ -16,6 +19,7 @@ const PermissionsContext = createContext<PermissionsData>({
   hasFullAccess: true,
   sections: {},
   allowedSections: [],
+  allowedMenus: [],
   loading: true,
 });
 
@@ -29,6 +33,7 @@ export default function PermissionsProvider({ children }: { children: ReactNode 
     hasFullAccess: true,
     sections: {},
     allowedSections: [],
+    allowedMenus: [],
     loading: true,
   });
 
@@ -38,7 +43,6 @@ export default function PermissionsProvider({ children }: { children: ReactNode 
       try {
         const res = await fetch('/api/permissions');
         if (!res.ok) {
-          // If the API fails, default to full access so the app isn't locked out
           if (!cancelled) setData((d) => ({ ...d, loading: false }));
           return;
         }
@@ -49,6 +53,7 @@ export default function PermissionsProvider({ children }: { children: ReactNode 
             hasFullAccess: json.hasFullAccess ?? true,
             sections: json.sections ?? {},
             allowedSections: json.allowedSections ?? [],
+            allowedMenus: json.allowedMenus ?? [],
             loading: false,
           });
         }
