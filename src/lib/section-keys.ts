@@ -1,43 +1,104 @@
 import type { ViewMode } from '@/app/dashboard/pnl/statement/useStatement';
 
-// ─── Section labels (visible in AccessDeniedModal) ─────────────
+// ─── Section labels (individual section_key → label) ───────────
 export const SECTION_LABELS: Record<string, string> = {
-  // P&L Statement tabs
-  'pnl-summary': 'P&L Summary',
-  'pnl-single': 'P&L Expanded',
-  'pnl-monthly': 'P&L Monthly',
-  'pnl-quarter': 'P&L Quarterly',
-  'pnl-yearly': 'P&L Yearly',
-  'pnl-portfolio': 'P&L Portfolio',
-  // Top Line
-  'topline-market-share': 'Market Share',
-  'topline-rooms-rev': 'Rooms Revenue (Pack)',
-  'topline-other-rev': 'Other Revenue (Non Pack)',
-  'topline-on-the-books': 'On the Books',
+  'pnl-summary': 'P&L Summary', 'pnl-single': 'P&L Expanded', 'pnl-monthly': 'P&L Monthly',
+  'pnl-quarter': 'P&L Quarterly', 'pnl-yearly': 'P&L Yearly', 'pnl-portfolio': 'P&L Portfolio',
+  'topline-market-share': 'Market Share', 'topline-rooms-rev': 'Rooms Revenue (Pack)',
+  'topline-other-rev': 'Other Revenue (Non Pack)', 'topline-on-the-books': 'On the Books',
   'topline-group-pipeline': 'Group Pipeline',
-  // Bottom Line
-  'bottomline-profitability': 'Profitability',
-  'bottomline-expenses': 'Expenses',
-  'bottomline-staffing': 'Staffing',
-  'bottomline-utilities': 'Utilities',
+  'bottomline-profitability': 'Profitability', 'bottomline-expenses': 'Expenses',
+  'bottomline-staffing': 'Staffing', 'bottomline-utilities': 'Utilities',
   'bottomline-projects': 'Capex / Projects',
-  // Owner Statement
-  'owner-expenses': 'Owner Expenses',
-  'owner-cash-flow': 'Cash Flow',
-  // Guest Experience
-  'guest-satisfaction': 'Guest Satisfaction',
-  'guest-meta-positioning': 'Hotel META Positioning',
+  'owner-expenses': 'Owner Expenses', 'owner-cash-flow': 'Cash Flow',
+  'guest-satisfaction': 'Guest Satisfaction', 'guest-meta-positioning': 'Hotel META Positioning',
   'guest-ops-radar': 'Competitive Set Radar',
-  // Strategy & Planning
-  'strategic-forecast': 'Forecast',
-  'strategic-action-plan-tracker': 'Action Plan Tracker',
-  // Market Trends
-  'market-airport-passengers': 'Airport Passengers',
-  'market-market-demand': 'Market Demand',
-  // Tools
-  'tools-hotel-audits': 'Hotel Audits',
-  'tools-hotel-meta-snapshot': 'Hotel META Snapshot',
+  'strategic-forecast': 'Forecast', 'strategic-action-plan-tracker': 'Action Plan Tracker',
+  'market-airport-passengers': 'Airport Passengers', 'market-market-demand': 'Market Demand',
+  'tools-hotel-audits': 'Hotel Audits', 'tools-hotel-meta-snapshot': 'Hotel META Snapshot',
 };
+
+// ─── Menu-level mapping ────────────────────────────────────────
+// Maps each section_key to its parent sidebar menu item for modal display.
+
+export interface MenuInfo {
+  menuName: string;
+  category: string;
+  route: string;
+}
+
+const menu = (menuName: string, category: string, route: string): MenuInfo => ({ menuName, category, route });
+
+export const SECTION_TO_MENU: Record<string, MenuInfo> = {
+  'pnl-summary':    menu('P&L Statement', 'PROFIT & LOSS', '/dashboard/pnl/statement'),
+  'pnl-single':     menu('P&L Statement', 'PROFIT & LOSS', '/dashboard/pnl/statement'),
+  'pnl-monthly':    menu('P&L Statement', 'PROFIT & LOSS', '/dashboard/pnl/statement'),
+  'pnl-quarter':    menu('P&L Statement', 'PROFIT & LOSS', '/dashboard/pnl/statement'),
+  'pnl-yearly':     menu('P&L Statement', 'PROFIT & LOSS', '/dashboard/pnl/statement'),
+  'pnl-portfolio':  menu('P&L Statement', 'PROFIT & LOSS', '/dashboard/pnl/statement'),
+  'topline-market-share':  menu('Market Share', 'TOP LINE', '/dashboard/topline/market-share'),
+  'topline-rooms-rev':     menu('Rooms Rev$ (Pack)', 'TOP LINE', '/dashboard/topline/rooms-rev'),
+  'topline-other-rev':     menu('Other Rev$ (Non Pack)', 'TOP LINE', '/dashboard/topline/other-rev'),
+  'topline-on-the-books':  menu('On the Books', 'TOP LINE', '/dashboard/topline/on-the-books'),
+  'topline-group-pipeline': menu('Group Pipeline', 'TOP LINE', '/dashboard/topline/group-pipeline'),
+  'bottomline-profitability': menu('Profitability', 'BOTTOM LINE', '/dashboard/bottomline/profitability'),
+  'bottomline-expenses':  menu('Expenses', 'BOTTOM LINE', '/dashboard/bottomline/expenses'),
+  'bottomline-staffing':  menu('Staffing', 'BOTTOM LINE', '/dashboard/bottomline/staffing'),
+  'bottomline-utilities': menu('Utilities', 'BOTTOM LINE', '/dashboard/bottomline/utilities'),
+  'bottomline-projects':  menu('Capex', 'OWNER STATEMENT', '/dashboard/bottomline/projects'),
+  'owner-expenses':   menu('Owner Expenses', 'OWNER STATEMENT', '/dashboard/owner/expenses'),
+  'owner-cash-flow':  menu('Cash Flow', 'OWNER STATEMENT', '/dashboard/owner/cash-flow'),
+  'guest-satisfaction':     menu('Guest Satisfaction Performance', 'GUEST EXPERIENCE', '/dashboard/guest/satisfaction'),
+  'guest-meta-positioning': menu('Hotel META Positioning', 'GUEST EXPERIENCE', '/dashboard/guest/meta-positioning'),
+  'guest-ops-radar':        menu('Competitive Set Radar', 'GUEST EXPERIENCE', '/dashboard/guest/ops-radar'),
+  'strategic-forecast':            menu('Forecast', 'STRATEGY & PLANNING', '/dashboard/strategic/forecast'),
+  'strategic-action-plan-tracker': menu('Action Plan Tracker', 'STRATEGY & PLANNING', '/dashboard/strategic/action-plan-tracker'),
+  'market-airport-passengers': menu('Airport Passengers', 'MARKET TRENDS', '/dashboard/market/airport-passengers'),
+  'market-market-demand':      menu('Market Demand', 'MARKET TRENDS', '/dashboard/market/market-demand'),
+  'tools-hotel-audits':       menu('GFG Hotel Audits', 'TOOLS', '/dashboard/tools/hotel-audits'),
+  'tools-hotel-meta-snapshot': menu('Hotel META Snapshot', 'TOOLS', '/dashboard/tools/hotel-meta-snapshot'),
+};
+
+/**
+ * Deduplicate section_keys into unique menu items grouped by sidebar category.
+ * Returns them in the order categories appear in the sidebar.
+ */
+const CATEGORY_ORDER = [
+  'PROFIT & LOSS', 'TOP LINE', 'BOTTOM LINE', 'OWNER STATEMENT',
+  'GUEST EXPERIENCE', 'STRATEGY & PLANNING', 'MARKET TRENDS', 'TOOLS',
+];
+
+export interface AllowedMenu {
+  menuName: string;
+  category: string;
+  route: string;
+}
+
+export function getAllowedMenus(sectionKeys: string[]): AllowedMenu[] {
+  const seen = new Set<string>();
+  const menus: AllowedMenu[] = [];
+  for (const sk of sectionKeys) {
+    const info = SECTION_TO_MENU[sk];
+    if (!info || seen.has(info.route)) continue;
+    seen.add(info.route);
+    menus.push({ menuName: info.menuName, category: info.category, route: info.route });
+  }
+  menus.sort((a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category));
+  return menus;
+}
+
+/**
+ * Returns the set of sidebar routes a restricted user can access.
+ * Used by the Sidebar to filter visible menu items.
+ */
+export function getAllowedRoutes(sectionKeys: string[]): Set<string> {
+  const routes = new Set<string>();
+  for (const sk of sectionKeys) {
+    const info = SECTION_TO_MENU[sk];
+    if (info) routes.add(info.route);
+  }
+  return routes;
+}
 
 // ─── Route → section_key(s) ────────────────────────────────────
 // Empty array means always accessible (e.g. dashboard home).
