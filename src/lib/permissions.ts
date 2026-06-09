@@ -8,8 +8,9 @@ export interface UserPermissions {
 
 /**
  * Fetch all permission rows for an email.
- * No rows → full access (admin/internal user).
- * Has rows → restricted to listed section_keys + allowed_properties.
+ * - `_admin_all` row present → hasFullAccess: true (admin).
+ * - Other rows present       → restricted to those section_keys.
+ * - No rows at all           → hasFullAccess: false, no sections (denied).
  */
 export async function getUserPermissions(email: string): Promise<UserPermissions> {
   const { rows } = await pool.query<{ section_key: string; allowed_properties: string[] }>(
@@ -17,6 +18,9 @@ export async function getUserPermissions(email: string): Promise<UserPermissions
     [email],
   );
   if (rows.length === 0) {
+    return { hasFullAccess: false, sections: {} };
+  }
+  if (rows.some((r) => r.section_key === '_admin_all')) {
     return { hasFullAccess: true, sections: {} };
   }
   const sections: Record<string, string[]> = {};

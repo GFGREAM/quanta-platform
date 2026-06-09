@@ -46,38 +46,45 @@ export default function AccessDeniedModal({ email, allowedSections }: AccessDeni
 
         {/* Body */}
         <div className="px-8 py-6">
-          <p className="text-sm leading-relaxed m-0 mb-4" style={{ color: '#4B5563' }}>
-            The current account (<span className="font-semibold" style={{ color: '#172951' }}>{email}</span>) only has access to the following sections:
-          </p>
-
           {allowedSections.length === 0 ? (
-            <p className="text-sm italic" style={{ color: '#9CA3AF' }}>No sections assigned.</p>
+            <>
+              <p className="text-sm leading-relaxed m-0 mb-2" style={{ color: '#4B5563' }}>
+                The account <span className="font-semibold" style={{ color: '#172951' }}>{email}</span> does not have access to this platform.
+              </p>
+              <p className="text-sm leading-relaxed m-0" style={{ color: '#4B5563' }}>
+                Please contact your administrator to request access.
+              </p>
+            </>
           ) : (
-            <div className="flex flex-col gap-3 max-h-64 overflow-y-auto pr-1">
-              {[...grouped.entries()].map(([category, items]) => (
-                <div key={category}>
-                  <p className="text-[0.625rem] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#9CA3AF' }}>
-                    {category}
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {items.map((s) => (
-                      <span
-                        key={s.key}
-                        className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium"
-                        style={{ background: 'rgba(0,175,173,0.1)', color: '#00807E' }}
-                      >
-                        {s.label}
-                      </span>
-                    ))}
+            <>
+              <p className="text-sm leading-relaxed m-0 mb-4" style={{ color: '#4B5563' }}>
+                The current account (<span className="font-semibold" style={{ color: '#172951' }}>{email}</span>) only has access to the following sections:
+              </p>
+              <div className="flex flex-col gap-3 max-h-64 overflow-y-auto pr-1">
+                {[...grouped.entries()].map(([category, items]) => (
+                  <div key={category}>
+                    <p className="text-[0.625rem] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#9CA3AF' }}>
+                      {category}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {items.map((s) => (
+                        <span
+                          key={s.key}
+                          className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium"
+                          style={{ background: 'rgba(0,175,173,0.1)', color: '#00807E' }}
+                        >
+                          {s.label}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+              <p className="text-xs mt-5 mb-0" style={{ color: '#9CA3AF' }}>
+                Navigate to an allowed section or sign out to switch accounts.
+              </p>
+            </>
           )}
-
-          <p className="text-xs mt-5 mb-0" style={{ color: '#9CA3AF' }}>
-            Navigate to an allowed section or sign out to switch accounts.
-          </p>
         </div>
 
         {/* Footer actions */}
