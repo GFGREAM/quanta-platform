@@ -250,24 +250,26 @@ export const PORTFOLIO_HOTELS: readonly string[] = [
 ];
 
 // ─── Weekly Outlook snapshots (mock) ────────────────────────────
-// Until the weekly snapshot pipeline is wired, the WoW chart applies a fixed
-// per-week multiplier to the current Outlook value. Index 0 is the oldest
-// week shown; the last entry (Current) matches today's published Outlook.
-// Replace with real `snapshotDate`-keyed rows once the pipeline lands.
+// Until the weekly snapshot pipeline is wired, the Week filter / WoW chart apply a fixed
+// per-week multiplier to the current Outlook value. `snapshotDate` is the ISO date of each weekly
+// snapshot (oldest first; the LAST entry is the latest/current published Outlook, multiplier 1).
+// When the SQL feed lands it already carries these dates — just replace this list with the real
+// distinct snapshot dates and have the accessors filter rows by the selected date (the UI and
+// `useStatement` already key off `snapshotDate`, so no UI change is needed).
 export interface WeeklyOutlookDrift {
-  weekLabel: string;
+  snapshotDate: string; // ISO, e.g. '2026-06-01'
   multiplier: number;
 }
 
 export const WEEKLY_OUTLOOK_DRIFTS: readonly WeeklyOutlookDrift[] = [
-  { weekLabel: 'W-7', multiplier: 1.045 },
-  { weekLabel: 'W-6', multiplier: 1.052 },
-  { weekLabel: 'W-5', multiplier: 1.038 },
-  { weekLabel: 'W-4', multiplier: 1.022 },
-  { weekLabel: 'W-3', multiplier: 1.028 },
-  { weekLabel: 'W-2', multiplier: 1.012 },
-  { weekLabel: 'W-1', multiplier: 1.005 },
-  { weekLabel: 'Current', multiplier: 1.000 },
+  { snapshotDate: '2026-04-20', multiplier: 1.045 },
+  { snapshotDate: '2026-04-27', multiplier: 1.052 },
+  { snapshotDate: '2026-05-04', multiplier: 1.038 },
+  { snapshotDate: '2026-05-11', multiplier: 1.022 },
+  { snapshotDate: '2026-05-18', multiplier: 1.028 },
+  { snapshotDate: '2026-05-25', multiplier: 1.012 },
+  { snapshotDate: '2026-06-01', multiplier: 1.005 },
+  { snapshotDate: '2026-06-08', multiplier: 1.000 },
 ];
 // Only expose years that have a Budget reference — LY years are implicit.
 export const YEARS = Array.from(

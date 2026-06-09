@@ -81,6 +81,28 @@ function aggregateRowsMetric(rows: ForecastRow[], def: MetricDef): number | null
   return rows.reduce((s, r) => s + def.calc(r), 0);
 }
 
+// Apply a week's WoW drift multiplier to a comparison (Outlook) row: scale the demand-side
+// and financial lines, leaving physical capacity (rooms/availability) and the FX rate fixed —
+// those don't drift week to week. Placeholder until real snapshot-keyed weekly rows land.
+function scaleOutlook(r: ForecastRow, m: number): ForecastRow {
+  if (m === 1) return r;
+  return {
+    ...r,
+    roomsSold: r.roomsSold * m,
+    roomsComp: r.roomsComp * m,
+    roomsRevenue: r.roomsRevenue * m,
+    clubMaintFee: r.clubMaintFee * m,
+    timeshareMaintFee: r.timeshareMaintFee * m,
+    otherRevenue: r.otherRevenue * m,
+    departmentalExpenses: r.departmentalExpenses * m,
+    undistributedExpenses: r.undistributedExpenses * m,
+    otherExpenses: r.otherExpenses * m,
+    nonOperating: r.nonOperating * m,
+    guests: r.guests * m,
+    payingGuests: r.payingGuests * m,
+  };
+}
+
 export interface UseStatementOptions {
   /** If provided, only these view modes are available. Omit for full access. */
   allowedViewModes?: ViewMode[];
@@ -95,6 +117,10 @@ export function useStatement(opts?: UseStatementOptions) {
   const defaultView = allowedModes && allowedModes.length > 0 ? allowedModes[0] : 'summary';
   const [year, setYear] = useState<number>(YEARS[0]);
   const [hotel, setHotel] = useState<string>('');
+  // Weekly snapshot (ISO date) to view the Outlook as of. Defaults to the latest snapshot (no
+  // drift). Earlier dates re-scale the Outlook by that week's drift so the whole statement shows
+  // how it stood then. Real snapshot dates arrive with the SQL feed; this keys off them already.
+  const [week, setWeek] = useState<string>(() => WEEKLY_OUTLOOK_DRIFTS[WEEKLY_OUTLOOK_DRIFTS.length - 1].snapshotDate);
   const [metric, setMetric] = useState<MetricKey>('totalRevenue');
   const [scenario, setScenario] = useState<ComparisonScenario>('Outlook');
   const [scope, setScope] = useState<Scope>('ytd');
@@ -195,9 +221,22 @@ export function useStatement(opts?: UseStatementOptions) {
     return () => controller.abort();
   }, [viewMode, currency, allYearsLoaded]);
 
-  // The server already returns rows in the requested currency, so no
-  // client-side conversion is needed.
-  const convertedRows = useMemo(() => forecastRows, [forecastRows]);
+  const weekMultiplier = useMemo(
+    () => WEEKLY_OUTLOOK_DRIFTS.find((d) => d.snapshotDate === week)?.multiplier ?? 1,
+    [week],
+  );
+
+  // The server already returns rows in the requested currency, so no client-side conversion is
+  // needed. We do re-scale the active year's comparison (Outlook) rows by the selected week's WoW
+  // drift so every table/chart reflects how the Outlook stood that week; Budget and prior-year LY
+  // are left untouched. 'Current' (multiplier 1) is a no-op. The dedicated WoW progression chart
+  // (weeklyOutlookSeries) anchors on the raw rows so it stays independent of this selection.
+  const convertedRows = useMemo(() => {
+    if (weekMultiplier === 1) return forecastRows;
+    return forecastRows.map((r) =>
+      r.year === year && r.scenario === scenario ? scaleOutlook(r, weekMultiplier) : r,
+    );
+  }, [forecastRows, weekMultiplier, year, scenario]);
 
   const currentYearRows = useMemo(
     () =>
@@ -431,16 +470,20 @@ export function useStatement(opts?: UseStatementOptions) {
   // is an Outlook snapshot taken at a different week; Budget is shown as a
   // constant horizontal reference.
   const weeklyOutlookSeries = useMemo<WeeklyOutlookPoint[]>(() => {
-    if (portfolio.groups.length === 0) return [];
+    const orderedSelection = PORTFOLIO_HOTELS.filter((h) => portfolioHotels.includes(h));
+    if (orderedSelection.length === 0) return [];
+    // Anchor on the RAW (unscaled) rows so the progression is independent of the Week selector —
+    // it always plots the true latest Outlook, then applies each week's drift to walk it back.
     const sumMetric = (rs: ForecastRow[]) => rs.reduce((s, r) => s + metricDef.calc(r), 0);
-    const baseOutlook = sumMetric(portfolio.total.current);
-    const baseBudget = sumMetric(portfolio.total.budget);
-    return WEEKLY_OUTLOOK_DRIFTS.map(({ weekLabel, multiplier }) => ({
-      week: weekLabel,
+    const allCurrentYear = forecastRows.filter((r) => r.year === year && orderedSelection.includes(r.hotel));
+    const baseOutlook = sumMetric(filterByPeriod(allCurrentYear.filter((r) => r.scenario === scenario), scope, periodMonth));
+    const baseBudget = sumMetric(filterByPeriod(allCurrentYear.filter((r) => r.scenario === 'Budget'), scope, periodMonth));
+    return WEEKLY_OUTLOOK_DRIFTS.map(({ snapshotDate, multiplier }) => ({
+      week: snapshotDate,
       outlook: baseOutlook * multiplier,
       budget: baseBudget,
     }));
-  }, [portfolio, metricDef]);
+  }, [forecastRows, portfolioHotels, year, scenario, scope, periodMonth, metricDef]);
 
   // ─── Property filtering ───────────────────────────────────────
   const baseHotels = dynamicHotels.length > 0 ? dynamicHotels : HOTELS;
@@ -463,6 +506,7 @@ export function useStatement(opts?: UseStatementOptions) {
   return {
     year, setYear,
     hotel, setHotel,
+    week, setWeek,
     metric, setMetric,
     scenario, setScenario,
     scope, setScope,
@@ -491,6 +535,9 @@ export function useStatement(opts?: UseStatementOptions) {
     portfolio,
     weeklyOutlookSeries,
     loading,
+    // Newest snapshot first for the dropdown; latestWeek lets the UI mark the current one.
+    weekOptions: [...WEEKLY_OUTLOOK_DRIFTS].reverse().map((d) => d.snapshotDate),
+    latestWeek: WEEKLY_OUTLOOK_DRIFTS[WEEKLY_OUTLOOK_DRIFTS.length - 1].snapshotDate,
     hotelOptions: filteredHotels,
     portfolioHotelOptions: filteredPortfolioHotels,
     yearOptions: dynamicYears.length > 0 ? dynamicYears : YEARS,
