@@ -1,9 +1,11 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
 import { Home, DollarSign, FileText, Hotel, Users, Wrench, BarChart3, TrendingUp, Sparkles, Star, Pin, PinOff, X, Target, Radar, PlaneTakeoff, ClipboardCheck, Workflow, LineChart, Receipt, Banknote, HardHat } from 'lucide-react';
+import { usePermissions } from '@/components/permissions-provider';
+import { getAllowedRoutes } from '@/lib/section-keys';
 
 interface MenuItem {
   label: string;
@@ -73,6 +75,31 @@ interface SidebarProps {
 export default function Sidebar({ mobileOpen, onMobileClose, pinned, hovered, onPinToggle, onMenuSelect, onHoverChange }: SidebarProps) {
   const expanded = pinned || hovered;
   const pathname = usePathname();
+  const { hasFullAccess, sections, loading } = usePermissions();
+
+  // Build the set of allowed routes for restricted users
+  const allowedRoutes = useMemo(() => {
+    if (hasFullAccess || loading) return null; // null = show all
+    return getAllowedRoutes(Object.keys(sections));
+  }, [hasFullAccess, sections, loading]);
+
+  // Filter menu items based on permissions
+  const visibleItems = useMemo<MenuEntry[]>(() => {
+    if (allowedRoutes === null) return menuItems;
+    return menuItems.reduce<MenuEntry[]>((acc, entry) => {
+      if ('href' in entry) {
+        // Home link — show if user has any sections
+        if (entry.href === '/dashboard' && allowedRoutes.size > 0) acc.push(entry);
+        return acc;
+      }
+      // Category — filter items, only include category if it has visible items
+      const filteredItems = entry.items.filter((item) => allowedRoutes.has(item.href));
+      if (filteredItems.length > 0) {
+        acc.push({ category: entry.category, items: filteredItems });
+      }
+      return acc;
+    }, []);
+  }, [allowedRoutes]);
 
   useEffect(() => { if (mobileOpen && onMobileClose) { const handleResize = () => { if (window.innerWidth >= 768) onMobileClose(); }; window.addEventListener('resize', handleResize); return () => window.removeEventListener('resize', handleResize); } }, [mobileOpen, onMobileClose]);
 
@@ -89,7 +116,7 @@ export default function Sidebar({ mobileOpen, onMobileClose, pinned, hovered, on
   const sidebarContent = (
     <div className="flex flex-col h-full">
       <nav className="flex-1 overflow-y-auto py-4 px-2">
-        {menuItems.map((item, index) => {
+        {visibleItems.map((item, index) => {
           if ('href' in item) return renderLink(item as MenuItem, index);
           return (
             <div key={index} className="mb-2">

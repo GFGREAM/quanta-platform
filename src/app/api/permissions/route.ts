@@ -2,7 +2,7 @@ import { getServerSession } from 'next-auth';
 import { NextResponse } from 'next/server';
 import { authOptions } from '@/lib/auth';
 import { getUserPermissions } from '@/lib/permissions';
-import { SECTION_LABELS } from '@/lib/section-keys';
+import { SECTION_LABELS, getAllowedMenus } from '@/lib/section-keys';
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -23,10 +23,16 @@ export async function GET() {
       .map((key) => ({ key, label: SECTION_LABELS[key] }));
   }
 
+  // Menu-grouped list for modal display (deduplicated by route)
+  const allowedMenus = perms.hasFullAccess
+    ? getAllowedMenus(Object.keys(SECTION_LABELS))
+    : getAllowedMenus(Object.keys(perms.sections));
+
   return NextResponse.json({
     email,
     hasFullAccess: perms.hasFullAccess,
     sections: perms.sections,
     allowedSections,
+    allowedMenus,
   });
 }
