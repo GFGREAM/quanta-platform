@@ -14,7 +14,7 @@ export interface UserPermissions {
  */
 export async function getUserPermissions(email: string): Promise<UserPermissions> {
   const { rows } = await pool.query<{ section_key: string; allowed_properties: string[] }>(
-    'SELECT section_key, allowed_properties FROM auth_quanta.user_permissions WHERE email = $1',
+    'SELECT section_key, allowed_properties FROM auth_quanta.user_permissions WHERE LOWER(email) = LOWER($1)',
     [email],
   );
   if (rows.length === 0) {
