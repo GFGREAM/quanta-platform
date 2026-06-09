@@ -1,33 +1,31 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
+import { ChevronDown, ChevronRight, Download } from 'lucide-react';
 import {
-  ChevronDown, ChevronRight, Download, Maximize2, RefreshCw, Star,
-} from 'lucide-react';
-import {
-  Bar, CartesianGrid, ComposedChart, Legend as RLegend, Line, ResponsiveContainer,
-  Tooltip, XAxis, YAxis,
+  Bar, CartesianGrid, ComposedChart, Legend as RLegend, Line,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import KpiCard from '@/components/ui/KpiCard';
 import {
-  HOTELS, MONTHS_LONG, MONTHS_SHORT, ROOMS_AVAILABLE, ROOMS_OCCUPIED,
+  GUESTS, HOTELS, MONTHS_LONG, MONTHS_SHORT, ROOMS_AVAILABLE, ROOMS_OCCUPIED,
   UTILITIES, UTILITY_META, YEARS,
   type Utility,
 } from './data';
 
 type Timeframe = 'MTD' | 'YTD';
-type RoomMetric = 'POR' | 'PAR';
+type RoomMetric = 'POR' | 'PAR' | 'GUEST';
 
 const UTILITIES_ORDER: Utility[] = ['water', 'electricity', 'gas'];
 
-// Chart series palette — same three blues used everywhere on the board.
-// Each series (Actual / Budget / LY) carries its own color regardless of
-// which utility or sum is being plotted, so the chart always reads with
-// the same three-color key.
+// Chart series palette — Quanta brand colors (matches globals.css and
+// UTILITY_META). Each series (Actual / Budget / LY) carries its own
+// color regardless of which utility or sum is being plotted, so the
+// chart always reads with the same three-color key.
 const CHART_SERIES = [
-  { key: 'actual', label: 'Actual', color: '#1e3a8a' }, // blue-900 (navy)
-  { key: 'budget', label: 'Budget', color: '#3b82f6' }, // blue-500
-  { key: 'ly',     label: 'LY',     color: '#93c5fd' }, // blue-300
+  { key: 'actual', label: 'Actual', color: '#172951' }, // --primary (navy)
+  { key: 'budget', label: 'Budget', color: '#00AFAD' }, // --accent (teal)
+  { key: 'ly',     label: 'LY',     color: '#69D9D0' }, // --accent-light
 ] as const;
 
 // Range driven by the View toggle:
@@ -81,7 +79,6 @@ export default function UtilitiesPage() {
     electricity: true,
     gas: true,
   });
-  const [isFavorite, setIsFavorite] = useState(false);
 
   // Multi-select utility toggle for the chart — at least one must stay on
   // so the chart never goes blank when the user double-clicks the active pill.
@@ -95,12 +92,14 @@ export default function UtilitiesPage() {
 
   const indices = useMemo(() => rangeIndices(timeframe, monthIdx), [timeframe, monthIdx]);
 
-  // Room denominators over the active range — only Row 2 (cost-per-unit
-  // cards) projects against these. Row 1 and the chart stay in $ totals.
+  // Denominators over the active range — Row 2 projects against one of
+  // these depending on the POR / PAR / GUEST toggle. Row 1 and the chart
+  // stay in $ totals.
   const rooms = useMemo(() => {
     const occupied = sumOver(ROOMS_OCCUPIED, indices);
     const available = sumOver(ROOMS_AVAILABLE, indices);
-    return { occupied, available };
+    const guests = sumOver(GUESTS, indices);
+    return { occupied, available, guests };
   }, [indices]);
 
   // Per-utility totals over the active range.
@@ -121,34 +120,55 @@ export default function UtilitiesPage() {
     return { cost, budget, ly };
   }, [totals]);
 
-  // Chart data — per-utility series for the single-utility case + summed
-  // series across the active utilities for the multi-utility case. The
-  // bars rendered below pick which set to read based on how many filters
-  // are on, so re-deriving here keeps both branches symmetrical.
+  // Months before "today" in the selected year are closed (actuals);
+  // current month and beyond are forecast. Forecast data isn't loaded
+  // yet, so the chart filters those months out entirely.
+  const now = new Date();
+  const isClosedMonth = (i: number): boolean => {
+    const selectedYear = Number(year);
+    if (selectedYear < now.getFullYear()) return true;
+    if (selectedYear > now.getFullYear()) return false;
+    return i < now.getMonth();
+  };
+
+  // Chart data — per-utility series + summed series across the active
+  // utilities. Only closed months are kept; forecast months are dropped
+  // from the X axis until real forecast data wires in.
   const chartData = useMemo(() => {
     const selected = UTILITIES_ORDER.filter((u) => utilitiesOn[u]);
-    return MONTHS_SHORT.map((m, i) => {
-      const row: Record<string, number | string> = { month: m };
-      let sumActual = 0;
-      let sumBudget = 0;
-      let sumLy = 0;
-      for (const u of selected) {
-        const s = UTILITIES[u];
-        row[`${u}_actual`] = s.costCY[i];
-        row[`${u}_budget`] = s.costBudget[i];
-        row[`${u}_ly`] = s.costLY[i];
-        sumActual += s.costCY[i];
-        sumBudget += s.costBudget[i];
-        sumLy += s.costLY[i];
-      }
-      row.sum_actual = sumActual;
-      row.sum_budget = sumBudget;
-      row.sum_ly = sumLy;
-      row.occupancy =
-        ROOMS_AVAILABLE[i] > 0 ? ROOMS_OCCUPIED[i] / ROOMS_AVAILABLE[i] : 0;
-      return row;
-    });
-  }, [utilitiesOn]);
+    return MONTHS_SHORT
+      .map((m, i) => ({ m, i }))
+      .filter(({ i }) => isClosedMonth(i))
+      .map(({ m, i }) => {
+        const row: Record<string, number | string> = { month: m };
+        let sumActual = 0;
+        let sumBudget = 0;
+        let sumLy = 0;
+        for (const u of selected) {
+          const s = UTILITIES[u];
+          row[`${u}_actual`] = s.costCY[i];
+          row[`${u}_budget`] = s.costBudget[i];
+          row[`${u}_ly`] = s.costLY[i];
+          sumActual += s.costCY[i];
+          sumBudget += s.costBudget[i];
+          sumLy += s.costLY[i];
+        }
+        row.sum_actual = sumActual;
+        row.sum_budget = sumBudget;
+        row.sum_ly = sumLy;
+        row.occupancy =
+          ROOMS_AVAILABLE[i] > 0 ? ROOMS_OCCUPIED[i] / ROOMS_AVAILABLE[i] : 0;
+        row.guests = GUESTS[i];
+        return row;
+      });
+    // year is read via isClosedMonth — kept in deps so the chart
+    // re-derives when the Year selector changes.
+  }, [utilitiesOn, year]);
+
+  // Guest scale max — used to fit the guests line on its own hidden axis
+  // without crowding the left $ axis. Padded so the curve never grazes
+  // the chart's top.
+  const guestsMax = Math.max(...GUESTS) * 1.1;
 
   // ─── Export (PNG / PDF) ──────────────────────────────────────
   const exportRef = useRef<HTMLDivElement>(null);
@@ -274,29 +294,6 @@ export default function UtilitiesPage() {
           >
             <Download size={13} /> {exporting === 'pdf' ? 'Generating…' : 'PDF'}
           </button>
-          <button
-            onClick={() => setIsFavorite(!isFavorite)}
-            className="p-2 rounded-lg hover:bg-[var(--bg-hover)] transition-colors"
-            aria-label="Favorite"
-          >
-            <Star
-              size={18}
-              fill={isFavorite ? 'var(--accent)' : 'none'}
-              color={isFavorite ? 'var(--accent)' : 'var(--text-secondary)'}
-            />
-          </button>
-          <button
-            className="p-2 rounded-lg hover:bg-[var(--bg-hover)] transition-colors"
-            aria-label="Refresh"
-          >
-            <RefreshCw size={18} style={{ color: 'var(--text-secondary)' }} />
-          </button>
-          <button
-            className="p-2 rounded-lg hover:bg-[var(--bg-hover)] transition-colors"
-            aria-label="Fullscreen"
-          >
-            <Maximize2 size={18} style={{ color: 'var(--text-secondary)' }} />
-          </button>
         </div>
       </div>
 
@@ -344,7 +341,7 @@ export default function UtilitiesPage() {
         <SegToggle
           value={roomMetric}
           onChange={(v) => setRoomMetric(v as RoomMetric)}
-          options={['POR', 'PAR']}
+          options={['PAR', 'POR', 'GUEST']}
         />
       </div>
 
@@ -386,15 +383,25 @@ export default function UtilitiesPage() {
           })}
         </div>
 
-        {/* Row 2 — Costo por habitación ocupada (POR) o disponible (PAR) */}
+        {/* Row 2 — Costo por habitación ocupada (POR), disponible (PAR), o huésped (GUEST) */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
           {totals.map((t) => {
             const meta = UTILITY_META[t.utility];
-            const div = roomMetric === 'POR' ? rooms.occupied : rooms.available;
+            const div =
+              roomMetric === 'POR'
+                ? rooms.occupied
+                : roomMetric === 'PAR'
+                  ? rooms.available
+                  : rooms.guests;
             const valCY = div > 0 ? t.cost / div : NaN;
             const valBud = div > 0 ? t.budget / div : NaN;
             const valLy = div > 0 ? t.ly / div : NaN;
-            const denomLabel = roomMetric === 'POR' ? 'hab. ocupada' : 'hab. disponible';
+            const denomLabel =
+              roomMetric === 'POR'
+                ? 'hab. ocupada'
+                : roomMetric === 'PAR'
+                  ? 'hab. disponible'
+                  : 'huésped';
             return (
               <KpiCard
                 key={t.utility}
@@ -441,8 +448,8 @@ export default function UtilitiesPage() {
               <ComposedChart
                 data={chartData}
                 margin={{ top: 8, right: 12, left: 0, bottom: 0 }}
-                barCategoryGap="6%"
-                barGap={1}
+                barCategoryGap="12%"
+                barGap={2}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
@@ -457,11 +464,18 @@ export default function UtilitiesPage() {
                   domain={[0, 1]}
                   hide
                 />
+                <YAxis
+                  yAxisId="guests"
+                  orientation="right"
+                  domain={[0, guestsMax]}
+                  hide
+                />
                 <Tooltip
                   formatter={
                     ((value: unknown, name: unknown) => {
                       const n = typeof value === 'number' ? value : Number(value);
                       if (name === 'Ocupación') return `${(n * 100).toFixed(1)}%`;
+                      if (name === 'Huéspedes') return `${n.toLocaleString('en-US')} guest-nights`;
                       return fmtUsd(n);
                     }) as (value: unknown, name: unknown) => string
                   }
@@ -471,9 +485,7 @@ export default function UtilitiesPage() {
                 <RLegend wrapperStyle={{ fontSize: 12 }} />
                 {(() => {
                   const selected = UTILITIES_ORDER.filter((u) => utilitiesOn[u]);
-                  // 1 active → per-utility bars; 2+ → summed bars. Either
-                  // way the bar palette is driven by the series, so the
-                  // three blues stay consistent across all filter states.
+                  // 1 active → per-utility bars; 2+ → summed bars.
                   if (selected.length === 1) {
                     const u = selected[0];
                     return CHART_SERIES.map((s) => (
@@ -506,6 +518,16 @@ export default function UtilitiesPage() {
                   stroke="#6b7280"
                   strokeWidth={2}
                   strokeDasharray="2 3"
+                  dot={false}
+                />
+                <Line
+                  yAxisId="guests"
+                  type="monotone"
+                  dataKey="guests"
+                  name="Huéspedes"
+                  stroke="#94a3b8"
+                  strokeWidth={2}
+                  strokeDasharray="5 3"
                   dot={false}
                 />
               </ComposedChart>

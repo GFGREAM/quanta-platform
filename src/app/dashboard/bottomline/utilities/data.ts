@@ -33,6 +33,15 @@ export const ROOMS_OCCUPIED: number[] = ROOMS_AVAILABLE.map((avail, i) =>
   Math.round(avail * OCC_PCT[i]),
 );
 
+// Average guests per occupied room — lower in winter (leisure singles +
+// business travel), higher in summer (families).
+const GUESTS_PER_ROOM = [1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.0, 1.8, 1.7, 1.6, 1.5];
+
+// Guest-nights per month. GUEST denominator.
+export const GUESTS: number[] = ROOMS_OCCUPIED.map((occ, i) =>
+  Math.round(occ * GUESTS_PER_ROOM[i]),
+);
+
 export type Utility = 'water' | 'electricity' | 'gas';
 
 // Per-utility: monthly consumption in its native unit (m³ / kWh / liters),
@@ -76,12 +85,11 @@ export const UTILITIES: Record<Utility, UtilitySeries> = {
   gas: GAS,
 };
 
-// Single blue palette shared with the Total / Total·Budget / Total·LY
-// sum bars: navy → mid blue → light blue. Same three values everywhere
-// (KPI accents, per-utility bars, sum bars) so the dashboard reads as
-// one palette across every filter.
+// Quanta brand palette (from globals.css): --primary → --accent →
+// --accent-light. Same three values feed UTILITY_META and CHART_SERIES,
+// so KPI accents and chart bars share one corporate palette.
 export const UTILITY_META = {
-  water:       { label: 'Agua',        unit: 'm³',  color: '#1e3a8a' }, // blue-900 (navy)
-  electricity: { label: 'Electricidad', unit: 'kWh', color: '#3b82f6' }, // blue-500
-  gas:         { label: 'Gas',         unit: 'L',   color: '#93c5fd' }, // blue-300
+  water:       { label: 'Agua',        unit: 'm³',  color: '#172951' }, // --primary (navy)
+  electricity: { label: 'Electricidad', unit: 'kWh', color: '#00AFAD' }, // --accent (teal)
+  gas:         { label: 'Gas',         unit: 'L',   color: '#69D9D0' }, // --accent-light
 } as const satisfies Record<Utility, { label: string; unit: string; color: string }>;
