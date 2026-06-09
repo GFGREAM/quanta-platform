@@ -24,6 +24,7 @@ export default function StatementDesktop({ permissionOpts }: { permissionOpts?: 
   const {
     year, setYear,
     hotel, setHotel,
+    week, setWeek, weekOptions, latestWeek,
     metric, setMetric,
     scenario,
     scope, setScope,
@@ -95,6 +96,16 @@ export default function StatementDesktop({ permissionOpts }: { permissionOpts?: 
               {hotelOptions.map((h) => <option key={h} value={h}>{h}</option>)}
             </select>
           )}
+          {/* WoW snapshot — view the Outlook as it stood on a prior weekly snapshot (latest = current) */}
+          <select
+            className="h-9 w-40 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
+            style={selectStyle}
+            value={week}
+            onChange={(e) => setWeek(e.target.value)}
+            title="Week-over-week — view the Outlook as of a weekly snapshot"
+          >
+            {weekOptions.map((w) => <option key={w} value={w}>{w === latestWeek ? `${w} (current)` : w}</option>)}
+          </select>
           <select
             className="h-9 w-28 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
             style={selectStyle}

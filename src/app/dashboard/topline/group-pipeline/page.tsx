@@ -1,6 +1,6 @@
 'use client';
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Star, RefreshCw, Maximize2, ChevronRight, ChevronDown, Download, Info } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback, useRef, Fragment } from 'react';
+import { Star, RefreshCw, Maximize2, ChevronRight, ChevronDown, Download } from 'lucide-react';
 import {
   METRICS,
   STATUSES,
@@ -17,12 +17,18 @@ import {
   getInventory,
   getBaselines,
   getSeries,
+  getGrowthAnalysis,
+  GROWTH_STATUSES,
+  GROWTH_METRICS,
   type Snapshot,
   type Metric,
   type Status,
   type Level,
   type Visual,
   type Baseline,
+  type GrowthDelta,
+  type GrowthRow,
+  type GrowthAnalysis,
 } from './data';
 
 
@@ -94,6 +100,9 @@ export default function GroupPipelinePage() {
   const [fromSnap, setFromSnap] = useState<Snapshot>(() => getSnapshots(PROPERTIES[0].code)[0]);
   const [metric, setMetric] = useState<Metric>('RN');
   const [baseline, setBaseline] = useState<Baseline>('Budget');
+  // Growth Analysis section (inside the matrix). Compact keeps it light (three
+  // actionable deltas per status); Expanded adds vs Avg / vs Start + base rows.
+  const [growthExpanded, setGrowthExpanded] = useState(false);
   const [weighted, setWeighted] = useState(true);
   // Conversion "To" is always the Matrix snapshot — same point-in-time as what
   // the rest of the page is showing — so it doesn't need its own control.
@@ -133,15 +142,11 @@ export default function GroupPipelinePage() {
   // Memoized so it stays referentially stable as a useMemo dep below.
   const visibleLevels = useMemo<Level[]>(() => (view === 'Summary' ? ['My Hotel'] : LEVELS), [view]);
 
-  // Prospect / Hotel reference series for the growth section, all metric-aware:
-  //   • prospectBaseMetric — per-month average of the selected metric across the
-  //     period's base weeks (From→Week, excluding the Week, weeks that reported a
-  //     prospect i.e. RN > 0). Used to backfill the elapsed/closed months of the
-  //     "Prospect All" matrix row (replacing the old peak backfill).
-  //   • prospectMax / hotelMax — per-month PEAK of the selected metric across ALL
-  //     weeks (the most a month ever held). Shown as their own rows above the base
-  //     rows, for every month (elapsed and future). Hotel = Tentative + Definite
-  //     My Hotel (combined the same way as the matrix's "Tentative + Definite").
+  // Prospect reference series for the matrix backfill, metric-aware:
+  //   prospectBaseMetric — per-month average of the selected metric across the
+  //   period's base weeks (From→Week, excluding the Week, weeks that reported a
+  //   prospect i.e. RN > 0). Used to backfill the elapsed/closed months of the
+  //   "Prospect All" matrix row.
   const prospectExtras = useMemo(() => {
     const fromIdx = snapshots.indexOf(fromSnap);
     const toIdx = snapshots.indexOf(toSnap);
@@ -160,33 +165,7 @@ export default function GroupPipelinePage() {
       return reported.length > 0 ? reported.reduce((a, b) => a + b, 0) / reported.length : null;
     });
 
-    const prospectMax = MONTHS.map((_, i) => {
-      const vals = snapshots
-        .map((s) => ({
-          rn: series(visual, s, 'Prospect', 'My Hotel', 'RN')[i] ?? 0,
-          m: series(visual, s, 'Prospect', 'My Hotel', metric)[i],
-        }))
-        .filter((x) => x.rn > 0 && x.m !== null && x.m !== undefined)
-        .map((x) => x.m as number);
-      return vals.length > 0 ? Math.max(...vals) : null;
-    });
-
-    const hotelMax = MONTHS.map((_, i) => {
-      const vals = snapshots
-        .map((s) => {
-          const tRN = series(visual, s, 'Tentative', 'My Hotel', 'RN')[i] ?? 0;
-          const dRN = series(visual, s, 'Definite', 'My Hotel', 'RN')[i] ?? 0;
-          const tM = series(visual, s, 'Tentative', 'My Hotel', metric)[i];
-          const dM = series(visual, s, 'Definite', 'My Hotel', metric)[i];
-          const combinedM = tM === null && dM === null ? null : (tM ?? 0) + (dM ?? 0);
-          return { rn: tRN + dRN, m: combinedM };
-        })
-        .filter((x) => x.rn > 0 && x.m !== null && x.m !== undefined)
-        .map((x) => x.m as number);
-      return vals.length > 0 ? Math.max(...vals) : null;
-    });
-
-    return { prospectBaseMetric, prospectMax, hotelMax };
+    return { prospectBaseMetric };
   }, [visual, metric, fromSnap, toSnap, snapshots, series]);
 
   const rows = useMemo(() => {
@@ -273,37 +252,6 @@ export default function GroupPipelinePage() {
       return reported.length > 0 ? reported.reduce((a, b) => a + b, 0) / reported.length : 0;
     });
 
-    // Hotel base — same averaging logic (reporting weeks only, Week excluded) but on
-    // the hotel's on-the-books RN (Tentative + Definite, My Hotel). Shown as a
-    // supporting context row next to the Prospect base.
-    const hotelBase = MONTHS.map((_, i) => {
-      const reported = weeksForBase
-        .map((s) => {
-          const t = series(visual, s, 'Tentative', 'My Hotel', 'RN')[i] ?? 0;
-          const d = series(visual, s, 'Definite', 'My Hotel', 'RN')[i] ?? 0;
-          return t + d;
-        })
-        .filter((v) => v > 0);
-      return reported.length > 0 ? reported.reduce((a, b) => a + b, 0) / reported.length : 0;
-    });
-
-    // CS / Market on-the-books base — same averaging logic, but on the weighted RN
-    // (INV × (OCC_Tent + OCC_Def)) so it's comparable to MyHotel scale. Used for the
-    // CS/Market growth rows (Expanded + Weighted only).
-    const levelBase = (lv: Level) =>
-      MONTHS.map((_, i) => {
-        const reported = weeksForBase
-          .map((s) => {
-            const ot = series(visual, s, 'Tentative', lv, 'OCC')[i] ?? 0;
-            const od = series(visual, s, 'Definite', lv, 'OCC')[i] ?? 0;
-            return inventory[i] * (ot + od);
-          })
-          .filter((v) => v > 0);
-        return reported.length > 0 ? reported.reduce((a, b) => a + b, 0) / reported.length : 0;
-      });
-    const compSetBase = levelBase('Comp Set');
-    const marketBase = levelBase('Market');
-
     const out: { level: Level; ratios: (number | null)[]; deltaRN: number[] }[] = [];
 
     // MyHotel — Δ(Tent + Def) in actual RN.
@@ -334,7 +282,7 @@ export default function GroupPipelinePage() {
         out.push({ level: lv, ratios, deltaRN });
       }
     }
-    return { rows: out, prospectBase, hotelBase, compSetBase, marketBase, baseWeeks: weeksForBase };
+    return { rows: out, prospectBase };
   }, [visual, fromSnap, toSnap, weighted, view, series, inventory, snapshots]);
 
   // Pick-up between fromSnap and toSnap — raw Δ (can be negative if a bucket shrunk).
@@ -460,6 +408,16 @@ export default function GroupPipelinePage() {
 
     return [build('RN', bookedRN), build('ADR', bookedADR), build('REV', bookedREV)];
   }, [snapshot, baseline, series, baselines, snapDates]);
+
+  // Growth Analysis — five growth angles (vs 1W / 4W / Avg / Max / Start) for
+  // Prospect and Definite, anchored at the selected Week. Hotel source, My Hotel.
+  // Follows the page Metric selector when it's one of RN/ADR/REV/OCC; RevPAR and
+  // BKGS aren't trackable across snapshots here, so they fall back to RN.
+  const growthMetric: Metric = GROWTH_METRICS.includes(metric) ? metric : 'RN';
+  const growthAnalysis = useMemo(
+    () => getGrowthAnalysis(propertyCode, year, snapshot, growthMetric),
+    [propertyCode, year, snapshot, growthMetric]
+  );
 
   // ─── Export (both tables → PNG / PDF) ───────────────────────────────
   const exportRef = useRef<HTMLDivElement>(null);
@@ -712,26 +670,13 @@ export default function GroupPipelinePage() {
               />
             ))}
             <CombinedGroup rows={combinedRows} metric={metric} splitIdx={weekMonthIndex(snapDates, snapshot)} />
-            <ConversionGroup
-              prospectMax={prospectExtras.prospectMax}
-              hotelMax={prospectExtras.hotelMax}
-              metric={metric}
-              prospectBase={conversion.prospectBase}
-              hotelBase={conversion.hotelBase}
-              prospectAll={rows.find((r) => r.status === 'Prospect' && r.level === 'My Hotel')?.series ?? []}
-              hotelAll={combinedRows.find((r) => r.level === 'My Hotel')?.series ?? []}
-              extraLevels={
-                weighted && view === 'Expanded'
-                  ? [
-                      { level: 'Comp Set', base: conversion.compSetBase, all: combinedRows.find((r) => r.level === 'Comp Set')?.series ?? [] },
-                      { level: 'Market', base: conversion.marketBase, all: combinedRows.find((r) => r.level === 'Market')?.series ?? [] },
-                    ]
-                  : []
-              }
-              baseWeeks={conversion.baseWeeks}
-              fromSnap={fromSnap}
-              toSnap={toSnap}
+            <GrowthAnalysisGroup
+              data={growthAnalysis}
+              metric={growthMetric}
+              splitIdx={weekMonthIndex(snapDates, snapshot)}
               snapDates={snapDates}
+              expanded={growthExpanded}
+              onToggle={() => setGrowthExpanded((e) => !e)}
             />
             <PickUpGroup rows={pickUp} fromSnap={fromSnap} toSnap={toSnap} splitIdx={weekMonthIndex(snapDates, snapshot)} snapDates={snapDates} />
             <ConversionLevelsGroup
@@ -756,6 +701,7 @@ export default function GroupPipelinePage() {
           snapDates={snapDates}
         />
       </div>
+
       </div>
 
       {/* Footnotes */}
@@ -768,6 +714,11 @@ export default function GroupPipelinePage() {
         <p className="mt-1">
           <sup>²</sup> For D360, <b>ADR/REV/RevPAR</b> in Comp Set and Market may show as 0 or empty for future months
           (Amadeus releases the figure once the month closes). <b>BKGS</b> is only available in Snap-Feb and Snap-Mar (the hotel&apos;s extended format).
+        </p>
+        <p className="mt-1">
+          <sup>³</sup> <b>Growth Analysis</b>: Δ = (Week − base) ÷ base per month. Bases: previous snapshot (<b>1W</b>),
+          snapshot closest to 28 days back (<b>4W</b>), average / peak across all snapshots up to the Week (<b>Avg</b> / <b>Max</b>),
+          and the first snapshot of the year (<b>Start</b>). <i>new</i> = appeared from zero; “—” = closed month (−100%) or no base to compare.
         </p>
         {!HOTEL_METRICS.includes(metric) && !D360_METRICS.includes(metric) && (
           <p className="mt-1 text-orange-600">Metric not available in any source.</p>
@@ -793,100 +744,66 @@ export default function GroupPipelinePage() {
   );
 }
 
-// ─── Conversion group ────────────────────────────────────────────────
-// Rendered as another section inside the matrix table: per-month conversion %
-// per level, an overall % in the aggregate column, then the supporting RN rows
-// (Prospect base = denominator, Δ(Tent+Def) = numerator).
-function ConversionGroup({
-  prospectMax,
-  hotelMax,
+// ─── Growth Analysis group ───────────────────────────────────────────
+// Rendered inside the matrix table (replaces the old "Growth vs max value"
+// section): five growth angles for Prospect / Definite, anchored at the
+// selected Week (Hotel source, My Hotel level). Compact keeps the visual light
+// — only the weekly pulse (vs 1W), monthly trend (vs 4W) and distance to peak
+// (vs Max) — while Expanded adds vs Avg / vs Start plus the muted base rows.
+const GROWTH_DELTA_DEFS: {
+  key: keyof GrowthRow['deltas'];
+  base: keyof GrowthRow['bases'];
+  label: string;
+  title: string;
+  compact: boolean;
+}[] = [
+  { key: 'vs1w', base: 'weekAgo', label: 'vs 1W', title: 'Weekly pulse — vs the previous snapshot', compact: true },
+  { key: 'vs4w', base: 'fourWAgo', label: 'vs 4W', title: 'Monthly trend — vs the snapshot closest to 28 days back', compact: true },
+  { key: 'vsAvg', base: 'avg', label: 'vs Avg', title: 'Vs the average across all snapshots up to the Week (inclusive)', compact: false },
+  { key: 'vsMax', base: 'max', label: 'vs Max', title: 'Distance to the historical peak across all snapshots up to the Week', compact: true },
+  { key: 'vsStart', base: 'start', label: 'vs Start', title: 'Vs the first snapshot of the year', compact: false },
+];
+
+const GROWTH_BASE_DEFS: { key: 'avg' | 'max' | 'start'; label: string }[] = [
+  { key: 'avg', label: 'Avg base · all weeks' },
+  { key: 'max', label: 'Max base · all weeks' },
+  { key: 'start', label: 'Start base' },
+];
+
+function GrowthAnalysisGroup({
+  data,
   metric,
-  prospectBase,
-  hotelBase,
-  prospectAll,
-  hotelAll,
-  extraLevels,
-  baseWeeks,
-  fromSnap,
-  toSnap,
+  splitIdx,
   snapDates,
+  expanded,
+  onToggle,
 }: {
-  prospectMax: (number | null)[];
-  hotelMax: (number | null)[];
+  data: GrowthAnalysis;
   metric: Metric;
-  prospectBase: number[];
-  hotelBase: number[];
-  prospectAll: (number | null)[];
-  hotelAll: (number | null)[];
-  extraLevels: { level: Level; base: number[]; all: (number | null)[] }[];
-  baseWeeks: Snapshot[];
-  fromSnap: Snapshot;
-  toSnap: Snapshot;
+  splitIdx: number;
   snapDates: Record<string, string>;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
-  const sumBase = prospectBase.reduce((a, b) => a + b, 0);
-  const sumHotel = hotelBase.reduce((a, b) => a + b, 0);
-  // YTD / ROY boundary (same Week month index that splits the Prospect growth).
-  const splitIdx = weekMonthIndex(snapDates, toSnap);
-  const sumRange = (arr: number[], lo: number, hi: number) => arr.slice(lo, hi).reduce((a, b) => a + b, 0);
-  // Same range sum but null-tolerant, for the metric-aware max rows.
-  const sumRangeN = (arr: (number | null)[], lo: number, hi: number) =>
-    arr.slice(lo, hi).reduce<number>((a, b) => a + (b ?? 0), 0);
-  // Growth over a month range — (ΣAll − Σbase) / Σbase on the slice (the close/future
-  // formula used for the FY Total), applied to YTD and ROY columns.
-  const growthRange = (all: (number | null)[], base: number[], lo: number, hi: number) => {
-    const sAll = all.slice(lo, hi).reduce<number>((s, v) => s + (v ?? 0), 0);
-    const sBase = base.slice(lo, hi).reduce((s, v) => s + v, 0);
-    return sBase > 0 ? (sAll - sBase) / sBase : null;
+  const refLabel = (s: Snapshot | null) => (s ? snapLabel(snapDates, s) : '—');
+  const refFor = (key: keyof GrowthRow['deltas']): Snapshot | null =>
+    key === 'vs1w' ? data.refSnaps.weekAgo
+    : key === 'vs4w' ? data.refSnaps.fourWAgo
+    : key === 'vsStart' ? data.refSnaps.start
+    : null;
+  const defs = GROWTH_DELTA_DEFS.filter((d) => expanded || d.compact);
+
+  // Range aggregate (YTD / ROY / Total): blended (ΣActual − ΣBase) / ΣBase over
+  // the slice, with the same zero rules as the per-month deltas.
+  const rangeDelta = (rows: GrowthRow[], base: keyof GrowthRow['bases'], lo: number, hi: number): GrowthDelta => {
+    const slice = rows.slice(lo, hi);
+    if (slice.length === 0 || slice.every((r) => r.bases[base] === null)) return null;
+    const sActual = slice.reduce((s, r) => s + r.actual, 0);
+    const sBase = slice.reduce((s, r) => s + (r.bases[base] ?? 0), 0);
+    if (sBase === 0) return sActual > 0 ? 'new' : null;
+    return Math.round(((sActual - sBase) / sBase) * 1000) / 10;
   };
-  // Growth vs the per-month PEAK (max across all weeks): (X − Max) / Max for every
-  // month, where X is the matrix value (Prospect All / Tentative + Definite). Uniform
-  // — no elapsed/future split. Since Max is the ceiling, X ≤ Max, so this reads ≤ 0:
-  // how far below its peak the value currently sits. YTD / ROY / Total all use the
-  // same (ΣX − ΣMax) / ΣMax over their range, so they reconcile cleanly.
-  const growthVsMax = (all: (number | null)[], max: (number | null)[]) => {
-    const ratios = max.map((mx, i) => {
-      const a = all[i];
-      if (mx === null || mx === 0 || a === null || a === undefined) return null;
-      return (a - mx) / mx;
-    });
-    const sAll = all.reduce<number>((s, v) => s + (v ?? 0), 0);
-    const sMax = max.reduce<number>((s, v) => s + (v ?? 0), 0);
-    const total = sMax > 0 ? (sAll - sMax) / sMax : null;
-    return { ratios, total };
-  };
-  const rangeVsMax = (all: (number | null)[], max: (number | null)[], lo: number, hi: number) => {
-    const sAll = all.slice(lo, hi).reduce<number>((s, v) => s + (v ?? 0), 0);
-    const sMax = max.slice(lo, hi).reduce<number>((s, v) => s + (v ?? 0), 0);
-    return sMax > 0 ? (sAll - sMax) / sMax : null;
-  };
-  const prospectGrowth = growthVsMax(prospectAll, prospectMax);
-  // On-the-books is a close, so growth is measured over the average base —
-  // (All − base) / base. Positive = the All grew vs its average; negative = shrank.
-  // Used for Hotel and (Expanded + Weighted) for Comp Set / Market.
-  const growthVsBase = (all: (number | null)[], base: number[]) => {
-    const ratios = base.map((b, i) => {
-      const a = all[i];
-      if (!b || a === null || a === undefined) return null;
-      return (a - b) / b;
-    });
-    const sAll = all.reduce<number>((s, v) => s + (v ?? 0), 0);
-    const sBase = base.reduce((s, v) => s + v, 0);
-    const total = sBase > 0 ? (sAll - sBase) / sBase : null;
-    return { ratios, total };
-  };
-  const hotelGrowth = growthVsMax(hotelAll, hotelMax);
-  const extraGrowth = extraLevels.map((l) => ({
-    level: l.level,
-    ...growthVsBase(l.all, l.base),
-    ytd: growthRange(l.all, l.base, 0, splitIdx + 1),
-    roy: growthRange(l.all, l.base, splitIdx + 1, MONTHS.length),
-  }));
-  // Label the base by the weeks actually averaged (the Week itself is excluded).
-  const baseLabel =
-    baseWeeks.length <= 1
-      ? snapLabel(snapDates, baseWeeks[0] ?? fromSnap)
-      : `avg ${snapLabel(snapDates, baseWeeks[0])} → ${snapLabel(snapDates, baseWeeks[baseWeeks.length - 1])}`;
+
   return (
     <>
       <tr>
@@ -895,192 +812,154 @@ function ConversionGroup({
           className="px-3 py-2 text-[11px] uppercase tracking-wider font-semibold border-t"
           style={{ backgroundColor: 'var(--bg-hover)', color: 'var(--primary)', borderColor: 'var(--border)' }}
         >
-          GROWTH VS MAX VALUE
-          <span className="ml-2 font-normal normal-case opacity-70">
-            {snapLabel(snapDates, fromSnap)} → {snapLabel(snapDates, toSnap)}
-          </span>
+          <div className="flex items-center justify-between gap-2">
+            <span>
+              GROWTH ANALYSIS
+              <span className="ml-2 font-normal normal-case opacity-70">
+                {metric} · 1W {refLabel(data.refSnaps.weekAgo)} · 4W {refLabel(data.refSnaps.fourWAgo)} · Start {refLabel(data.refSnaps.start)}
+              </span>
+            </span>
+            <button
+              onClick={onToggle}
+              className="px-2 py-0.5 rounded border text-[10px] font-medium normal-case tracking-normal transition-colors hover:bg-white"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', backgroundColor: expanded ? 'white' : 'transparent' }}
+              title={expanded ? 'Back to the three key deltas' : 'Show all five deltas plus the Avg / Max / Start base values'}
+            >
+              {expanded ? '− Compact' : '+ Expanded'}
+            </button>
+          </div>
         </td>
       </tr>
-      {/* Peak (max) of the selected metric per month, across ALL weeks — the most a
-          month ever held. Shown for every month (elapsed and future); these are the
-          ceilings that sit above the period-average base rows below. */}
-      <tr className="border-t" style={{ borderColor: 'var(--border)' }}>
-        <td className="sticky left-0 z-10 px-3 py-2 bg-white" style={{ color: 'var(--text-secondary)' }}>
-          <span className="pl-2 italic">Prospect max · all weeks</span>
-        </td>
-        {prospectMax.map((v, i) => (
-          <td key={i} className="text-right px-2 py-2 tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-            {fmt(v, metric)}
-          </td>
-        ))}
-        <td className="text-right px-2 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-          {fmt(sumRangeN(prospectMax, 0, splitIdx + 1), metric)}
-        </td>
-        <td className="text-right px-2 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-          {fmt(sumRangeN(prospectMax, splitIdx + 1, MONTHS.length), metric)}
-        </td>
-        <td className="text-right px-3 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-          {fmt(sumRangeN(prospectMax, 0, MONTHS.length), metric)}
-        </td>
-      </tr>
-      <tr className="border-t" style={{ borderColor: 'var(--border)' }}>
-        <td className="sticky left-0 z-10 px-3 py-2 bg-white" style={{ color: 'var(--text-secondary)' }}>
-          <span className="pl-2 italic">Hotel max · all weeks</span>
-        </td>
-        {hotelMax.map((v, i) => (
-          <td key={i} className="text-right px-2 py-2 tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-            {fmt(v, metric)}
-          </td>
-        ))}
-        <td className="text-right px-2 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-          {fmt(sumRangeN(hotelMax, 0, splitIdx + 1), metric)}
-        </td>
-        <td className="text-right px-2 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-          {fmt(sumRangeN(hotelMax, splitIdx + 1, MONTHS.length), metric)}
-        </td>
-        <td className="text-right px-3 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-          {fmt(sumRangeN(hotelMax, 0, MONTHS.length), metric)}
-        </td>
-      </tr>
-      {/* Denominator: average Prospect RN across the weeks in the period. Muted so it
-          reads as supporting context, not as live pipeline (which the top Prospect
-          group at the Week already shows). */}
-      <tr className="border-t" style={{ borderColor: 'var(--border)' }}>
-        <td className="sticky left-0 z-10 px-3 py-2 bg-white" style={{ color: 'var(--text-secondary)' }}>
-          <span className="pl-2 italic">Prospect base · {baseLabel}</span>
-        </td>
-        {prospectBase.map((v, i) => (
-          <td key={i} className="text-right px-2 py-2 tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-            {fmtNum(v)}
-          </td>
-        ))}
-        <td className="text-right px-2 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-          {fmtNum(sumRange(prospectBase, 0, splitIdx + 1))}
-        </td>
-        <td className="text-right px-2 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-          {fmtNum(sumRange(prospectBase, splitIdx + 1, MONTHS.length))}
-        </td>
-        <td className="text-right px-3 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-          {fmtNum(sumBase)}
-        </td>
-      </tr>
-      {/* Hotel on-the-books base — same averaging logic, Tentative + Definite RN. */}
-      <tr className="border-t" style={{ borderColor: 'var(--border)' }}>
-        <td className="sticky left-0 z-10 px-3 py-2 bg-white" style={{ color: 'var(--text-secondary)' }}>
-          <span className="pl-2 italic">Hotel · {baseLabel}</span>
-        </td>
-        {hotelBase.map((v, i) => (
-          <td key={i} className="text-right px-2 py-2 tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-            {fmtNum(v)}
-          </td>
-        ))}
-        <td className="text-right px-2 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-          {fmtNum(sumRange(hotelBase, 0, splitIdx + 1))}
-        </td>
-        <td className="text-right px-2 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-          {fmtNum(sumRange(hotelBase, splitIdx + 1, MONTHS.length))}
-        </td>
-        <td className="text-right px-3 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-          {fmtNum(sumHotel)}
-        </td>
-      </tr>
-      {/* CS / Market on-the-books base — weighted RN, Expanded + Weighted only. */}
-      {extraLevels.map((l) => (
-        <tr key={`base-${l.level}`} className="border-t" style={{ borderColor: 'var(--border)' }}>
-          <td className="sticky left-0 z-10 px-3 py-2 bg-white" style={{ color: 'var(--text-secondary)' }}>
-            <span className="pl-2 italic">{l.level} · {baseLabel}</span>
-          </td>
-          {l.base.map((v, i) => (
-            <td key={i} className="text-right px-2 py-2 tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-              {fmtNum(v)}
-            </td>
-          ))}
-          <td className="text-right px-2 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-            {fmtNum(sumRange(l.base, 0, splitIdx + 1))}
-          </td>
-          <td className="text-right px-2 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-            {fmtNum(sumRange(l.base, splitIdx + 1, MONTHS.length))}
-          </td>
-          <td className="text-right px-3 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
-            {fmtNum(l.base.reduce((a, b) => a + b, 0))}
-          </td>
-        </tr>
-      ))}
-      {/* Growth of the current All vs its average base (gained/lost vs the average). */}
-      <tr className="border-t" style={{ borderColor: 'var(--border)' }}>
-        <td
-          className="sticky left-0 z-10 px-3 py-2 bg-white cursor-help"
-          style={{ color: 'var(--primary)' }}
-          title="Prospect All vs its peak — the most that month ever held (Max across all weeks). Same formula every month: (value − max) / max. So it reads ≤ 0: 0 = sitting at its peak, red = the % it currently falls short of that peak."
-        >
-          <span className="pl-2 inline-flex items-center gap-1">
-            Prospect growth
-            <Info size={13} className="opacity-60" style={{ color: 'var(--text-secondary)' }} />
-          </span>
-        </td>
-        {prospectGrowth.ratios.map((v, i) => (
-          <td key={i} className="text-right px-2 py-2 tabular-nums">
-            <GrowthPct value={v} />
-          </td>
-        ))}
-        <td className="text-right px-2 py-2 tabular-nums">
-          <GrowthPct value={rangeVsMax(prospectAll, prospectMax, 0, splitIdx + 1)} />
-        </td>
-        <td className="text-right px-2 py-2 tabular-nums">
-          <GrowthPct value={rangeVsMax(prospectAll, prospectMax, splitIdx + 1, MONTHS.length)} />
-        </td>
-        <td className="text-right px-3 py-2 tabular-nums">
-          <GrowthPct value={prospectGrowth.total} />
-        </td>
-      </tr>
-      <tr className="border-t" style={{ borderColor: 'var(--border)' }}>
-        <td
-          className="sticky left-0 z-10 px-3 py-2 bg-white cursor-help"
-          style={{ color: 'var(--primary)' }}
-          title="Hotel (Tentative + Definite) vs its peak — the most on-the-books that month ever held (Max across all weeks). Same formula every month: (value − max) / max. So it reads ≤ 0: 0 = sitting at its peak, red = the % it currently falls short of that peak."
-        >
-          <span className="pl-2 inline-flex items-center gap-1">
-            Hotel growth
-            <Info size={13} className="opacity-60" style={{ color: 'var(--text-secondary)' }} />
-          </span>
-        </td>
-        {hotelGrowth.ratios.map((v, i) => (
-          <td key={i} className="text-right px-2 py-2 tabular-nums">
-            <GrowthPct value={v} />
-          </td>
-        ))}
-        <td className="text-right px-2 py-2 tabular-nums">
-          <GrowthPct value={rangeVsMax(hotelAll, hotelMax, 0, splitIdx + 1)} />
-        </td>
-        <td className="text-right px-2 py-2 tabular-nums">
-          <GrowthPct value={rangeVsMax(hotelAll, hotelMax, splitIdx + 1, MONTHS.length)} />
-        </td>
-        <td className="text-right px-3 py-2 tabular-nums">
-          <GrowthPct value={hotelGrowth.total} />
-        </td>
-      </tr>
-      {extraGrowth.map((g) => (
-        <tr key={`growth-${g.level}`} className="border-t" style={{ borderColor: 'var(--border)' }}>
-          <td className="sticky left-0 z-10 px-3 py-2 bg-white" style={{ color: 'var(--primary)' }}>
-            <span className="pl-2">{g.level} growth · All vs base</span>
-          </td>
-          {g.ratios.map((v, i) => (
-            <td key={i} className="text-right px-2 py-2 tabular-nums">
-              <GrowthPct value={v} />
-            </td>
-          ))}
-          <td className="text-right px-2 py-2 tabular-nums">
-            <GrowthPct value={g.ytd} />
-          </td>
-          <td className="text-right px-2 py-2 tabular-nums">
-            <GrowthPct value={g.roy} />
-          </td>
-          <td className="text-right px-3 py-2 tabular-nums">
-            <GrowthPct value={g.total} />
-          </td>
-        </tr>
-      ))}
+      {GROWTH_STATUSES.map((status) => {
+        const rows = data.rows.filter((r) => r.status === status);
+        return (
+          <Fragment key={status}>
+            <tr className="border-t" style={{ borderColor: 'var(--border)' }}>
+              <td
+                colSpan={MONTHS.length + 4}
+                className="px-3 py-1.5 text-[10px] uppercase tracking-wider font-semibold bg-white"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                <span className="pl-2">{statusLabel(status)}</span>
+              </td>
+            </tr>
+            {defs.map((d) => {
+              const ref = refFor(d.key);
+              return (
+                <tr key={d.key} className="border-t" style={{ borderColor: 'var(--border)' }}>
+                  <td
+                    className="sticky left-0 z-10 px-3 py-2 bg-white cursor-help"
+                    style={{ color: 'var(--primary)' }}
+                    title={`${d.title}${ref ? ` (${refLabel(ref)})` : ''}. Δ = (Week − base) ÷ base.`}
+                  >
+                    <span className="pl-2">
+                      Δ {d.label}
+                      {ref && <span className="text-[11px] opacity-60"> · {refLabel(ref)}</span>}
+                    </span>
+                  </td>
+                  {rows.map((r, i) => (
+                    <td key={i} className="text-right px-2 py-2 tabular-nums">
+                      <GrowthDeltaCell value={r.deltas[d.key]} />
+                    </td>
+                  ))}
+                  <td className="text-right px-2 py-2 tabular-nums">
+                    <GrowthDeltaCell value={rangeDelta(rows, d.base, 0, splitIdx + 1)} />
+                  </td>
+                  <td className="text-right px-2 py-2 tabular-nums">
+                    <GrowthDeltaCell value={rangeDelta(rows, d.base, splitIdx + 1, MONTHS.length)} />
+                  </td>
+                  <td className="text-right px-3 py-2 tabular-nums">
+                    <GrowthDeltaCell value={rangeDelta(rows, d.base, 0, MONTHS.length)} />
+                  </td>
+                </tr>
+              );
+            })}
+            {expanded &&
+              GROWTH_BASE_DEFS.map((b) => {
+                if (rows.every((r) => r.bases[b.key] === null)) return null;
+                const values = rows.map((r) => r.bases[b.key]);
+                const label = b.key === 'start' ? `Start base · ${refLabel(data.refSnaps.start)}` : b.label;
+                return (
+                  <tr key={b.key} className="border-t" style={{ borderColor: 'var(--border)' }}>
+                    <td className="sticky left-0 z-10 px-3 py-2 bg-white" style={{ color: 'var(--text-secondary)' }}>
+                      <span className="pl-2 italic">{label}</span>
+                    </td>
+                    {values.map((v, i) => (
+                      <td key={i} className="text-right px-2 py-2 tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+                        {fmt(v, metric)}
+                      </td>
+                    ))}
+                    <td className="text-right px-2 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+                      {fmt(rowAggregate(values.slice(0, splitIdx + 1), metric), metric)}
+                    </td>
+                    <td className="text-right px-2 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+                      {fmt(rowAggregate(values.slice(splitIdx + 1), metric), metric)}
+                    </td>
+                    <td className="text-right px-3 py-2 font-semibold tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+                      {fmt(rowAggregate(values, metric), metric)}
+                    </td>
+                  </tr>
+                );
+              })}
+          </Fragment>
+        );
+      })}
     </>
+  );
+}
+
+// Delta cell — plain colored text keeps the section light; only the extremes
+// (> +10% strong green, < −50% red) get a background pill. 'new' = appeared
+// from zero (accent badge); −100% = the month closed and the pool emptied.
+function GrowthDeltaCell({ value }: { value: GrowthDelta }) {
+  if (value === null) {
+    return <span style={{ color: 'var(--text-secondary)' }} />;
+  }
+  if (value === 'new') {
+    return (
+      <span
+        className="inline-block px-1.5 py-0.5 rounded-sm text-[10px] font-bold uppercase tracking-wider"
+        style={{ color: 'var(--accent)', background: 'rgba(0, 175, 173, 0.12)' }}
+        title="New — appeared at the Week with no base to compare against"
+      >
+        new
+      </span>
+    );
+  }
+  if (value === -100) {
+    return (
+      <span style={{ color: 'var(--text-secondary)', opacity: 0.5 }} title="Month closed — the pool emptied; not applicable">
+        —
+      </span>
+    );
+  }
+  if (value > 10) {
+    return (
+      <span
+        className="inline-block px-2 py-0.5 rounded-sm font-bold tabular-nums -mr-2"
+        style={{ color: 'var(--success)', background: 'rgba(16, 185, 129, 0.18)' }}
+      >
+        +{value.toFixed(1)}%
+      </span>
+    );
+  }
+  if (value < -50) {
+    return (
+      <span
+        className="inline-block px-2 py-0.5 rounded-sm font-bold tabular-nums -mr-2"
+        style={{ color: 'var(--danger)', background: VAR_BG_BAD }}
+      >
+        {value.toFixed(1)}%
+      </span>
+    );
+  }
+  // Mild moves stay as plain text: green 0..+10, amber −50..−10, faded amber −10..0.
+  const color = value >= 0 ? 'var(--success)' : 'var(--warning)';
+  const faded = value < 0 && value >= -10;
+  return (
+    <span className="font-medium tabular-nums" style={{ color, opacity: faded ? 0.75 : 1 }}>
+      {value > 0 ? '+' : ''}{value.toFixed(1)}%
+    </span>
   );
 }
 
@@ -1236,22 +1115,6 @@ function PickUpPill({ value }: { value: number }) {
 function fmtNum(v: number): string {
   if (v === 0) return '';
   return v.toLocaleString('en-US', { maximumFractionDigits: 0 });
-}
-
-// Signed growth % pill: green when the All grew over its base, red when it shrank.
-function GrowthPct({ value }: { value: number | null }) {
-  if (value === null || value === undefined || !isFinite(value) || value === 0) {
-    return <span style={{ color: 'var(--text-secondary)' }} />;
-  }
-  const good = value > 0;
-  return (
-    <span
-      className="inline-block px-2 py-0.5 rounded-sm font-semibold tabular-nums -mr-2"
-      style={{ color: good ? 'var(--success)' : 'var(--danger)', background: good ? VAR_BG_GOOD : VAR_BG_BAD }}
-    >
-      {good ? '+' : '-'}{(Math.abs(value) * 100).toFixed(1)}%
-    </span>
-  );
 }
 
 function fmtPct(value: number | null): string {
