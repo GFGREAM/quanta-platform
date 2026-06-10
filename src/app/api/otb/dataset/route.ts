@@ -42,16 +42,37 @@ const SQL_SNAPSHOTS = `
 `;
 
 const SQL_DAILY = `
-  SELECT stay_date::text AS stay_date, year, segment_key,
-         room_nights, rooms_revenue,
-         cs_room_nights, cs_revenue, rn_change_vs_ly
+  SELECT stay_date::text          AS stay_date,
+         year::int                AS year,
+         segment_key,
+         room_nights::numeric     AS room_nights,
+         rooms_revenue::numeric   AS rooms_revenue,
+         cs_room_nights::numeric  AS cs_room_nights,
+         cs_revenue::numeric      AS cs_revenue,
+         rn_change_vs_ly::numeric AS rn_change_vs_ly,
+         rn_change_vs_lw::numeric AS rn_change_vs_lw
   FROM daily_segmentation_otb.daily_actuals
   WHERE property_code = $1 AND snapshot_date = $2::date
   ORDER BY year, stay_date, segment_key
 `;
 
+// 4-week pickup: room_nights from the snapshot closest to (current - 28 days).
+// Returns empty if no such snapshot exists — pickups auto-activate as weekly loads accumulate.
+const SQL_PICKUP_4W = `
+  SELECT stay_date::text AS stay_date, year::int AS year, segment_key,
+         room_nights::numeric AS room_nights
+  FROM daily_segmentation_otb.daily_actuals
+  WHERE property_code = $1
+    AND snapshot_date = (
+      SELECT MAX(snapshot_date) FROM daily_segmentation_otb.daily_actuals
+      WHERE property_code = $1 AND snapshot_date <= ($2::date - 28)
+    )
+  ORDER BY year, stay_date, segment_key
+`;
+
 const SQL_BUDGET = `
-  SELECT segment_key, month, budget_rn, budget_revenue
+  SELECT segment_key, month::int AS month,
+         budget_rn::numeric AS budget_rn, budget_revenue::numeric AS budget_revenue
   FROM daily_segmentation_otb.budget
   WHERE property_code = $1 AND year = $2
   ORDER BY segment_key, month
@@ -128,10 +149,11 @@ export async function GET(request: Request) {
     const currentYear = Number(snapshot.slice(0, 4));
     const priorYear = currentYear - 1;
 
-    // Fetch daily actuals + budget in parallel
-    const [dailyRes, budgetRes] = await Promise.all([
+    // Fetch daily actuals + budget + 4-week pickup snapshot in parallel
+    const [dailyRes, budgetRes, pickup4wRes] = await Promise.all([
       pool.query(SQL_DAILY, [property, snapshot]),
       pool.query(SQL_BUDGET, [property, currentYear]),
+      pool.query(SQL_PICKUP_4W, [property, snapshot]),
     ]);
 
     // Generate date axes
@@ -186,6 +208,22 @@ export async function GET(request: Request) {
       }
     }
 
+    // ─── Pickups ─────────────────────────────────────────────────
+    // Last-week pickup: rn_change_vs_lw from D360 (current year, 2026 axis)
+    const pickupLw2026 = pivotMetric(rows, segments, dateIdx2026, currentYear, "rn_change_vs_lw", len);
+
+    // 4-week pickup: current RN − RN from snapshot ~28 days ago.
+    // If no old snapshot exists (< 28 days of history), returns null → UI shows "—".
+    // Auto-activates as weekly loads accumulate without code changes.
+    let pickup4w2026: SegArrays | null = null;
+    if (pickup4wRes.rows.length > 0) {
+      const oldRn = pivotMetric(pickup4wRes.rows, segments, dateIdx2026, currentYear, "room_nights", len);
+      pickup4w2026 = {};
+      for (const s of segments) {
+        pickup4w2026[s] = dates2026.map((_, i) => Math.round(actual2026[s][i] - (oldRn[s]?.[i] ?? 0)));
+      }
+    }
+
     return NextResponse.json({
       property: {
         code: prop.property_code,
@@ -209,6 +247,8 @@ export async function GET(request: Request) {
       csRevTotal2025,
       budgetTcM,
       budgetRevTcM,
+      pickupLw2026,
+      pickup4w2026,
     });
   } catch (error) {
     console.error("OTB dataset API error:", error);

@@ -488,16 +488,19 @@ function dowAbbr(iso: string): string {
 }
 
 interface FamVals { a: number | null; b: number | null }
-interface ColMetrics { rn: FamVals; occ: FamVals; rev: FamVals; adr: FamVals; revpar: FamVals }
+interface ColMetrics { rn: FamVals; occ: FamVals; rev: FamVals; adr: FamVals; revpar: FamVals; pickupW: number | null; pickup4w: number | null }
 
 // `b` is the comparison series chosen in the header: Budget, Last Year (2025), or Forecast (no data yet).
 function computeMetrics(days: GridDay[], compare: CompareBasis, cap26: number, cap25: number): ColMetrics {
   const n = days.length || 1;
   let rnA = 0, revA = 0, rnB = 0, revB = 0;
+  let pwSum = 0, pwHas = false, p4wSum = 0, p4wHas = false;
   for (const d of days) {
     rnA += d.rn; revA += d.rev;
     if (compare === 'budget') { rnB += d.budgetRn; revB += d.budgetRev; }
     else if (compare === 'ly') { rnB += d.rnLy; revB += d.revLy; }
+    if (d.pickupW != null) { pwSum += d.pickupW; pwHas = true; }
+    if (d.pickup4w != null) { p4wSum += d.pickup4w; p4wHas = true; }
   }
   const hasB = compare !== 'forecast';
   const capB = compare === 'ly' ? cap25 : cap26;
@@ -508,17 +511,21 @@ function computeMetrics(days: GridDay[], compare: CompareBasis, cap26: number, c
     rev: { a: revA, b: hasB ? revB : null },
     adr: { a: div(revA, rnA), b: hasB && rnB ? div(revB, rnB) : null },
     revpar: { a: revA / (cap26 * n), b: hasB ? revB / (capB * n) : null },
+    pickupW: pwHas ? pwSum : null,
+    pickup4w: p4wHas ? p4wSum : null,
   };
 }
 
 function cellValue(m: ColMetrics, famKey: string, sub: string): { v: number | null; pct?: boolean; signed?: boolean } {
-  const x = m[famKey as keyof ColMetrics];
+  if (sub === 'pickupW') return { v: famKey === 'rn' ? m.pickupW : null, signed: true };
+  if (sub === 'pickup4') return { v: famKey === 'rn' ? m.pickup4w : null, signed: true };
+  const x = m[famKey as keyof ColMetrics] as FamVals;
   switch (sub) {
     case 'act': return { v: x.a };
     case 'budget': return { v: x.b };
     case 'variance': return { v: x.a != null && x.b != null ? x.a - x.b : null, signed: true };
     case 'variancePct': return { v: x.b ? ((x.a! - x.b) / x.b) * 100 : null, pct: true, signed: true };
-    default: return { v: null }; // Pick Up rows — need multiple snapshots (placeholder)
+    default: return { v: null };
   }
 }
 
