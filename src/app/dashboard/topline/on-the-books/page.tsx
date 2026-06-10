@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { Fragment, useMemo, useState } from 'react';
+import { createContext, Fragment, useContext, useMemo, useState } from 'react';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import {
   CartesianGrid, Legend, Line, LineChart, ReferenceLine,
@@ -10,11 +10,14 @@ import KpiCard from '@/components/ui/KpiCard';
 import { MultiSelect } from '@/components/ui/MultiSelect';
 import { selectStyle } from '@/lib/selectStyle';
 import {
-  AS_OF, TC_SEGMENTS, TOTAL_KEY, CAPACITY_2025, CAPACITY_2026,
-  PROPERTIES, DEFAULT_PROPERTY,
-  getSegmentSummary, getGridDaily, getGroupDaily,
-  type TcSegment, type SegmentKey, type GridDay,
+  useOtbData, TOTAL_KEY,
+  type OtbData, type TcSegment, type SegmentKey, type GridDay,
 } from './data';
+
+// Context so sub-components (SegmentGrid, SegmentTree) can access the OTB data
+// without prop drilling through every intermediate component.
+const OtbCtx = createContext<OtbData | null>(null);
+function useOtb(): OtbData { return useContext(OtbCtx)!; }
 
 type ViewMode = 'cumulative' | 'daily';
 type Metric = 'RN' | 'OCC';
@@ -47,10 +50,11 @@ const BOARD_VIEWS: { key: BoardView; label: string }[] = [
 
 export default function OnTheBooksPage() {
   const [boardView, setBoardView] = useState<BoardView>('daily');
-  // Property scope. Only WACR-PC is bundled today; the rest arrive with the SQL connection.
-  const [propertyCode, setPropertyCode] = useState<string>(DEFAULT_PROPERTY);
+
+  const [propertyCode, setPropertyCode] = useState<string>('WACCR');
+  const otb = useOtbData(propertyCode);
+  const { loading, AS_OF, TC_SEGMENTS, CAPACITY_2025, CAPACITY_2026, PROPERTIES, getSegmentSummary, getGridDaily, getGroupDaily } = otb;
   const property = PROPERTIES.find((p) => p.code === propertyCode) ?? PROPERTIES[0];
-  // Multi-select of segment groupings (hierarchical nodes). Empty = all (Total).
   const [segSel, setSegSel] = useState<string[]>([]);
   const [view, setView] = useState<ViewMode>('cumulative');
   const [month, setMonth] = useState<MonthFilter>('all');
@@ -62,12 +66,12 @@ export default function OnTheBooksPage() {
   // checkbox list keeps the macro → micro shape; the Total node is dropped because
   // "no selection" already means all.
   const segChoices = useMemo(
-    () => SEG_OPTIONS.filter((o) => o.id !== '__total').map((o) => ({
+    () => buildSegOptions(TC_SEGMENTS).filter((o) => o.id !== '__total').map((o) => ({
       key: '  '.repeat(o.depth) + o.label,
       plain: o.label,
       segs: o.segs,
     })),
-    [],
+    [TC_SEGMENTS],
   );
   const segLabels = useMemo(() => segChoices.map((c) => c.key), [segChoices]);
 
@@ -178,11 +182,26 @@ export default function OnTheBooksPage() {
 
   const periodLabel = month === 'all' ? null : MONTH_FULL[month - 1];
   const fmtVal = (v: number) => (isOcc ? fmtPct(v) : fmtRn(v));
-  // variance vs budget: relative % for RN, percentage points for OCC
   const varSub = (cur: number, ref: number) =>
     isOcc ? `${cur - ref >= 0 ? '+' : ''}${(cur - ref).toFixed(1)} pts` : fmtVar(cur, ref);
 
+  if (loading || TC_SEGMENTS.length === 0) {
+    return (
+      <div className="animate-pulse flex flex-col gap-4">
+        <div className="h-4 w-48 rounded" style={{ background: 'var(--border)' }} />
+        <div className="h-8 w-64 rounded" style={{ background: 'var(--border)' }} />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-24 rounded-lg" style={{ background: 'var(--muted)' }} />
+          ))}
+        </div>
+        <div className="h-64 rounded-lg" style={{ background: 'var(--muted)' }} />
+      </div>
+    );
+  }
+
   return (
+    <OtbCtx.Provider value={otb}>
     <div className="flex flex-col gap-5 font-[Inter,-apple-system,BlinkMacSystemFont,sans-serif]" style={{ color: 'var(--text-primary)' }}>
       <div className="flex items-center gap-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
         <span className="hover:underline cursor-pointer">Dashboard</span>
@@ -414,6 +433,7 @@ export default function OnTheBooksPage() {
       {boardView === 'dailySegment' && <SegmentTree month={month} />}
       {boardView === 'monthly' && <BlankView label="Monthly" />}
     </div>
+    </OtbCtx.Provider>
   );
 }
 
@@ -471,7 +491,7 @@ interface FamVals { a: number | null; b: number | null }
 interface ColMetrics { rn: FamVals; occ: FamVals; rev: FamVals; adr: FamVals; revpar: FamVals }
 
 // `b` is the comparison series chosen in the header: Budget, Last Year (2025), or Forecast (no data yet).
-function computeMetrics(days: GridDay[], compare: CompareBasis): ColMetrics {
+function computeMetrics(days: GridDay[], compare: CompareBasis, cap26: number, cap25: number): ColMetrics {
   const n = days.length || 1;
   let rnA = 0, revA = 0, rnB = 0, revB = 0;
   for (const d of days) {
@@ -480,14 +500,14 @@ function computeMetrics(days: GridDay[], compare: CompareBasis): ColMetrics {
     else if (compare === 'ly') { rnB += d.rnLy; revB += d.revLy; }
   }
   const hasB = compare !== 'forecast';
-  const capB = compare === 'ly' ? CAPACITY_2025 : CAPACITY_2026; // LY occ/RevPAR on 2025 capacity
+  const capB = compare === 'ly' ? cap25 : cap26;
   const div = (x: number, y: number) => (y ? x / y : null);
   return {
     rn: { a: rnA, b: hasB ? rnB : null },
-    occ: { a: (rnA / (CAPACITY_2026 * n)) * 100, b: hasB ? (rnB / (capB * n)) * 100 : null },
+    occ: { a: (rnA / (cap26 * n)) * 100, b: hasB ? (rnB / (capB * n)) * 100 : null },
     rev: { a: revA, b: hasB ? revB : null },
     adr: { a: div(revA, rnA), b: hasB && rnB ? div(revB, rnB) : null },
-    revpar: { a: revA / (CAPACITY_2026 * n), b: hasB ? revB / (capB * n) : null },
+    revpar: { a: revA / (cap26 * n), b: hasB ? revB / (capB * n) : null },
   };
 }
 
@@ -513,12 +533,13 @@ function formatCell(fam: typeof GRID_FAMILIES[number], sub: string, m: ColMetric
 }
 
 function SegmentGrid({ segment, month, isOcc, granularity }: { segment: SegmentKey; month: MonthFilter; isOcc: boolean; granularity: 'monthly' | 'daily' }) {
+  const { getGridDaily, CAPACITY_2025, CAPACITY_2026 } = useOtb();
   const [compare, setCompare] = useState<CompareBasis>('budget');
   const [dayType, setDayType] = useState<DayType>('all');
   const compareRow = COMPARE_OPTIONS.find((o) => o.key === compare)!.row;
   // First family follows the Metric toggle: Room Nights or Occupancy %.
   const families = isOcc ? [OCC_FAMILY, ...GRID_FAMILIES.slice(1)] : GRID_FAMILIES;
-  const daily = useMemo(() => getGridDaily(segment), [segment]);
+  const daily = useMemo(() => getGridDaily(segment), [segment, getGridDaily]);
 
   // Monthly → 12 month columns. Daily → one column per day (full year = 365 cols w/ scroll,
   // or just the selected month). Both honour the weekday / weekend filter.
@@ -542,8 +563,8 @@ function SegmentGrid({ segment, month, isOcc, granularity }: { segment: SegmentK
     return { columns: cols, totalDays: days };
   }, [daily, month, dayType, granularity]);
 
-  const colMetrics = useMemo(() => columns.map((c) => computeMetrics(c.days, compare)), [columns, compare]);
-  const totalMetrics = useMemo(() => computeMetrics(totalDays, compare), [totalDays, compare]);
+  const colMetrics = useMemo(() => columns.map((c) => computeMetrics(c.days, compare, CAPACITY_2026, CAPACITY_2025)), [columns, compare, CAPACITY_2026, CAPACITY_2025]);
+  const totalMetrics = useMemo(() => computeMetrics(totalDays, compare, CAPACITY_2026, CAPACITY_2025), [totalDays, compare, CAPACITY_2026, CAPACITY_2025]);
 
   const renderCell = (fam: typeof GRID_FAMILIES[number], sub: string, m: ColMetrics, key: string | number, isTotal: boolean) => {
     const { text, color, emphasize } = formatCell(fam, sub, m);
@@ -666,8 +687,8 @@ function segmentsOf(n: TreeNode): string[] {
 
 // Flattened hierarchical options for the Segment selector (Total → macro → sub → detail).
 interface SegOption { id: string; label: string; depth: number; segs: TcSegment[] }
-const SEG_OPTIONS: SegOption[] = (() => {
-  const out: SegOption[] = [{ id: '__total', label: 'Total', depth: 0, segs: TC_SEGMENTS }];
+function buildSegOptions(tcSegments: TcSegment[]): SegOption[] {
+  const out: SegOption[] = [{ id: '__total', label: 'Total', depth: 0, segs: tcSegments }];
   const walk = (nodes: TreeNode[], depth: number) => {
     for (const n of nodes) {
       out.push({ id: n.id, label: n.label, depth, segs: segmentsOf(n) as TcSegment[] });
@@ -676,7 +697,7 @@ const SEG_OPTIONS: SegOption[] = (() => {
   };
   walk(SEG_TREE, 0);
   return out;
-})();
+}
 
 const TREE_METRICS = [
   { key: 'rn', label: 'Room Nights', short: 'RN' },
@@ -687,6 +708,7 @@ const TREE_METRICS = [
 ];
 
 function SegmentTree({ month }: { month: MonthFilter }) {
+  const { getGridDaily, TC_SEGMENTS, CAPACITY_2025, CAPACITY_2026 } = useOtb();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [dayType, setDayType] = useState<DayType>('all');
   const [compare, setCompare] = useState<CompareBasis>('budget');
@@ -698,7 +720,7 @@ function SegmentTree({ month }: { month: MonthFilter }) {
     return next;
   });
 
-  const sample = useMemo(() => getGridDaily('General Discount'), []);
+  const sample = useMemo(() => getGridDaily('General Discount'), [getGridDaily]);
   const dates = useMemo(() => sample.map((d) => d.date), [sample]);
   const paceFlags = useMemo(() => sample.map((d) => d.isPace), [sample]);
   const series = useMemo(() => {
@@ -710,7 +732,7 @@ function SegmentTree({ month }: { month: MonthFilter }) {
       rev[seg] = g.map((d) => d.rev); budRev[seg] = g.map((d) => d.budgetRev); revLy[seg] = g.map((d) => d.revLy);
     });
     return { rn, bud, ly, rev, budRev, revLy };
-  }, []);
+  }, [TC_SEGMENTS, getGridDaily]);
 
   const columns = useMemo(() => dates
     .map((dt, i) => ({ dt, i }))

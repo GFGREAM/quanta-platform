@@ -20,7 +20,7 @@ export async function getUserPermissions(email: string): Promise<UserPermissions
   if (rows.length === 0) {
     return { hasFullAccess: false, sections: {} };
   }
-  if (rows.some((r) => r.section_key === '_admin_all')) {
+  if (rows.some((r) => r.section_key.trim().toLowerCase() === '_admin_all')) {
     return { hasFullAccess: true, sections: {} };
   }
   const sections: Record<string, string[]> = {};
