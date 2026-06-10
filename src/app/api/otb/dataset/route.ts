@@ -50,7 +50,10 @@ const SQL_DAILY = `
          cs_room_nights::numeric  AS cs_room_nights,
          cs_revenue::numeric      AS cs_revenue,
          rn_change_vs_ly::numeric AS rn_change_vs_ly,
-         rn_change_vs_lw::numeric AS rn_change_vs_lw
+         rn_change_vs_lw::numeric AS rn_change_vs_lw,
+         rev_change_vs_ly::numeric   AS rev_change_vs_ly,
+         cs_rn_change_vs_ly::numeric AS cs_rn_change_vs_ly,
+         cs_rev_change_vs_ly::numeric AS cs_rev_change_vs_ly
   FROM daily_segmentation_otb.daily_actuals
   WHERE property_code = $1 AND snapshot_date = $2::date
   ORDER BY year, stay_date, segment_key
@@ -188,6 +191,39 @@ export async function GET(request: Request) {
       stly2026[seg][idx] = Math.round(asNum(r.room_nights) - asNum(r.rn_change_vs_ly));
     }
 
+    // STLY Revenue = rooms_revenue - rev_change_vs_ly (on the 2026 axis)
+    const stlyRev2026 = emptyArrays(segments, len);
+    for (const r of rows) {
+      if (Number(r.year) !== currentYear) continue;
+      const idx = dateIdx2026.get(r.stay_date as string);
+      if (idx === undefined) continue;
+      const seg = r.segment_key as string;
+      if (!(seg in stlyRev2026)) continue;
+      stlyRev2026[seg][idx] = Math.round(asNum(r.rooms_revenue) - asNum(r.rev_change_vs_ly));
+    }
+
+    // CS STLY RN = cs_room_nights - cs_rn_change_vs_ly (on the 2026 axis)
+    const csStlyRn2026 = emptyArrays(segments, len);
+    for (const r of rows) {
+      if (Number(r.year) !== currentYear) continue;
+      const idx = dateIdx2026.get(r.stay_date as string);
+      if (idx === undefined) continue;
+      const seg = r.segment_key as string;
+      if (!(seg in csStlyRn2026)) continue;
+      csStlyRn2026[seg][idx] = Math.round(asNum(r.cs_room_nights) - asNum(r.cs_rn_change_vs_ly));
+    }
+
+    // CS STLY Revenue = cs_revenue - cs_rev_change_vs_ly (on the 2026 axis)
+    const csStlyRev2026 = emptyArrays(segments, len);
+    for (const r of rows) {
+      if (Number(r.year) !== currentYear) continue;
+      const idx = dateIdx2026.get(r.stay_date as string);
+      if (idx === undefined) continue;
+      const seg = r.segment_key as string;
+      if (!(seg in csStlyRev2026)) continue;
+      csStlyRev2026[seg][idx] = Math.round(asNum(r.cs_revenue) - asNum(r.cs_rev_change_vs_ly));
+    }
+
     // CS Total (sum across all segments per day, prior year)
     const csTotal2025 = dates2025.map((_, i) => segments.reduce((acc, s) => acc + csRn2025[s][i], 0));
     const csRevTotal2025 = dates2025.map((_, i) => segments.reduce((acc, s) => acc + csRev2025[s][i], 0));
@@ -239,6 +275,9 @@ export async function GET(request: Request) {
       actual2025,
       actual2026,
       stly2026,
+      stlyRev2026,
+      csStlyRn2026,
+      csStlyRev2026,
       revenue2025,
       revenue2026,
       csRn2025,

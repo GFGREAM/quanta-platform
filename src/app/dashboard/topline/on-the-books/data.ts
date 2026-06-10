@@ -54,6 +54,9 @@ export interface GridDay {
   budgetRev: number;
   rnLy: number;
   revLy: number;
+  stlyRev: number;           // STLY revenue (rooms_revenue - rev_change_vs_ly)
+  csStlyRn: number;          // Comp Set STLY room nights
+  csStlyRev: number;         // Comp Set STLY revenue
   pickupW: number | null;   // RN change vs last week (from D360)
   pickup4w: number | null;  // RN diff vs snapshot ~28 days ago
 }
@@ -70,6 +73,9 @@ interface OtbApiResponse {
   actual2025: Record<string, number[]>;
   actual2026: Record<string, number[]>;
   stly2026: Record<string, number[]>;
+  stlyRev2026: Record<string, number[]>;
+  csStlyRn2026: Record<string, number[]>;
+  csStlyRev2026: Record<string, number[]>;
   revenue2025: Record<string, number[]>;
   revenue2026: Record<string, number[]>;
   csRn2025: Record<string, number[]>;
@@ -170,6 +176,7 @@ export function useOtbData(propertyCode: string): OtbData {
     if (!data) return null;
 
     const { segments, dates2025, dates2026, actual2025, actual2026, stly2026,
+      stlyRev2026, csStlyRn2026, csStlyRev2026,
       revenue2025, revenue2026, csRn2025, csRev2025, csTotal2025, csRevTotal2025,
       budgetTcM, budgetRevTcM, pickupLw2026, pickup4w2026, asOf } = data;
 
@@ -203,7 +210,8 @@ export function useOtbData(propertyCode: string): OtbData {
 
     return {
       tcSegments, dates2025, dates2026, asOf,
-      actual2025, actual2026, stly2026, revenue2025, revenue2026,
+      actual2025, actual2026, stly2026, stlyRev2026, csStlyRn2026, csStlyRev2026,
+      revenue2025, revenue2026,
       total2025, total2026, totalStly, totalRev2025, totalRev2026,
       totalBudgetM, totalBudgetRevM, totalBudgetDailyRn, totalBudgetDailyRev,
       budgetTcM, budgetRevTcM,
@@ -241,16 +249,27 @@ export function useOtbData(propertyCode: string): OtbData {
       total2025, total2026, totalRev2025, totalRev2026,
       totalBudgetDailyRn, totalBudgetDailyRev, segBudgetRn, segBudgetRev,
       csTotal2025, csRevTotal2025, csRn2025, csRev2025,
+      stlyRev2026, csStlyRn2026, csStlyRev2026,
       pickupLw2026, pickup4w2026 } = derived;
     const isTotal = seg === TOTAL_KEY;
+    const tcSegs = derived.tcSegments;
     const rn26 = isTotal ? total2026 : actual2026[seg];
     const rn25 = isTotal ? total2025 : actual2025[seg];
     const rev26 = isTotal ? totalRev2026 : revenue2026[seg];
     const rev25 = isTotal ? totalRev2025 : revenue2025[seg];
     const budRn = isTotal ? totalBudgetDailyRn : segBudgetRn[seg];
     const budRev = isTotal ? totalBudgetDailyRev : segBudgetRev[seg];
+    // STLY revenue & CS STLY: for Total, sum across all segments per day
+    const sRevArr = isTotal
+      ? dates2026.map((_, i) => tcSegs.reduce((acc, s) => acc + (stlyRev2026[s]?.[i] ?? 0), 0))
+      : (stlyRev2026[seg] ?? null);
+    const csStlyRnArr = isTotal
+      ? dates2026.map((_, i) => tcSegs.reduce((acc, s) => acc + (csStlyRn2026[s]?.[i] ?? 0), 0))
+      : (csStlyRn2026[seg] ?? null);
+    const csStlyRevArr = isTotal
+      ? dates2026.map((_, i) => tcSegs.reduce((acc, s) => acc + (csStlyRev2026[s]?.[i] ?? 0), 0))
+      : (csStlyRev2026[seg] ?? null);
     // Pickups: for Total, sum across all segments per day
-    const tcSegs = derived.tcSegments;
     const lwArr = isTotal
       ? (pickupLw2026 ? dates2026.map((_, i) => tcSegs.reduce((acc, s) => acc + (pickupLw2026[s]?.[i] ?? 0), 0)) : null)
       : (pickupLw2026?.[seg] ?? null);
@@ -267,6 +286,9 @@ export function useOtbData(propertyCode: string): OtbData {
       budgetRev: budRev?.[i] ?? 0,
       rnLy: rn25?.[i] ?? 0,
       revLy: rev25?.[i] ?? 0,
+      stlyRev: sRevArr?.[i] ?? 0,
+      csStlyRn: csStlyRnArr?.[i] ?? 0,
+      csStlyRev: csStlyRevArr?.[i] ?? 0,
       pickupW: lwArr?.[i] ?? null,
       pickup4w: p4wArr?.[i] ?? null,
     }));
