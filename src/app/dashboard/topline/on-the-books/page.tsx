@@ -498,7 +498,7 @@ function computeMetrics(days: GridDay[], compare: CompareBasis, cap26: number, c
   for (const d of days) {
     rnA += d.rn; revA += d.rev;
     if (compare === 'budget') { rnB += d.budgetRn; revB += d.budgetRev; }
-    else if (compare === 'ly') { rnB += d.rnLy; revB += d.revLy; }
+    else if (compare === 'ly') { rnB += d.rnLy; revB += d.stlyRev; }
     if (d.pickupW != null) { pwSum += d.pickupW; pwHas = true; }
     if (d.pickup4w != null) { p4wSum += d.pickup4w; p4wHas = true; }
   }
@@ -736,7 +736,7 @@ function SegmentTree({ month }: { month: MonthFilter }) {
     TC_SEGMENTS.forEach((seg) => {
       const g = getGridDaily(seg);
       rn[seg] = g.map((d) => d.rn); bud[seg] = g.map((d) => d.budgetRn); ly[seg] = g.map((d) => d.rnLy);
-      rev[seg] = g.map((d) => d.rev); budRev[seg] = g.map((d) => d.budgetRev); revLy[seg] = g.map((d) => d.revLy);
+      rev[seg] = g.map((d) => d.rev); budRev[seg] = g.map((d) => d.budgetRev); revLy[seg] = g.map((d) => d.stlyRev);
     });
     return { rn, bud, ly, rev, budRev, revLy };
   }, [TC_SEGMENTS, getGridDaily]);
