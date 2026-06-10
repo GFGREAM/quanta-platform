@@ -56,11 +56,16 @@ export const CHANNELS: { key: Channel; label: string }[] = [
 
 // Top-level NPR concepts. A concept with `children` is an expandable bucket whose value = the SUM
 // of its detail rows (e.g. AYB). A childless concept is a plain leaf carrying its own value (SPA,
-// Tiendas, Otros). `pending: true` marks a bucket whose detail hasn't been shared yet (Up Selling)
-// — it shows its known total and a "detalle pendiente" note until the breakdown arrives.
+// Tiendas, Otros). `pending: true` marks a bucket whose detail hasn't been shared yet — it shows
+// its known total and a "detalle pendiente" note until the breakdown arrives.
 export interface BucketDef { bucket: string; children: string[]; pending?: boolean }
+// Up Selling = the Extra Room Revenue (ERR) group; its detail are the six ERR room lines.
+const ERR_LINES = [
+  'GNS - Gtd. No-Show', 'RGN - Rebate Gtd. No-Show', 'OTR - Up Selling',
+  'OTR - Late Check Out', 'OTR - Other Extra Room Rev', 'OTR - Extra Person',
+];
 export const BUCKETS: BucketDef[] = [
-  { bucket: 'Up Selling', children: [], pending: true },
+  { bucket: 'Up Selling', children: ERR_LINES },
   { bucket: 'F&B', children: ['F&B Package', 'F&B EP', 'F&B Other'] },
   { bucket: 'Spa', children: [] },
   { bucket: 'Retail', children: [] },
@@ -71,7 +76,12 @@ export const BUCKETS: BucketDef[] = [
 type Vals = [hotel: number, club: number, otros: number, budget: number];
 const DATA: Record<MonthKey, Record<string, Vals>> = {
   ene: {
-    'Up Selling': [9.4, 0, 0, 15],
+    'GNS - Gtd. No-Show': [0.392, 0, 0, 0],
+    'RGN - Rebate Gtd. No-Show': [-5.175, 0, 0, 0],
+    'OTR - Up Selling': [2.913, 5.771, 0, 15],
+    'OTR - Late Check Out': [0, 0, 0, 0],
+    'OTR - Other Extra Room Rev': [1.3, 1.858, 0, 0],
+    'OTR - Extra Person': [8.401, 0, 0, 0],
     'F&B Package': [2.4, 147.6, 0, 459],
     'F&B EP': [77.8, 289.0, 21.4, 535],
     'F&B Other': [59.2, 2.5, 0, 44],
@@ -80,7 +90,12 @@ const DATA: Record<MonthKey, Record<string, Vals>> = {
     'Other Income': [19.3, 0, 0, 25],
   },
   feb: {
-    'Up Selling': [24.32, 0, 0, 15],
+    'GNS - Gtd. No-Show': [0, 0.093, 0, 0],
+    'RGN - Rebate Gtd. No-Show': [0, 0, 0, 0],
+    'OTR - Up Selling': [11.23, 11.864, 0, 15],
+    'OTR - Late Check Out': [0, 0, 0, 0],
+    'OTR - Other Extra Room Rev': [-7.022, 0.186, 0, 0],
+    'OTR - Extra Person': [20.115, 0, 0, 0],
     'F&B Package': [1.1, 219.2, 0, 518],
     'F&B EP': [83.0, 354.3, 21.2, 607],
     'F&B Other': [56.1, 2.1, 0, 37],
@@ -89,7 +104,12 @@ const DATA: Record<MonthKey, Record<string, Vals>> = {
     'Other Income': [19.9, 0, 0, 28],
   },
   mar: {
-    'Up Selling': [46.06, 0, 0, 15],
+    'GNS - Gtd. No-Show': [2.521, 3.292, 0, 0],
+    'RGN - Rebate Gtd. No-Show': [0, 0, 0, 0],
+    'OTR - Up Selling': [12.733, 16.272, 0, 15],
+    'OTR - Late Check Out': [0, 0, 0, 0],
+    'OTR - Other Extra Room Rev': [0, 1.379, 0, 0],
+    'OTR - Extra Person': [30.802, 0, 0, 0],
     'F&B Package': [19.6, 310.9, 0, 543],
     'F&B EP': [204.0, 392.2, 18.5, 647],
     'F&B Other': [53.5, 2.3, 0, 39],
@@ -98,7 +118,12 @@ const DATA: Record<MonthKey, Record<string, Vals>> = {
     'Other Income': [121.4, 0, 0, 31],
   },
   abr: {
-    'Up Selling': [29.52, 0, 0, 15],
+    'GNS - Gtd. No-Show': [0.915, 0, 0, 0],
+    'RGN - Rebate Gtd. No-Show': [-0.499, 0, 0, 0],
+    'OTR - Up Selling': [8.964, 9.972, 0, 15],
+    'OTR - Late Check Out': [0.257, 0.154, 0, 0],
+    'OTR - Other Extra Room Rev': [-0.32, 0.15, 0, 0],
+    'OTR - Extra Person': [20.204, 0, 0, 0],
     'F&B Package': [5.7, 268.8, 0, 381],
     'F&B EP': [61.2, 252.3, 13.1, 465],
     'F&B Other': [10.0, 0.1, 0.0, 32],
@@ -107,7 +132,12 @@ const DATA: Record<MonthKey, Record<string, Vals>> = {
     'Other Income': [27.3, 0, 0, 27],
   },
   may: {
-    'Up Selling': [17.83, 0, 0, 15],
+    'GNS - Gtd. No-Show': [0, 0.143, 0, 0],
+    'RGN - Rebate Gtd. No-Show': [0, 0, 0, 0],
+    'OTR - Up Selling': [10.077, 3.138, 0, 15],
+    'OTR - Late Check Out': [0, 0.138, 0, 0],
+    'OTR - Other Extra Room Rev': [0, 1.163, 0, 0],
+    'OTR - Extra Person': [7.753, 0, 0, 0],
     'F&B Package': [3.7, 186.7, 0, 303],
     'F&B EP': [37.7, 182.0, 12.0, 378],
     'F&B Other': [59.1, 0.4, 0, 42],
@@ -117,7 +147,6 @@ const DATA: Record<MonthKey, Record<string, Vals>> = {
   },
   // ── Forecast (Jun–Dic 2026) ──
   jun: {
-    'Up Selling': [25.0, 0, 0, 15],
     'F&B Package': [0, 190.0, 0, 295],
     'F&B EP': [76.6, 197.0, 11.6, 360],
     'F&B Other': [15.1, 0.5, 0, 28],
@@ -126,7 +155,6 @@ const DATA: Record<MonthKey, Record<string, Vals>> = {
     'Other Income': [13.2, 0, 0, 22],
   },
   jul: {
-    'Up Selling': [20.0, 0, 0, 15],
     'F&B Package': [0, 150.0, 0, 294],
     'F&B EP': [83.1, 171.9, 10.1, 365],
     'F&B Other': [5.0, 0.2, 0, 23],
@@ -135,7 +163,6 @@ const DATA: Record<MonthKey, Record<string, Vals>> = {
     'Other Income': [16.1, 0, 0, 24],
   },
   ago: {
-    'Up Selling': [20.0, 0, 0, 15],
     'F&B Package': [0, 120.0, 0, 220],
     'F&B EP': [47.1, 149.2, 8.8, 270],
     'F&B Other': [20.1, 0.6, 0, 37],
@@ -144,7 +171,6 @@ const DATA: Record<MonthKey, Record<string, Vals>> = {
     'Other Income': [10.8, 0, 0, 18],
   },
   sep: {
-    'Up Selling': [15.0, 0, 0, 15],
     'F&B Package': [0, 97.5, 0, 183],
     'F&B EP': [42.1, 133.3, 7.8, 228],
     'F&B Other': [30.1, 1.0, 0, 28],
@@ -153,7 +179,6 @@ const DATA: Record<MonthKey, Record<string, Vals>> = {
     'Other Income': [10.7, 0, 0, 17],
   },
   oct: {
-    'Up Selling': [15.0, 0, 0, 15],
     'F&B Package': [0, 201.9, 0, 402],
     'F&B EP': [90.8, 287.9, 16.9, 477],
     'F&B Other': [40.2, 1.3, 0, 37],
@@ -162,7 +187,6 @@ const DATA: Record<MonthKey, Record<string, Vals>> = {
     'Other Income': [14.1, 0, 0, 25],
   },
   nov: {
-    'Up Selling': [15.0, 0, 0, 15],
     'F&B Package': [0, 263.0, 0, 544],
     'F&B EP': [109.9, 348.5, 20.5, 647],
     'F&B Other': [128.5, 4.1, 0, 111],
@@ -171,7 +195,6 @@ const DATA: Record<MonthKey, Record<string, Vals>> = {
     'Other Income': [18.0, 0, 0, 32],
   },
   dic: {
-    'Up Selling': [15.0, 0, 0, 15],
     'F&B Package': [0, 233.8, 0, 473],
     'F&B EP': [338.1, 339.6, 19.9, 585],
     'F&B Other': [65.2, 2.1, 0, 28],
@@ -180,6 +203,41 @@ const DATA: Record<MonthKey, Record<string, Vals>> = {
     'Other Income': [17.7, 0, 0, 31],
   },
 };
+
+// ── Forecast ERR detail (Jun–Dic) ──────────────────────────────────────────────
+// The source only gave a single Up Selling (ERR) total for the forecast months. Distribute each
+// month's total across the six ERR lines and the Hotel/Club channels using the proportional mix
+// observed in the closed months (Ene–May), so the forecast carries the same detail shape. Budget
+// stays on the OTR - Up Selling line. Totals per month are unchanged (the split sums back to them).
+const FORECAST_UPSELL: Partial<Record<MonthKey, number>> = {
+  jun: 25, jul: 20, ago: 20, sep: 15, oct: 15, nov: 15, dic: 15,
+};
+const UPSELL_BUDGET = 15;
+{
+  const weight: Record<string, { hotel: number; club: number }> = {};
+  let grand = 0;
+  for (const line of ERR_LINES) {
+    let hotel = 0, club = 0;
+    for (const mk of ACTUAL_MONTHS) {
+      const v = DATA[mk][line];
+      if (v) { hotel += v[0]; club += v[1]; }
+    }
+    weight[line] = { hotel, club };
+    grand += hotel + club;
+  }
+  for (const mk of Object.keys(FORECAST_UPSELL) as MonthKey[]) {
+    const total = FORECAST_UPSELL[mk]!;
+    for (const line of ERR_LINES) {
+      const w = weight[line];
+      DATA[mk][line] = [
+        grand ? (w.hotel / grand) * total : 0,
+        grand ? (w.club / grand) * total : 0,
+        0,
+        line === 'OTR - Up Selling' ? UPSELL_BUDGET : 0,
+      ];
+    }
+  }
+}
 
 const relPct = (a: number, b: number) => (b ? ((a - b) / b) * 100 : null);
 

@@ -54,6 +54,7 @@ export interface GridDay {
   budgetRev: number;
   rnLy: number;
   revLy: number;
+  rnStly: number;            // 2025 STLY room nights (D360, on the 2026 axis)
   stlyRev: number;           // STLY revenue (rooms_revenue - rev_change_vs_ly)
   csStlyRn: number;          // Comp Set STLY room nights
   csStlyRev: number;         // Comp Set STLY revenue
@@ -186,6 +187,7 @@ export function useOtbData(propertyCode: string): OtbData {
     const total2025 = dates2025.map((_, i) => tcSegments.reduce((acc, s) => acc + (actual2025[s]?.[i] ?? 0), 0));
     const total2026 = dates2026.map((_, i) => tcSegments.reduce((acc, s) => acc + (actual2026[s]?.[i] ?? 0), 0));
     const totalStly = dates2026.map((_, i) => tcSegments.reduce((acc, s) => acc + (stly2026[s]?.[i] ?? 0), 0));
+    const totalRevStly = dates2026.map((_, i) => tcSegments.reduce((acc, s) => acc + (stlyRev2026[s]?.[i] ?? 0), 0));
     const totalRev2025 = dates2025.map((_, i) => tcSegments.reduce((acc, s) => acc + (revenue2025[s]?.[i] ?? 0), 0));
     const totalRev2026 = dates2026.map((_, i) => tcSegments.reduce((acc, s) => acc + (revenue2026[s]?.[i] ?? 0), 0));
     const totalBudgetM = Array.from({ length: 12 }, (_, m) => tcSegments.reduce((acc, s) => acc + (budgetTcM[s]?.[m] ?? 0), 0));
@@ -212,7 +214,7 @@ export function useOtbData(propertyCode: string): OtbData {
       tcSegments, dates2025, dates2026, asOf,
       actual2025, actual2026, stly2026, stlyRev2026, csStlyRn2026, csStlyRev2026,
       revenue2025, revenue2026,
-      total2025, total2026, totalStly, totalRev2025, totalRev2026,
+      total2025, total2026, totalStly, totalRevStly, totalRev2025, totalRev2026,
       totalBudgetM, totalBudgetRevM, totalBudgetDailyRn, totalBudgetDailyRev,
       budgetTcM, budgetRevTcM,
       segBudgetRn, segBudgetRev, segFallback,
@@ -245,8 +247,8 @@ export function useOtbData(propertyCode: string): OtbData {
 
   const getGridDaily = useCallback((seg: SegmentKey): GridDay[] => {
     if (!derived) return EMPTY_GRID;
-    const { dates2026, actual2025, actual2026, revenue2025, revenue2026, asOf,
-      total2025, total2026, totalRev2025, totalRev2026,
+    const { dates2026, actual2025, actual2026, stly2026, revenue2025, revenue2026, asOf,
+      total2025, total2026, totalStly, totalRevStly, totalRev2025, totalRev2026,
       totalBudgetDailyRn, totalBudgetDailyRev, segBudgetRn, segBudgetRev,
       csTotal2025, csRevTotal2025, csRn2025, csRev2025,
       stlyRev2026, csStlyRn2026, csStlyRev2026,
@@ -255,14 +257,13 @@ export function useOtbData(propertyCode: string): OtbData {
     const tcSegs = derived.tcSegments;
     const rn26 = isTotal ? total2026 : actual2026[seg];
     const rn25 = isTotal ? total2025 : actual2025[seg];
+    const rnStlyArr = isTotal ? totalStly : stly2026[seg];
     const rev26 = isTotal ? totalRev2026 : revenue2026[seg];
     const rev25 = isTotal ? totalRev2025 : revenue2025[seg];
     const budRn = isTotal ? totalBudgetDailyRn : segBudgetRn[seg];
     const budRev = isTotal ? totalBudgetDailyRev : segBudgetRev[seg];
     // STLY revenue & CS STLY: for Total, sum across all segments per day
-    const sRevArr = isTotal
-      ? dates2026.map((_, i) => tcSegs.reduce((acc, s) => acc + (stlyRev2026[s]?.[i] ?? 0), 0))
-      : (stlyRev2026[seg] ?? null);
+    const sRevArr = isTotal ? totalRevStly : (stlyRev2026[seg] ?? null);
     const csStlyRnArr = isTotal
       ? dates2026.map((_, i) => tcSegs.reduce((acc, s) => acc + (csStlyRn2026[s]?.[i] ?? 0), 0))
       : (csStlyRn2026[seg] ?? null);
@@ -286,6 +287,7 @@ export function useOtbData(propertyCode: string): OtbData {
       budgetRev: budRev?.[i] ?? 0,
       rnLy: rn25?.[i] ?? 0,
       revLy: rev25?.[i] ?? 0,
+      rnStly: rnStlyArr?.[i] ?? 0,
       stlyRev: sRevArr?.[i] ?? 0,
       csStlyRn: csStlyRnArr?.[i] ?? 0,
       csStlyRev: csStlyRevArr?.[i] ?? 0,

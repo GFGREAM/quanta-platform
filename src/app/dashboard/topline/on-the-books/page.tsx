@@ -100,11 +100,14 @@ export default function OnTheBooksPage() {
     // within the month so the chart shows only that period's data.
     const rows = month === 'all' ? daily : daily.filter((d) => Number(d.date.slice(5, 7)) === month);
     const boundaryPace = rows.find((d) => d.isPace)?.date ?? '';
-    let c25 = 0, c26 = 0, cBud = 0;
+    let c25 = 0, c26 = 0, cBud = 0, cAct25 = 0;
     return rows.map((d, i) => {
       // 2025 line: realized actual through AS_OF, then the LY/STLY reported by D360 for the pace days.
       const ly2025 = d.isPace ? d.stly2025 : d.actual2025;
       c25 += ly2025; c26 += d.actual2026; cBud += d.budget;
+      // 2025 actual close: the real day-by-day close of 2025, accumulated across the whole
+      // year. It matches the actual line through AS_OF, then diverges from STLY into the future.
+      cAct25 += d.actual2025;
       // For RN: daily value or running total. For OCC: rn/(capacity×days) — daily
       // uses 1 day, cumulative uses days elapsed in the window (running occupancy).
       const conv = (rnDay: number, rnCum: number, cap: number) => {
@@ -112,6 +115,7 @@ export default function OnTheBooksPage() {
         return view === 'cumulative' ? occOf(rnCum, cap, i + 1) : occOf(rnDay, cap, 1);
       };
       const a2025 = conv(ly2025, c25, CAPACITY_2025);
+      const a2025Close = conv(d.actual2025, cAct25, CAPACITY_2025);
       const a2026 = conv(d.actual2026, c26, CAPACITY_2026);
       const budget = conv(d.budget, cBud, CAPACITY_2026);
       // boundary day belongs to both so the solid/dashed lines connect
@@ -119,8 +123,9 @@ export default function OnTheBooksPage() {
       const paceCell = (v: number, isPace: boolean) => (isPace || d.date === AS_OF ? v : null);
       return {
         date: d.date,
-        // 2025 split act/pace at AS_OF, same as 2026: solid actual in the past, dashed STLY ahead.
-        a2025Actual: actCell(a2025, d.isPace),
+        // 2025 actual close — realized day-by-day across the whole year, one continuous solid line.
+        a2025Actual: a2025Close,
+        // 2025 STLY branches off the actual line at AS_OF into the pace region (dashed).
         a2025Pace: paceCell(a2025, d.isPace),
         a2026Actual: actCell(a2026, d.isPace),
         a2026Pace: paceCell(a2026, d.isPace),
@@ -335,33 +340,35 @@ export default function OnTheBooksPage() {
         <KpiCard
           label={`${periodLabel ? `${periodLabel} 2026 actual` : '2026 YTD actual'}${isOcc ? ' occ' : ''}${periodLabel ? ' (to date)' : ''}`}
           value={fmtVal(kpi.ytdActual)}
-          sub={`${varSub(kpi.ytdActual, kpi.ytdBudget)} vs budget`}
+          sub={`${varSub(kpi.ytdActual, kpi.ytdBudget)} vs Budget`}
           subColor={varColor(kpi.ytdActual, kpi.ytdBudget)}
-          subRight={`${varSub(kpi.ytdActual, kpi.ytdLy)} vs LY`}
+          subRight={`${varSub(kpi.ytdActual, kpi.ytdLy)} vs Last Year`}
           subRightColor={varColor(kpi.ytdActual, kpi.ytdLy)}
           color="var(--primary)"
         />
         <KpiCard
           label={`${periodLabel ? `${periodLabel} 2026 (On The Books)` : '2026 (On The Books)'}${isOcc ? ' occ' : ''}`}
           value={fmtVal(kpi.paceActual)}
-          sub={`${varSub(kpi.paceActual, kpi.paceBudget)} vs budget`}
+          sub={`${varSub(kpi.paceActual, kpi.paceBudget)} vs Budget`}
           subColor={varColor(kpi.paceActual, kpi.paceBudget)}
-          subRight={`${varSub(kpi.paceActual, kpi.paceLy)} vs LY`}
+          subRight={`${varSub(kpi.paceActual, kpi.paceLy)} vs Last Year`}
           subRightColor={varColor(kpi.paceActual, kpi.paceLy)}
         />
         <KpiCard
           label={`${periodLabel ? `${periodLabel} 2026 (act + pace)` : '2026 (act + pace)'}${isOcc ? ' occ' : ''}`}
           value={fmtVal(kpi.fullActual)}
-          sub={`${varSub(kpi.fullActual, kpi.fullBudget)} vs budget`}
+          sub={`${varSub(kpi.fullActual, kpi.fullBudget)} vs Budget`}
           subColor={varColor(kpi.fullActual, kpi.fullBudget)}
-          subRight={`${varSub(kpi.fullActual, kpi.a2025)} vs LY`}
+          subRight={`${varSub(kpi.fullActual, kpi.a2025)} vs Last Year`}
           subRightColor={varColor(kpi.fullActual, kpi.a2025)}
           accent="var(--accent)"
         />
         <KpiCard
-          label={`${periodLabel ? `${periodLabel} budget` : 'FY26 budget'}${isOcc ? ' occ' : ''}`}
+          label={`${periodLabel ? `${periodLabel} Budget` : 'FY26 Budget'}${isOcc ? ' occ' : ''}`}
           value={hasBudget ? fmtVal(kpi.fullBudget) : '—'}
           sub={hasBudget ? 'mapped from hotel segments' : 'no budget mapped'}
+          subRight={hasBudget ? `${varSub(kpi.fullBudget, kpi.a2025)} vs Last Year` : undefined}
+          subRightColor={hasBudget ? varColor(kpi.fullBudget, kpi.a2025) : undefined}
           color="var(--accent)"
         />
       </div>
@@ -462,10 +469,11 @@ const fmtSignedUnit = (unit: GridUnit, v: number | null) =>
 // Room Nights family becomes Occupancy % when the Metric toggle is set to OCC.
 const OCC_FAMILY: GridFamily = { key: 'occ', label: 'Occupancy', unit: 'pct' };
 
-type CompareBasis = 'budget' | 'ly' | 'forecast';
+type CompareBasis = 'budget' | 'ly' | 'stly' | 'forecast';
 const COMPARE_OPTIONS: { key: CompareBasis; label: string; row: string }[] = [
   { key: 'budget', label: 'vs Budget', row: 'Budget' },
   { key: 'ly', label: 'vs Last Year', row: 'Last Year' },
+  { key: 'stly', label: 'vs STLY', row: 'STLY' },
   { key: 'forecast', label: 'vs Forecast', row: 'Forecast' },
 ];
 
@@ -490,7 +498,7 @@ function dowAbbr(iso: string): string {
 interface FamVals { a: number | null; b: number | null }
 interface ColMetrics { rn: FamVals; occ: FamVals; rev: FamVals; adr: FamVals; revpar: FamVals; pickupW: number | null; pickup4w: number | null }
 
-// `b` is the comparison series chosen in the header: Budget, Last Year (2025), or Forecast (no data yet).
+// `b` is the comparison series chosen in the header: Budget, Last Year (2025), STLY, or Forecast (no data yet).
 function computeMetrics(days: GridDay[], compare: CompareBasis, cap26: number, cap25: number): ColMetrics {
   const n = days.length || 1;
   let rnA = 0, revA = 0, rnB = 0, revB = 0;
@@ -498,19 +506,31 @@ function computeMetrics(days: GridDay[], compare: CompareBasis, cap26: number, c
   for (const d of days) {
     rnA += d.rn; revA += d.rev;
     if (compare === 'budget') { rnB += d.budgetRn; revB += d.budgetRev; }
-    else if (compare === 'ly') { rnB += d.rnLy; revB += d.stlyRev; }
+    else if (compare === 'ly') { rnB += d.rnLy; revB += d.revLy; }
+    // STLY combines per day: closed days use 2025 actual, pace days use the 2026 STLY
+    // (both RN and revenue, derived from D360's rn/rev_change_vs_ly on the 2026 axis).
+    else if (compare === 'stly') {
+      rnB += d.isPace ? d.rnStly : d.rnLy;
+      revB += d.isPace ? d.stlyRev : d.revLy;
+    }
     if (d.pickupW != null) { pwSum += d.pickupW; pwHas = true; }
     if (d.pickup4w != null) { p4wSum += d.pickup4w; p4wHas = true; }
   }
-  const hasB = compare !== 'forecast';
-  const capB = compare === 'ly' ? cap25 : cap26;
+  const hasRnB = compare !== 'forecast';
+  const hasRevB = compare !== 'forecast';
+  const capB = compare === 'ly' || compare === 'stly' ? cap25 : cap26;
+  // Prior-year comparisons (LY/STLY) have no comparable when last year carried no data — e.g. the
+  // hotel had no 2025 history before it opened. Surface "—" instead of a misleading variance against 0.
+  const priorYear = compare === 'ly' || compare === 'stly';
+  const rnBcmp = hasRnB && !(priorYear && rnB === 0) ? rnB : null;
+  const revBcmp = hasRevB && !(priorYear && revB === 0) ? revB : null;
   const div = (x: number, y: number) => (y ? x / y : null);
   return {
-    rn: { a: rnA, b: hasB ? rnB : null },
-    occ: { a: (rnA / (cap26 * n)) * 100, b: hasB ? (rnB / (capB * n)) * 100 : null },
-    rev: { a: revA, b: hasB ? revB : null },
-    adr: { a: div(revA, rnA), b: hasB && rnB ? div(revB, rnB) : null },
-    revpar: { a: revA / (cap26 * n), b: hasB ? revB / (capB * n) : null },
+    rn: { a: rnA, b: rnBcmp },
+    occ: { a: (rnA / (cap26 * n)) * 100, b: rnBcmp != null ? (rnBcmp / (capB * n)) * 100 : null },
+    rev: { a: revA, b: revBcmp },
+    adr: { a: div(revA, rnA), b: revBcmp != null && rnBcmp ? div(revBcmp, rnBcmp) : null },
+    revpar: { a: revA / (cap26 * n), b: revBcmp != null ? revBcmp / (capB * n) : null },
     pickupW: pwHas ? pwSum : null,
     pickup4w: p4wHas ? p4wSum : null,
   };
@@ -736,7 +756,7 @@ function SegmentTree({ month }: { month: MonthFilter }) {
     TC_SEGMENTS.forEach((seg) => {
       const g = getGridDaily(seg);
       rn[seg] = g.map((d) => d.rn); bud[seg] = g.map((d) => d.budgetRn); ly[seg] = g.map((d) => d.rnLy);
-      rev[seg] = g.map((d) => d.rev); budRev[seg] = g.map((d) => d.budgetRev); revLy[seg] = g.map((d) => d.stlyRev);
+      rev[seg] = g.map((d) => d.rev); budRev[seg] = g.map((d) => d.budgetRev); revLy[seg] = g.map((d) => d.revLy);
     });
     return { rn, bud, ly, rev, budRev, revLy };
   }, [TC_SEGMENTS, getGridDaily]);
@@ -851,7 +871,7 @@ function SegmentTree({ month }: { month: MonthFilter }) {
           </div>
           <span style={{ color: 'var(--border)' }}>|</span>
           <div className="flex gap-1">
-            {COMPARE_OPTIONS.map((o) => (
+            {COMPARE_OPTIONS.filter((o) => o.key !== 'stly').map((o) => (
               <button key={o.key} type="button" onClick={() => setCompare(o.key)}
                 className="px-2.5 py-0.5 rounded border text-[0.625rem] font-semibold cursor-pointer transition-colors"
                 style={{ background: compare === o.key ? 'var(--primary)' : 'white', color: compare === o.key ? '#fff' : 'var(--text-secondary)', borderColor: compare === o.key ? 'var(--primary)' : 'var(--border)' }}>
