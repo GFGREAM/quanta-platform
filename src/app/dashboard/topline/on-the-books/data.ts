@@ -54,6 +54,8 @@ export interface GridDay {
   budgetRev: number;
   rnLy: number;
   revLy: number;
+  pickupW: number | null;   // RN change vs last week (from D360)
+  pickup4w: number | null;  // RN diff vs snapshot ~28 days ago
 }
 
 // ─── API response shape ────────────────────────────────────────
@@ -76,6 +78,8 @@ interface OtbApiResponse {
   csRevTotal2025: number[];
   budgetTcM: Record<string, number[]>;
   budgetRevTcM: Record<string, number[]>;
+  pickupLw2026: Record<string, number[]>;
+  pickup4w2026: Record<string, number[]> | null;
 }
 
 // ─── Budget spread (runs client-side, same logic as before) ────
@@ -167,7 +171,7 @@ export function useOtbData(propertyCode: string): OtbData {
 
     const { segments, dates2025, dates2026, actual2025, actual2026, stly2026,
       revenue2025, revenue2026, csRn2025, csRev2025, csTotal2025, csRevTotal2025,
-      budgetTcM, budgetRevTcM, asOf } = data;
+      budgetTcM, budgetRevTcM, pickupLw2026, pickup4w2026, asOf } = data;
 
     const tcSegments = segments as TcSegment[];
 
@@ -205,6 +209,7 @@ export function useOtbData(propertyCode: string): OtbData {
       budgetTcM, budgetRevTcM,
       segBudgetRn, segBudgetRev, segFallback,
       csTotal2025, csRevTotal2025, csRn2025, csRev2025,
+      pickupLw2026, pickup4w2026,
     };
   }, [data]);
 
@@ -235,7 +240,8 @@ export function useOtbData(propertyCode: string): OtbData {
     const { dates2026, actual2025, actual2026, revenue2025, revenue2026, asOf,
       total2025, total2026, totalRev2025, totalRev2026,
       totalBudgetDailyRn, totalBudgetDailyRev, segBudgetRn, segBudgetRev,
-      csTotal2025, csRevTotal2025, csRn2025, csRev2025 } = derived;
+      csTotal2025, csRevTotal2025, csRn2025, csRev2025,
+      pickupLw2026, pickup4w2026 } = derived;
     const isTotal = seg === TOTAL_KEY;
     const rn26 = isTotal ? total2026 : actual2026[seg];
     const rn25 = isTotal ? total2025 : actual2025[seg];
@@ -243,6 +249,14 @@ export function useOtbData(propertyCode: string): OtbData {
     const rev25 = isTotal ? totalRev2025 : revenue2025[seg];
     const budRn = isTotal ? totalBudgetDailyRn : segBudgetRn[seg];
     const budRev = isTotal ? totalBudgetDailyRev : segBudgetRev[seg];
+    // Pickups: for Total, sum across all segments per day
+    const tcSegs = derived.tcSegments;
+    const lwArr = isTotal
+      ? (pickupLw2026 ? dates2026.map((_, i) => tcSegs.reduce((acc, s) => acc + (pickupLw2026[s]?.[i] ?? 0), 0)) : null)
+      : (pickupLw2026?.[seg] ?? null);
+    const p4wArr = isTotal
+      ? (pickup4w2026 ? dates2026.map((_, i) => tcSegs.reduce((acc, s) => acc + (pickup4w2026[s]?.[i] ?? 0), 0)) : null)
+      : (pickup4w2026?.[seg] ?? null);
     if (!rn26) return EMPTY_GRID;
     return dates2026.map((date, i) => ({
       date,
@@ -253,6 +267,8 @@ export function useOtbData(propertyCode: string): OtbData {
       budgetRev: budRev?.[i] ?? 0,
       rnLy: rn25?.[i] ?? 0,
       revLy: rev25?.[i] ?? 0,
+      pickupW: lwArr?.[i] ?? null,
+      pickup4w: p4wArr?.[i] ?? null,
     }));
   }, [derived]);
 
