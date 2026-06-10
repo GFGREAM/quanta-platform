@@ -115,8 +115,10 @@ function pivotMetric(
 
 export async function GET(request: Request) {
   try {
+    // Dev-only auth bypass, mirroring middleware (AUTH_BYPASS=1 in development).
+    const bypass = process.env.NODE_ENV === "development" && process.env.AUTH_BYPASS === "1";
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
+    if (!bypass && !session?.user?.email) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
