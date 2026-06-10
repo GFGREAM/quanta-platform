@@ -42,16 +42,22 @@ const SQL_SNAPSHOTS = `
 `;
 
 const SQL_DAILY = `
-  SELECT stay_date::text AS stay_date, year, segment_key,
-         room_nights, rooms_revenue,
-         cs_room_nights, cs_revenue, rn_change_vs_ly
+  SELECT stay_date::text          AS stay_date,
+         year::int                AS year,
+         segment_key,
+         room_nights::numeric     AS room_nights,
+         rooms_revenue::numeric   AS rooms_revenue,
+         cs_room_nights::numeric  AS cs_room_nights,
+         cs_revenue::numeric      AS cs_revenue,
+         rn_change_vs_ly::numeric AS rn_change_vs_ly
   FROM daily_segmentation_otb.daily_actuals
   WHERE property_code = $1 AND snapshot_date = $2::date
   ORDER BY year, stay_date, segment_key
 `;
 
 const SQL_BUDGET = `
-  SELECT segment_key, month, budget_rn, budget_revenue
+  SELECT segment_key, month::int AS month,
+         budget_rn::numeric AS budget_rn, budget_revenue::numeric AS budget_revenue
   FROM daily_segmentation_otb.budget
   WHERE property_code = $1 AND year = $2
   ORDER BY segment_key, month
