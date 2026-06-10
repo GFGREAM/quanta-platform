@@ -50,6 +50,7 @@ const SQL_DAILY = `
          cs_room_nights::numeric  AS cs_room_nights,
          cs_revenue::numeric      AS cs_revenue,
          rn_change_vs_ly::numeric AS rn_change_vs_ly,
+         rev_change_vs_ly::numeric AS rev_change_vs_ly,
          rn_change_vs_lw::numeric AS rn_change_vs_lw
   FROM daily_segmentation_otb.daily_actuals
   WHERE property_code = $1 AND snapshot_date = $2::date
@@ -112,8 +113,10 @@ function pivotMetric(
 
 export async function GET(request: Request) {
   try {
+    // Dev-only auth bypass, mirroring middleware (AUTH_BYPASS=1 in development).
+    const bypass = process.env.NODE_ENV === "development" && process.env.AUTH_BYPASS === "1";
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
+    if (!bypass && !session?.user?.email) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
@@ -177,8 +180,9 @@ export async function GET(request: Request) {
     const csRn2025 = pivotMetric(rows, segments, dateIdx2025, priorYear, "cs_room_nights", dates2025.length);
     const csRev2025 = pivotMetric(rows, segments, dateIdx2025, priorYear, "cs_revenue", dates2025.length);
 
-    // STLY = room_nights - rn_change_vs_ly (on the 2026 axis)
+    // STLY = current value - change_vs_ly (on the 2026 axis), for both room nights and revenue.
     const stly2026 = emptyArrays(segments, len);
+    const revStly2026 = emptyArrays(segments, len);
     for (const r of rows) {
       if (Number(r.year) !== currentYear) continue;
       const idx = dateIdx2026.get(r.stay_date as string);
@@ -186,6 +190,7 @@ export async function GET(request: Request) {
       const seg = r.segment_key as string;
       if (!(seg in stly2026)) continue;
       stly2026[seg][idx] = Math.round(asNum(r.room_nights) - asNum(r.rn_change_vs_ly));
+      revStly2026[seg][idx] = Math.round(asNum(r.rooms_revenue) - asNum(r.rev_change_vs_ly));
     }
 
     // CS Total (sum across all segments per day, prior year)
@@ -239,6 +244,7 @@ export async function GET(request: Request) {
       actual2025,
       actual2026,
       stly2026,
+      revStly2026,
       revenue2025,
       revenue2026,
       csRn2025,

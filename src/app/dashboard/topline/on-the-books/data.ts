@@ -54,6 +54,8 @@ export interface GridDay {
   budgetRev: number;
   rnLy: number;
   revLy: number;
+  rnStly: number;           // 2025 STLY room nights (D360, on the 2026 axis)
+  revStly: number;          // 2025 STLY rooms revenue (D360, on the 2026 axis)
   pickupW: number | null;   // RN change vs last week (from D360)
   pickup4w: number | null;  // RN diff vs snapshot ~28 days ago
 }
@@ -70,6 +72,7 @@ interface OtbApiResponse {
   actual2025: Record<string, number[]>;
   actual2026: Record<string, number[]>;
   stly2026: Record<string, number[]>;
+  revStly2026: Record<string, number[]>;
   revenue2025: Record<string, number[]>;
   revenue2026: Record<string, number[]>;
   csRn2025: Record<string, number[]>;
@@ -169,7 +172,7 @@ export function useOtbData(propertyCode: string): OtbData {
   const derived = useMemo(() => {
     if (!data) return null;
 
-    const { segments, dates2025, dates2026, actual2025, actual2026, stly2026,
+    const { segments, dates2025, dates2026, actual2025, actual2026, stly2026, revStly2026,
       revenue2025, revenue2026, csRn2025, csRev2025, csTotal2025, csRevTotal2025,
       budgetTcM, budgetRevTcM, pickupLw2026, pickup4w2026, asOf } = data;
 
@@ -179,6 +182,7 @@ export function useOtbData(propertyCode: string): OtbData {
     const total2025 = dates2025.map((_, i) => tcSegments.reduce((acc, s) => acc + (actual2025[s]?.[i] ?? 0), 0));
     const total2026 = dates2026.map((_, i) => tcSegments.reduce((acc, s) => acc + (actual2026[s]?.[i] ?? 0), 0));
     const totalStly = dates2026.map((_, i) => tcSegments.reduce((acc, s) => acc + (stly2026[s]?.[i] ?? 0), 0));
+    const totalRevStly = dates2026.map((_, i) => tcSegments.reduce((acc, s) => acc + (revStly2026[s]?.[i] ?? 0), 0));
     const totalRev2025 = dates2025.map((_, i) => tcSegments.reduce((acc, s) => acc + (revenue2025[s]?.[i] ?? 0), 0));
     const totalRev2026 = dates2026.map((_, i) => tcSegments.reduce((acc, s) => acc + (revenue2026[s]?.[i] ?? 0), 0));
     const totalBudgetM = Array.from({ length: 12 }, (_, m) => tcSegments.reduce((acc, s) => acc + (budgetTcM[s]?.[m] ?? 0), 0));
@@ -203,8 +207,8 @@ export function useOtbData(propertyCode: string): OtbData {
 
     return {
       tcSegments, dates2025, dates2026, asOf,
-      actual2025, actual2026, stly2026, revenue2025, revenue2026,
-      total2025, total2026, totalStly, totalRev2025, totalRev2026,
+      actual2025, actual2026, stly2026, revStly2026, revenue2025, revenue2026,
+      total2025, total2026, totalStly, totalRevStly, totalRev2025, totalRev2026,
       totalBudgetM, totalBudgetRevM, totalBudgetDailyRn, totalBudgetDailyRev,
       budgetTcM, budgetRevTcM,
       segBudgetRn, segBudgetRev, segFallback,
@@ -237,14 +241,16 @@ export function useOtbData(propertyCode: string): OtbData {
 
   const getGridDaily = useCallback((seg: SegmentKey): GridDay[] => {
     if (!derived) return EMPTY_GRID;
-    const { dates2026, actual2025, actual2026, revenue2025, revenue2026, asOf,
-      total2025, total2026, totalRev2025, totalRev2026,
+    const { dates2026, actual2025, actual2026, stly2026, revStly2026, revenue2025, revenue2026, asOf,
+      total2025, total2026, totalStly, totalRevStly, totalRev2025, totalRev2026,
       totalBudgetDailyRn, totalBudgetDailyRev, segBudgetRn, segBudgetRev,
       csTotal2025, csRevTotal2025, csRn2025, csRev2025,
       pickupLw2026, pickup4w2026 } = derived;
     const isTotal = seg === TOTAL_KEY;
     const rn26 = isTotal ? total2026 : actual2026[seg];
     const rn25 = isTotal ? total2025 : actual2025[seg];
+    const stly = isTotal ? totalStly : stly2026[seg];
+    const revStly = isTotal ? totalRevStly : revStly2026[seg];
     const rev26 = isTotal ? totalRev2026 : revenue2026[seg];
     const rev25 = isTotal ? totalRev2025 : revenue2025[seg];
     const budRn = isTotal ? totalBudgetDailyRn : segBudgetRn[seg];
@@ -267,6 +273,8 @@ export function useOtbData(propertyCode: string): OtbData {
       budgetRev: budRev?.[i] ?? 0,
       rnLy: rn25?.[i] ?? 0,
       revLy: rev25?.[i] ?? 0,
+      rnStly: stly?.[i] ?? 0,
+      revStly: revStly?.[i] ?? 0,
       pickupW: lwArr?.[i] ?? null,
       pickup4w: p4wArr?.[i] ?? null,
     }));
