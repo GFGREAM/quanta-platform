@@ -16,7 +16,7 @@ export interface PermissionsData {
 
 const PermissionsContext = createContext<PermissionsData>({
   email: '',
-  hasFullAccess: true,
+  hasFullAccess: false,
   sections: {},
   allowedSections: [],
   allowedMenus: [],
@@ -30,7 +30,7 @@ export function usePermissions() {
 export default function PermissionsProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<PermissionsData>({
     email: '',
-    hasFullAccess: true,
+    hasFullAccess: false,
     sections: {},
     allowedSections: [],
     allowedMenus: [],

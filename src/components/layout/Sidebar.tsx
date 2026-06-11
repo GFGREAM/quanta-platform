@@ -77,9 +77,12 @@ export default function Sidebar({ mobileOpen, onMobileClose, pinned, hovered, on
   const pathname = usePathname();
   const { hasFullAccess, sections, loading } = usePermissions();
 
-  // Build the set of allowed routes for restricted users
+  // Build the set of allowed routes for restricted users.
+  // While loading, return an empty set so the sidebar shows nothing (prevents
+  // flashing the full menu catalog before permissions resolve).
   const allowedRoutes = useMemo(() => {
-    if (hasFullAccess || loading) return null; // null = show all
+    if (loading) return new Set<string>(); // empty = show nothing while loading
+    if (hasFullAccess) return null; // null = show all
     return getAllowedRoutes(Object.keys(sections));
   }, [hasFullAccess, sections, loading]);
 
