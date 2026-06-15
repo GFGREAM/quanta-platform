@@ -261,14 +261,16 @@ export interface WeeklyOutlookDrift {
   multiplier: number;
 }
 
+// Pickup dynamics: older snapshots sit BELOW the current Outlook (less on the books) and
+// climb monotonically to 1.000 at the latest week as bookings pick up toward the stay period.
 export const WEEKLY_OUTLOOK_DRIFTS: readonly WeeklyOutlookDrift[] = [
-  { snapshotDate: '2026-04-20', multiplier: 1.045 },
-  { snapshotDate: '2026-04-27', multiplier: 1.052 },
-  { snapshotDate: '2026-05-04', multiplier: 1.038 },
-  { snapshotDate: '2026-05-11', multiplier: 1.022 },
-  { snapshotDate: '2026-05-18', multiplier: 1.028 },
-  { snapshotDate: '2026-05-25', multiplier: 1.012 },
-  { snapshotDate: '2026-06-01', multiplier: 1.005 },
+  { snapshotDate: '2026-04-20', multiplier: 0.955 },
+  { snapshotDate: '2026-04-27', multiplier: 0.963 },
+  { snapshotDate: '2026-05-04', multiplier: 0.972 },
+  { snapshotDate: '2026-05-11', multiplier: 0.980 },
+  { snapshotDate: '2026-05-18', multiplier: 0.987 },
+  { snapshotDate: '2026-05-25', multiplier: 0.993 },
+  { snapshotDate: '2026-06-01', multiplier: 0.997 },
   { snapshotDate: '2026-06-08', multiplier: 1.000 },
 ];
 // Only expose years that have a Budget reference — LY years are implicit.

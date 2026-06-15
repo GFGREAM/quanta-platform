@@ -7,8 +7,9 @@ import { fmtMoney, type Basis, type Currency, type MetricFormat, type Scope } fr
 import { varianceStyle } from './tableConfig';
 import type { ViewMode } from './useStatement';
 
-// Re-export MultiSelect from its promoted location so existing imports still work.
+// Re-export MultiSelect / SingleSelect from their promoted location so existing imports still work.
 export { MultiSelect } from '@/components/ui/MultiSelect';
+export { SingleSelect } from '@/components/ui/SingleSelect';
 
 // ─── Chart color constants ──────────────────────────────────────
 // Recharts strokes need literal hex (no CSS-var resolution inside SVG attributes).

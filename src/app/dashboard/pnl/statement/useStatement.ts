@@ -44,6 +44,7 @@ export interface PortfolioData {
     budget: ForecastRow[];
     ly: ForecastRow[];
     currentNoXR: ForecastRow[];
+    budgetNoXR: ForecastRow[];
     lyNoXR: ForecastRow[];
   };
 }
@@ -52,6 +53,8 @@ export interface WeeklyOutlookPoint {
   week: string;
   outlook: number;
   budget: number;
+  // Week-over-week change in the Outlook vs the prior snapshot (metric units; 0 for the first week).
+  wow: number;
 }
 
 export type ComparisonScenario = (typeof COMPARISON_SCENARIOS)[number];
@@ -116,7 +119,6 @@ export function useStatement(opts?: UseStatementOptions) {
 
   const defaultView = allowedModes && allowedModes.length > 0 ? allowedModes[0] : 'summary';
   const [year, setYear] = useState<number>(YEARS[0]);
-  const [hotel, setHotel] = useState<string>('');
   // Weekly snapshot (ISO date) to view the Outlook as of. Defaults to the latest snapshot (no
   // drift). Earlier dates re-scale the Outlook by that week's drift so the whole statement shows
   // how it stood then. Real snapshot dates arrive with the SQL feed; this keys off them already.
@@ -238,20 +240,53 @@ export function useStatement(opts?: UseStatementOptions) {
     );
   }, [forecastRows, weekMultiplier, year, scenario]);
 
+  // ─── Hotel selection (unified across every view) ───────────────────
+  // All views filter by the same multi-hotel selection. Options come from the
+  // live dimensions feed when present, else the static portfolio list.
+  const baseHotels = dynamicHotels.length > 0 ? dynamicHotels : HOTELS;
+  const basePortfolioHotels = dynamicHotels.length > 0 ? dynamicHotels : PORTFOLIO_HOTELS;
+  const filteredHotels = allowedProps
+    ? baseHotels.filter((h) => allowedProps.includes(h))
+    : baseHotels;
+  const filteredPortfolioHotels = allowedProps
+    ? basePortfolioHotels.filter((h) => allowedProps.includes(h))
+    : basePortfolioHotels;
+
+  // Reconcile the selection when the available option set changes (live data
+  // loads / permissions narrow it): drop stale picks; if none remain, select all.
+  const optionsKey = filteredPortfolioHotels.join('|');
+  useEffect(() => {
+    setPortfolioHotels((prev) => {
+      const valid = prev.filter((h) => filteredPortfolioHotels.includes(h));
+      if (valid.length === 0) return [...filteredPortfolioHotels];
+      return valid.length === prev.length ? prev : valid;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [optionsKey]);
+
+  const selectedHotelSet = useMemo(() => new Set(portfolioHotels), [portfolioHotels]);
+  const allHotelsSelected = filteredPortfolioHotels.length > 0
+    && filteredPortfolioHotels.every((h) => selectedHotelSet.has(h));
+  // A row passes when the full set is selected (≡ "all hotels") or its hotel is picked.
+  const hotelInSelection = useCallback(
+    (h: string) => allHotelsSelected || selectedHotelSet.has(h),
+    [allHotelsSelected, selectedHotelSet],
+  );
+
   const currentYearRows = useMemo(
     () =>
       convertedRows.filter(
-        (r) => r.year === year && (hotel === '' || r.hotel === hotel),
+        (r) => r.year === year && hotelInSelection(r.hotel),
       ),
-    [convertedRows, year, hotel],
+    [convertedRows, year, hotelInSelection],
   );
 
   const lyYearRows = useMemo(
     () =>
       convertedRows.filter(
-        (r) => r.year === year - 1 && (hotel === '' || r.hotel === hotel),
+        (r) => r.year === year - 1 && hotelInSelection(r.hotel),
       ),
-    [convertedRows, year, hotel],
+    [convertedRows, year, hotelInSelection],
   );
 
   const metricDef = METRICS_BY_KEY[metric];
@@ -394,8 +429,8 @@ export function useStatement(opts?: UseStatementOptions) {
   }, [allYearsBudgetFxByKey, currency]);
 
   const allYearsHotelRows = useMemo(
-    () => allYearsRows.filter((r) => hotel === '' || r.hotel === hotel),
-    [allYearsRows, hotel],
+    () => allYearsRows.filter((r) => hotelInSelection(r.hotel)),
+    [allYearsRows, hotelInSelection],
   );
 
   const allYearsHotelRowsNoXR = useMemo(
@@ -432,7 +467,7 @@ export function useStatement(opts?: UseStatementOptions) {
   // is driven by `portfolioHotels`, ordered by PORTFOLIO_HOTELS so the column
   // order stays stable regardless of click sequence.
   const portfolio = useMemo<PortfolioData>(() => {
-    const orderedSelection = PORTFOLIO_HOTELS.filter((h) => portfolioHotels.includes(h));
+    const orderedSelection = filteredPortfolioHotels.filter((h) => portfolioHotels.includes(h));
     const allCurrentYear = convertedRows.filter((r) => r.year === year);
     const allLyYear = convertedRows.filter((r) => r.year === year - 1);
 
@@ -459,18 +494,20 @@ export function useStatement(opts?: UseStatementOptions) {
       budget: totalBudget,
       ly: totalLy,
       currentNoXR: totalCurrent.map(restateAtBudgetFx),
+      // Budget at Budget FX = Budget unchanged (restatement factor = 1 by construction).
+      budgetNoXR: totalBudget,
       lyNoXR: totalLy.map(restateAtBudgetFx),
     };
 
     return { groups, total };
-  }, [convertedRows, year, scenario, scope, periodMonth, portfolioHotels, restateAtBudgetFx]);
+  }, [convertedRows, year, scenario, scope, periodMonth, portfolioHotels, filteredPortfolioHotels, restateAtBudgetFx]);
 
   // WoW progression of the Outlook for the selected period (month + scope) and
   // selected metric, aggregated across the chosen portfolio total. Each point
   // is an Outlook snapshot taken at a different week; Budget is shown as a
   // constant horizontal reference.
   const weeklyOutlookSeries = useMemo<WeeklyOutlookPoint[]>(() => {
-    const orderedSelection = PORTFOLIO_HOTELS.filter((h) => portfolioHotels.includes(h));
+    const orderedSelection = filteredPortfolioHotels.filter((h) => portfolioHotels.includes(h));
     if (orderedSelection.length === 0) return [];
     // Anchor on the RAW (unscaled) rows so the progression is independent of the Week selector —
     // it always plots the true latest Outlook, then applies each week's drift to walk it back.
@@ -478,34 +515,21 @@ export function useStatement(opts?: UseStatementOptions) {
     const allCurrentYear = forecastRows.filter((r) => r.year === year && orderedSelection.includes(r.hotel));
     const baseOutlook = sumMetric(filterByPeriod(allCurrentYear.filter((r) => r.scenario === scenario), scope, periodMonth));
     const baseBudget = sumMetric(filterByPeriod(allCurrentYear.filter((r) => r.scenario === 'Budget'), scope, periodMonth));
-    return WEEKLY_OUTLOOK_DRIFTS.map(({ snapshotDate, multiplier }) => ({
-      week: snapshotDate,
-      outlook: baseOutlook * multiplier,
-      budget: baseBudget,
-    }));
-  }, [forecastRows, portfolioHotels, year, scenario, scope, periodMonth, metricDef]);
+    let prev: number | null = null;
+    return WEEKLY_OUTLOOK_DRIFTS.map(({ snapshotDate, multiplier }) => {
+      const outlook = baseOutlook * multiplier;
+      const wow = prev === null ? 0 : outlook - prev;
+      prev = outlook;
+      return { week: snapshotDate, outlook, budget: baseBudget, wow };
+    });
+  }, [forecastRows, portfolioHotels, filteredPortfolioHotels, year, scenario, scope, periodMonth, metricDef]);
 
-  // ─── Property filtering ───────────────────────────────────────
-  const baseHotels = dynamicHotels.length > 0 ? dynamicHotels : HOTELS;
-  const basePortfolioHotels = dynamicHotels.length > 0 ? dynamicHotels : PORTFOLIO_HOTELS;
-
-  const filteredHotels = allowedProps
-    ? baseHotels.filter((h) => allowedProps.includes(h))
-    : baseHotels;
-  const filteredPortfolioHotels = allowedProps
-    ? basePortfolioHotels.filter((h) => allowedProps.includes(h))
-    : basePortfolioHotels;
-
-  // Auto-select hotel when there's only one allowed property
-  useEffect(() => {
-    if (allowedProps && allowedProps.length === 1 && hotel !== allowedProps[0]) {
-      setHotel(allowedProps[0]);
-    }
-  }, [allowedProps, hotel]);
+  const hotelSelectionLabel = allHotelsSelected
+    ? 'All hotels'
+    : `${portfolioHotels.length} hotel${portfolioHotels.length === 1 ? '' : 's'}`;
 
   return {
     year, setYear,
-    hotel, setHotel,
     week, setWeek,
     metric, setMetric,
     scenario, setScenario,
@@ -515,6 +539,7 @@ export function useStatement(opts?: UseStatementOptions) {
     currency, setCurrency,
     basis, setBasis,
     portfolioHotels, setPortfolioHotels,
+    hotelSelectionLabel,
     metricDef,
     chartSeries,
     periodCurrent,
