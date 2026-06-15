@@ -1,9 +1,12 @@
 'use client';
 
-import { ChevronRight } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ChevronRight, Download } from 'lucide-react';
 import {
   CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
+import { exportNodeToPdf } from '@/lib/pdfExport';
+import { usePermissions } from '@/components/permissions-provider';
 import { selectStyle } from '@/lib/selectStyle';
 import { fmtMetric, METRIC_DEFS, SCOPES, scopeLabel, scenarioLabel, type MetricKey, type Month } from './data';
 import { useStatement, type ViewMode, type UseStatementOptions } from './useStatement';
@@ -14,7 +17,7 @@ import StatementMonthlyTable from './StatementMonthlyTable';
 import StatementQuarterlyTable from './StatementQuarterlyTable';
 import StatementYearlyTable from './StatementYearlyTable';
 import {
-  MultiSelect,
+  MultiSelect, SingleSelect,
   COLOR_COMPARISON, COLOR_BUDGET, COLOR_LY,
   VIEW_ORDER, VIEW_LABELS, SCOPE_LABELS, CURRENCY_LABELS, BASIS_LABELS,
   LegendDot, formatAxis,
@@ -23,7 +26,6 @@ import {
 export default function StatementMobile({ permissionOpts }: { permissionOpts?: UseStatementOptions }) {
   const {
     year, setYear,
-    hotel, setHotel,
     week, setWeek, weekOptions, latestWeek,
     metric, setMetric,
     scenario,
@@ -33,6 +35,7 @@ export default function StatementMobile({ permissionOpts }: { permissionOpts?: U
     currency, setCurrency,
     basis, setBasis,
     portfolioHotels, setPortfolioHotels,
+    hotelSelectionLabel,
     metricDef,
     chartSeries,
     weeklyOutlookSeries,
@@ -42,19 +45,51 @@ export default function StatementMobile({ permissionOpts }: { permissionOpts?: U
     currentScenarioRowsNoXR, currentBudgetRowsNoXR, lyActualRowsNoXR,
     allYearsHotelRows, allYearsHotelRowsNoXR, availableYears,
     portfolio,
-    hotelOptions, yearOptions, monthOptions,
+    yearOptions, monthOptions,
     portfolioHotelOptions, currencyOptions, basisOptions,
     allowedViewModes,
-    singlePropertyLock,
   } = useStatement(permissionOpts);
+
+  // Every view filters by the same multi-hotel selection. Summary and Portfolio
+  // show the WoW chart; the other views show a monthly/quarterly/yearly trend.
+  const isMultiHotel = viewMode === 'portfolio' || viewMode === 'summary';
+  const noHotelsSelected = isMultiHotel && portfolio.groups.length === 0;
+
+  // ─── PDF export (visuals: comparison table + chart) ──────────────
+  // Admins (full access) export the clean internal copy; everyone else gets the
+  // confidentiality watermark on externally-shareable copies.
+  const { hasFullAccess } = usePermissions();
+  const exportRef = useRef<HTMLDivElement>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const handleExportPdf = async () => {
+    if (exportingPdf || !exportRef.current) return;
+    setExportingPdf(true);
+    try {
+      const fileBase = `pnl-statement-${viewMode}-${year}-${new Date().toISOString().slice(0, 10)}`;
+      await exportNodeToPdf(exportRef.current, fileBase, { watermark: !hasFullAccess });
+    } finally {
+      setExportingPdf(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4" style={{ color: 'var(--text-primary)' }}>
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
-        <span>Profit &amp; Loss</span>
-        <ChevronRight size={12} />
-        <span style={{ color: 'var(--primary)' }}>P&amp;L Statement</span>
+      {/* Breadcrumb + PDF export */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+          <span>Profit &amp; Loss</span>
+          <ChevronRight size={12} />
+          <span style={{ color: 'var(--primary)' }}>P&amp;L Statement</span>
+        </div>
+        <button
+          onClick={handleExportPdf}
+          disabled={exportingPdf}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors hover:bg-[var(--bg-hover)] disabled:opacity-60 disabled:cursor-wait shrink-0"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+          title="Download the visuals as a PDF"
+        >
+          <Download size={13} /> {exportingPdf ? '…' : 'PDF'}
+        </button>
       </div>
 
       {/* Title + view toggle */}
@@ -72,38 +107,26 @@ export default function StatementMobile({ permissionOpts }: { permissionOpts?: U
 
       {/* Filters — stacked native selects */}
       <div className="grid grid-cols-2 gap-2">
-        {viewMode === 'portfolio' ? (
-          <MultiSelect
-            options={portfolioHotelOptions}
-            selected={portfolioHotels}
-            onChange={setPortfolioHotels}
-            width="100%"
-            placeholder="Select hotels…"
-            noun="hotels"
-            compact
-          />
-        ) : (
-          <select
-            className="h-10 px-3 pr-8 rounded-md border text-sm bg-white appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] disabled:opacity-60 disabled:cursor-not-allowed"
-            style={selectStyle}
-            value={hotel}
-            onChange={(e) => setHotel(e.target.value)}
-            disabled={!!singlePropertyLock}
-          >
-            {!singlePropertyLock && <option value="">All hotels</option>}
-            {hotelOptions.map((h) => <option key={h} value={h}>{h}</option>)}
-          </select>
-        )}
-        {/* WoW snapshot — view the Outlook as of a prior weekly snapshot (latest = current) */}
-        <select
-          className="h-10 px-3 pr-8 rounded-md border text-sm bg-white appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
-          style={selectStyle}
+        <MultiSelect
+          options={portfolioHotelOptions}
+          selected={portfolioHotels}
+          onChange={setPortfolioHotels}
+          width="100%"
+          placeholder="Select hotels…"
+          noun="hotels"
+          compact
+        />
+        {/* WoW snapshot — view the Outlook as of a prior weekly snapshot (latest = current).
+            Custom dropdown so every week shows at once (no native-select scroll cap). */}
+        <SingleSelect
+          options={weekOptions}
           value={week}
-          onChange={(e) => setWeek(e.target.value)}
+          onChange={setWeek}
+          width="100%"
+          compact
           title="Week-over-week — view the Outlook as of a weekly snapshot"
-        >
-          {weekOptions.map((w) => <option key={w} value={w}>{w === latestWeek ? `${w} (current)` : w}</option>)}
-        </select>
+          renderOption={(w) => (w === latestWeek ? `${w} (current)` : w)}
+        />
         <select
           className="h-10 px-3 pr-8 rounded-md border text-sm bg-white appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
           style={selectStyle}
@@ -163,27 +186,35 @@ export default function StatementMobile({ permissionOpts }: { permissionOpts?: U
         </div>
       </div>
 
+      {/* Exportable visuals — comparison table + chart, wrapped so the PDF captures them as one. */}
+      <div ref={exportRef} className="flex flex-col gap-4 bg-[var(--background)]">
       {/* Comparison table — summary, overview (single), or portfolio */}
       {viewMode === 'summary' ? (
-        <StatementSummaryTable
-          hotel={hotel}
-          scope={scope}
-          periodMonth={periodMonth}
-          year={year}
-          scenario={scenario}
-          currency={currency}
-          basis={basis}
-          current={periodCurrent}
-          budget={periodBudget}
-          ly={periodLy}
-          currentNoXR={periodCurrentNoXR}
-          budgetNoXR={periodBudgetNoXR}
-          lyNoXR={periodLyNoXR}
-          compact
-        />
+        noHotelsSelected ? (
+          <div className="bg-white border rounded-lg p-6 text-center text-xs" style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
+            Select at least one hotel to build the summary.
+          </div>
+        ) : (
+          <StatementSummaryTable
+            hotel={hotelSelectionLabel}
+            scope={scope}
+            periodMonth={periodMonth}
+            year={year}
+            scenario={scenario}
+            currency={currency}
+            basis={basis}
+            current={portfolio.total.current}
+            budget={portfolio.total.budget}
+            ly={portfolio.total.ly}
+            currentNoXR={portfolio.total.currentNoXR}
+            budgetNoXR={portfolio.total.budgetNoXR}
+            lyNoXR={portfolio.total.lyNoXR}
+            compact
+          />
+        )
       ) : viewMode === 'single' ? (
         <StatementTable
-          hotel={hotel}
+          hotel={hotelSelectionLabel}
           scope={scope}
           periodMonth={periodMonth}
           year={year}
@@ -200,7 +231,7 @@ export default function StatementMobile({ permissionOpts }: { permissionOpts?: U
         />
       ) : viewMode === 'monthly' ? (
         <StatementMonthlyTable
-          hotel={hotel}
+          hotel={hotelSelectionLabel}
           year={year}
           scenario={scenario}
           currency={currency}
@@ -214,7 +245,7 @@ export default function StatementMobile({ permissionOpts }: { permissionOpts?: U
         />
       ) : viewMode === 'quarter' ? (
         <StatementQuarterlyTable
-          hotel={hotel}
+          hotel={hotelSelectionLabel}
           year={year}
           scenario={scenario}
           currency={currency}
@@ -228,7 +259,7 @@ export default function StatementMobile({ permissionOpts }: { permissionOpts?: U
         />
       ) : viewMode === 'yearly' ? (
         <StatementYearlyTable
-          hotel={hotel}
+          hotel={hotelSelectionLabel}
           scenario={scenario}
           currency={currency}
           basis={basis}
@@ -254,21 +285,19 @@ export default function StatementMobile({ permissionOpts }: { permissionOpts?: U
         />
       )}
 
-      {/* Chart — Monthly trend (single/monthly) or WoW Outlook (portfolio).
-          Hidden in Summary because the same view exists in Expanded/Monthly. */}
-      {viewMode !== 'summary' && (
+      {/* Chart — WoW change (summary/portfolio) or monthly/quarterly/yearly trend. */}
       <div className="bg-white border rounded-lg p-3" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-start justify-between mb-2 gap-2">
           <div className="min-w-0">
             <div className="text-[0.625rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-              {viewMode === 'portfolio'
+              {isMultiHotel
                 ? 'Outlook · WoW'
                 : viewMode === 'quarter' ? 'Quarterly trend'
                 : viewMode === 'yearly' ? 'Yearly trend'
                 : 'Monthly trend'}
             </div>
             <div className="text-[0.8125rem] font-semibold truncate" style={{ color: 'var(--primary)' }}>
-              {viewMode === 'portfolio' ? `${metricDef.label} · ${scopeLabel(scope, periodMonth, year)}` : metricDef.label}
+              {isMultiHotel ? `${metricDef.label} · ${scopeLabel(scope, periodMonth, year)}` : metricDef.label}
             </div>
           </div>
           <select
@@ -281,11 +310,8 @@ export default function StatementMobile({ permissionOpts }: { permissionOpts?: U
           </select>
         </div>
         <div className="flex items-center gap-2 text-[0.6875rem] mb-2 justify-end" style={{ color: 'var(--text-secondary)' }}>
-          {viewMode === 'portfolio' ? (
-            <>
-              <LegendDot color={COLOR_COMPARISON} label="Outlook" size="sm" />
-              <LegendDot color={COLOR_BUDGET} label="Budget" size="sm" />
-            </>
+          {isMultiHotel ? (
+            <LegendDot color={COLOR_COMPARISON} label="WoW change" size="sm" />
           ) : (
             <>
               <LegendDot color={COLOR_COMPARISON} label={scenarioLabel(scenario)} size="sm" />
@@ -295,7 +321,7 @@ export default function StatementMobile({ permissionOpts }: { permissionOpts?: U
           )}
         </div>
         <div className="h-[280px]">
-          {viewMode !== 'portfolio' ? (
+          {!isMultiHotel ? (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartSeries} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke="#E5E5E5" strokeDasharray="3 3" vertical={false} />
@@ -388,18 +414,8 @@ export default function StatementMobile({ permissionOpts }: { permissionOpts?: U
                 />
                 <Line
                   type="monotone"
-                  dataKey="budget"
-                  name="Budget"
-                  stroke={COLOR_BUDGET}
-                  strokeWidth={1.75}
-                  strokeDasharray="5 3"
-                  dot={false}
-                  activeDot={{ r: 4 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="outlook"
-                  name="Outlook"
+                  dataKey="wow"
+                  name="WoW change"
                   stroke={COLOR_COMPARISON}
                   strokeWidth={2}
                   dot={{ r: 3, fill: COLOR_COMPARISON }}
@@ -410,7 +426,7 @@ export default function StatementMobile({ permissionOpts }: { permissionOpts?: U
           )}
         </div>
       </div>
-      )}
+      </div>
     </div>
   );
 }
