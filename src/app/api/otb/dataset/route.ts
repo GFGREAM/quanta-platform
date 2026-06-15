@@ -57,16 +57,34 @@ const SQL_DAILY = `
   ORDER BY year, stay_date, segment_key
 `;
 
-// 4-week pickup: room_nights from the snapshot closest to (current - 28 days).
-// Returns empty if no such snapshot exists — pickups auto-activate as weekly loads accumulate.
-const SQL_PICKUP_4W = `
+// Pickup snapshot: room_nights + rooms_revenue from the most recent snapshot at or
+// before (current − $3 days). Returns empty if no such snapshot exists — pickups
+// auto-activate as weekly loads accumulate. Used for the 4-week window ($3=28).
+const SQL_PICKUP = `
   SELECT stay_date::text AS stay_date, year::int AS year, segment_key,
-         room_nights::numeric AS room_nights
+         room_nights::numeric AS room_nights,
+         rooms_revenue::numeric AS rooms_revenue
   FROM daily_segmentation_otb.daily_actuals
   WHERE property_code = $1
     AND snapshot_date = (
       SELECT MAX(snapshot_date) FROM daily_segmentation_otb.daily_actuals
-      WHERE property_code = $1 AND snapshot_date <= ($2::date - 28)
+      WHERE property_code = $1 AND snapshot_date <= ($2::date - $3::int)
+    )
+  ORDER BY year, stay_date, segment_key
+`;
+
+// Last-week pickup baseline: the snapshot immediately preceding the current one
+// (the previous weekly load), regardless of the exact day gap — robust to irregular
+// snapshot cadence. Empty only on the very first load.
+const SQL_PICKUP_PREV = `
+  SELECT stay_date::text AS stay_date, year::int AS year, segment_key,
+         room_nights::numeric AS room_nights,
+         rooms_revenue::numeric AS rooms_revenue
+  FROM daily_segmentation_otb.daily_actuals
+  WHERE property_code = $1
+    AND snapshot_date = (
+      SELECT MAX(snapshot_date) FROM daily_segmentation_otb.daily_actuals
+      WHERE property_code = $1 AND snapshot_date < $2::date
     )
   ORDER BY year, stay_date, segment_key
 `;
@@ -152,11 +170,12 @@ export async function GET(request: Request) {
     const currentYear = Number(snapshot.slice(0, 4));
     const priorYear = currentYear - 1;
 
-    // Fetch daily actuals + budget + 4-week pickup snapshot in parallel
-    const [dailyRes, budgetRes, pickup4wRes] = await Promise.all([
+    // Fetch daily actuals + budget + last-week (previous snapshot) & 4-week pickups in parallel
+    const [dailyRes, budgetRes, pickup1wRes, pickup4wRes] = await Promise.all([
       pool.query(SQL_DAILY, [property, snapshot]),
       pool.query(SQL_BUDGET, [property, currentYear]),
-      pool.query(SQL_PICKUP_4W, [property, snapshot]),
+      pool.query(SQL_PICKUP_PREV, [property, snapshot]),
+      pool.query(SQL_PICKUP, [property, snapshot, 28]),
     ]);
 
     // Generate date axes
@@ -213,20 +232,36 @@ export async function GET(request: Request) {
       }
     }
 
-    // ─── Pickups ─────────────────────────────────────────────────
-    // Last-week pickup: rn_change_vs_lw from D360 (current year, 2026 axis)
-    const pickupLw2026 = pivotMetric(rows, segments, dateIdx2026, currentYear, "rn_change_vs_lw", len);
+    // ─── Pickups (snapshot diff) ─────────────────────────────────
+    // RN & revenue change vs a baseline snapshot: the previous load for last-week,
+    // and ~28 days ago for 4-week. When no baseline exists the window returns null →
+    // UI shows "—", except last-week RN falls back to D360's rn_change_vs_lw (first
+    // load only). Revenue pickup powers the ADR / RevPAR pickup rows in the monthly board.
+    const diff = (cur: SegArrays, old: SegArrays): SegArrays => {
+      const out: SegArrays = {};
+      for (const s of segments) out[s] = dates2026.map((_, i) => Math.round((cur[s]?.[i] ?? 0) - (old[s]?.[i] ?? 0)));
+      return out;
+    };
 
-    // 4-week pickup: current RN − RN from snapshot ~28 days ago.
-    // If no old snapshot exists (< 28 days of history), returns null → UI shows "—".
-    // Auto-activates as weekly loads accumulate without code changes.
+    let pickupLw2026: SegArrays;
+    let pickupLwRev2026: SegArrays | null = null;
+    if (pickup1wRes.rows.length > 0) {
+      const oldRn = pivotMetric(pickup1wRes.rows, segments, dateIdx2026, currentYear, "room_nights", len);
+      const oldRev = pivotMetric(pickup1wRes.rows, segments, dateIdx2026, currentYear, "rooms_revenue", len);
+      pickupLw2026 = diff(actual2026, oldRn);
+      pickupLwRev2026 = diff(revenue2026, oldRev);
+    } else {
+      // Fallback: D360's last-week RN change (no revenue equivalent → null).
+      pickupLw2026 = pivotMetric(rows, segments, dateIdx2026, currentYear, "rn_change_vs_lw", len);
+    }
+
     let pickup4w2026: SegArrays | null = null;
+    let pickup4wRev2026: SegArrays | null = null;
     if (pickup4wRes.rows.length > 0) {
       const oldRn = pivotMetric(pickup4wRes.rows, segments, dateIdx2026, currentYear, "room_nights", len);
-      pickup4w2026 = {};
-      for (const s of segments) {
-        pickup4w2026[s] = dates2026.map((_, i) => Math.round(actual2026[s][i] - (oldRn[s]?.[i] ?? 0)));
-      }
+      const oldRev = pivotMetric(pickup4wRes.rows, segments, dateIdx2026, currentYear, "rooms_revenue", len);
+      pickup4w2026 = diff(actual2026, oldRn);
+      pickup4wRev2026 = diff(revenue2026, oldRev);
     }
 
     return NextResponse.json({
@@ -254,7 +289,9 @@ export async function GET(request: Request) {
       budgetTcM,
       budgetRevTcM,
       pickupLw2026,
+      pickupLwRev2026,
       pickup4w2026,
+      pickup4wRev2026,
     });
   } catch (error) {
     console.error("OTB dataset API error:", error);

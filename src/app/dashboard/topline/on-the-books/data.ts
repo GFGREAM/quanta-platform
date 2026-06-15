@@ -56,8 +56,10 @@ export interface GridDay {
   revLy: number;
   rnStly: number;           // 2025 STLY room nights (D360, on the 2026 axis)
   revStly: number;          // 2025 STLY rooms revenue (D360, on the 2026 axis)
-  pickupW: number | null;   // RN change vs last week (from D360)
+  pickupW: number | null;   // RN change vs last week (snapshot ~7d diff, falls back to D360 rn_change_vs_lw)
   pickup4w: number | null;  // RN diff vs snapshot ~28 days ago
+  revPickupW: number | null;   // Rooms-revenue change vs snapshot ~7 days ago
+  revPickup4w: number | null;  // Rooms-revenue change vs snapshot ~28 days ago
 }
 
 // ─── API response shape ────────────────────────────────────────
@@ -82,7 +84,9 @@ interface OtbApiResponse {
   budgetTcM: Record<string, number[]>;
   budgetRevTcM: Record<string, number[]>;
   pickupLw2026: Record<string, number[]>;
+  pickupLwRev2026: Record<string, number[]> | null;
   pickup4w2026: Record<string, number[]> | null;
+  pickup4wRev2026: Record<string, number[]> | null;
 }
 
 // ─── Budget spread (runs client-side, same logic as before) ────
@@ -174,7 +178,7 @@ export function useOtbData(propertyCode: string): OtbData {
 
     const { segments, dates2025, dates2026, actual2025, actual2026, stly2026, revStly2026,
       revenue2025, revenue2026, csRn2025, csRev2025, csTotal2025, csRevTotal2025,
-      budgetTcM, budgetRevTcM, pickupLw2026, pickup4w2026, asOf } = data;
+      budgetTcM, budgetRevTcM, pickupLw2026, pickupLwRev2026, pickup4w2026, pickup4wRev2026, asOf } = data;
 
     const tcSegments = segments as TcSegment[];
 
@@ -213,7 +217,7 @@ export function useOtbData(propertyCode: string): OtbData {
       budgetTcM, budgetRevTcM,
       segBudgetRn, segBudgetRev, segFallback,
       csTotal2025, csRevTotal2025, csRn2025, csRev2025,
-      pickupLw2026, pickup4w2026,
+      pickupLw2026, pickupLwRev2026, pickup4w2026, pickup4wRev2026,
     };
   }, [data]);
 
@@ -245,7 +249,7 @@ export function useOtbData(propertyCode: string): OtbData {
       total2025, total2026, totalStly, totalRevStly, totalRev2025, totalRev2026,
       totalBudgetDailyRn, totalBudgetDailyRev, segBudgetRn, segBudgetRev,
       csTotal2025, csRevTotal2025, csRn2025, csRev2025,
-      pickupLw2026, pickup4w2026 } = derived;
+      pickupLw2026, pickupLwRev2026, pickup4w2026, pickup4wRev2026 } = derived;
     const isTotal = seg === TOTAL_KEY;
     const rn26 = isTotal ? total2026 : actual2026[seg];
     const rn25 = isTotal ? total2025 : actual2025[seg];
@@ -263,6 +267,13 @@ export function useOtbData(propertyCode: string): OtbData {
     const p4wArr = isTotal
       ? (pickup4w2026 ? dates2026.map((_, i) => tcSegs.reduce((acc, s) => acc + (pickup4w2026[s]?.[i] ?? 0), 0)) : null)
       : (pickup4w2026?.[seg] ?? null);
+    // Revenue pickups (snapshot diff) — power the ADR/RevPAR pickup rows in the monthly board.
+    const lwRevArr = isTotal
+      ? (pickupLwRev2026 ? dates2026.map((_, i) => tcSegs.reduce((acc, s) => acc + (pickupLwRev2026[s]?.[i] ?? 0), 0)) : null)
+      : (pickupLwRev2026?.[seg] ?? null);
+    const p4wRevArr = isTotal
+      ? (pickup4wRev2026 ? dates2026.map((_, i) => tcSegs.reduce((acc, s) => acc + (pickup4wRev2026[s]?.[i] ?? 0), 0)) : null)
+      : (pickup4wRev2026?.[seg] ?? null);
     if (!rn26) return EMPTY_GRID;
     return dates2026.map((date, i) => ({
       date,
@@ -277,6 +288,8 @@ export function useOtbData(propertyCode: string): OtbData {
       revStly: revStly?.[i] ?? 0,
       pickupW: lwArr?.[i] ?? null,
       pickup4w: p4wArr?.[i] ?? null,
+      revPickupW: lwRevArr?.[i] ?? null,
+      revPickup4w: p4wRevArr?.[i] ?? null,
     }));
   }, [derived]);
 

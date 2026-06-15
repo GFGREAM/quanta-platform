@@ -1,13 +1,15 @@
 ﻿'use client';
 
-import { createContext, Fragment, useContext, useMemo, useState } from 'react';
-import { ChevronRight, ChevronDown } from 'lucide-react';
+import { createContext, Fragment, useContext, useMemo, useRef, useState } from 'react';
+import { ChevronRight, ChevronDown, Download } from 'lucide-react';
 import {
   CartesianGrid, Legend, Line, LineChart, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import KpiCard from '@/components/ui/KpiCard';
 import { MultiSelect } from '@/components/ui/MultiSelect';
+import { usePermissions } from '@/components/permissions-provider';
+import { exportNodeToPdf } from '@/lib/pdfExport';
 import { selectStyle } from '@/lib/selectStyle';
 import {
   useOtbData, TOTAL_KEY,
@@ -49,7 +51,7 @@ const BOARD_VIEWS: { key: BoardView; label: string }[] = [
 ];
 
 export default function OnTheBooksPage() {
-  const [boardView, setBoardView] = useState<BoardView>('daily');
+  const [boardView, setBoardView] = useState<BoardView>('monthly');
 
   const [propertyCode, setPropertyCode] = useState<string>('WACCR');
   const otb = useOtbData(propertyCode);
@@ -190,6 +192,24 @@ export default function OnTheBooksPage() {
   const varSub = (cur: number, ref: number) =>
     isOcc ? `${cur - ref >= 0 ? '+' : ''}${(cur - ref).toFixed(1)} pts` : fmtVar(cur, ref);
 
+  // ─── PDF export (KPIs + chart + pace board) ──────────────────────
+  // Admins (full access) export the clean internal copy; everyone else gets the
+  // confidentiality watermark on externally-shareable copies.
+  const { hasFullAccess } = usePermissions();
+  const exportRef = useRef<HTMLDivElement>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const handleExportPdf = async () => {
+    if (exportingPdf || !exportRef.current) return;
+    setExportingPdf(true);
+    try {
+      const seg = boardView === 'dailySegment' ? selectedLabel.replace(/\s+/g, '-') : 'total';
+      const fileBase = `on-the-books-${boardView}-${propertyCode}-${seg}-${new Date().toISOString().slice(0, 10)}`;
+      await exportNodeToPdf(exportRef.current, fileBase, { watermark: !hasFullAccess });
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   if (loading || TC_SEGMENTS.length === 0) {
     return (
       <div className="animate-pulse flex flex-col gap-4">
@@ -216,13 +236,24 @@ export default function OnTheBooksPage() {
         <span style={{ color: 'var(--primary)' }}>On the Books</span>
       </div>
 
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight m-0" style={{ color: 'var(--primary)' }}>
-          Daily On The Books — {selectedLabel}
-        </h1>
-        <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-          {property.name} · Room Nights by TC segment · FY26 budget mapped onto actuals · pace as of {AS_OF}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight m-0" style={{ color: 'var(--primary)' }}>
+            Daily On The Books — {selectedLabel}
+          </h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+            {property.name} · Room Nights by TC segment · FY26 budget mapped onto actuals · pace as of {AS_OF}
+          </p>
+        </div>
+        <button
+          onClick={handleExportPdf}
+          disabled={exportingPdf}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors hover:bg-[var(--bg-hover)] disabled:opacity-60 disabled:cursor-wait shrink-0"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+          title="Download the visuals as a PDF"
+        >
+          <Download size={13} /> {exportingPdf ? 'Generating…' : 'PDF'}
+        </button>
       </div>
 
       {/* view toggle — Monthly / Daily / Daily Segment */}
@@ -334,6 +365,27 @@ export default function OnTheBooksPage() {
       </div>
       )}
 
+      {/* Monthly view keeps only a Property selector (the board shows every metric & basis). */}
+      {boardView === 'monthly' && (
+        <div className="flex flex-col gap-1.5 self-start">
+          <label className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+            Property
+          </label>
+          <select
+            value={propertyCode}
+            onChange={(e) => setPropertyCode(e.target.value)}
+            style={selectStyle}
+            className="h-9 w-52 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
+          >
+            {PROPERTIES.map((p) => (
+              <option key={p.code} value={p.code}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Captured for the PDF export: KPIs + chart + pace board (controls excluded) */}
+      <div ref={exportRef} className="flex flex-col gap-5 bg-white">
       {showTrend && (<>
       {/* KPIs */}
       <div className="grid grid-cols-4 gap-3 max-[860px]:grid-cols-2 max-[480px]:grid-cols-1">
@@ -438,7 +490,8 @@ export default function OnTheBooksPage() {
       {/* lower section — Daily: pace board · Daily Segment: hierarchical drill-down · Monthly: TBD */}
       {boardView === 'daily' && <SegmentGrid segment={TOTAL_KEY} month={month} isOcc={isOcc} granularity="daily" />}
       {boardView === 'dailySegment' && <SegmentTree month={month} />}
-      {boardView === 'monthly' && <BlankView label="Monthly" />}
+      {boardView === 'monthly' && <MonthlyPaceBoard propertyName={property.name} asOf={AS_OF} />}
+      </div>
     </div>
     </OtbCtx.Provider>
   );
@@ -686,11 +739,237 @@ function SegmentGrid({ segment, month, isOcc, granularity }: { segment: SegmentK
   );
 }
 
-// Placeholder for views not built yet (Monthly).
-function BlankView({ label }: { label: string }) {
+// ---- Monthly Booking Pace board ----
+// A transposed pace board: columns are months (+ Q1–Q4 quarter subtotals, FY, and
+// YTD / ROY splits), rows are grouped by comparison basis, each carrying the five
+// metrics Occ / ADR / RevPAR / Room Nights / Revenue.
+//
+//   On the Books        — 2026 actuals + on-the-books pace
+//   vs STLY             — actual − same-time-last-year (D360)
+//   Last Week Pickup    — RN booked in the last ~7 days (Occ derived; rev/adr pending data)
+//   Last 4 Week Pickup  — RN booked in the last ~28 days
+//   Reach to Budget     — actual − Budget (current gap to budget)
+//   Risk or Surplus     — (OTB + LY's rest-of-year pickup) − Budget (projected gap)
+
+type PaceMetricKey = 'occ' | 'adr' | 'revpar' | 'rn' | 'rev';
+type PaceSectionKey = 'otb' | 'stly' | 'pw' | 'p4' | 'reach' | 'risk';
+
+interface PaceAgg {
+  n: number;
+  rn: number; rev: number;         // 2026 on-the-books
+  bRn: number; bRev: number;       // budget
+  sRn: number; sRev: number;       // STLY (closed-actual on closed days, D360 STLY on pace days)
+  pRn: number; pRev: number;       // projected = OTB + LY's rest-of-year pickup
+  pw: number | null; p4: number | null;       // RN pickups (1-week / 4-week)
+  pwRev: number | null; p4Rev: number | null; // revenue pickups (1-week / 4-week)
+  cap26: number; cap25: number;
+}
+
+function aggregatePace(days: GridDay[], cap26: number, cap25: number): PaceAgg {
+  const n = days.length || 1;
+  let rn = 0, rev = 0, bRn = 0, bRev = 0, sRn = 0, sRev = 0, pRn = 0, pRev = 0;
+  let pw = 0, pwHas = false, p4 = 0, p4Has = false;
+  let pwRev = 0, pwRevHas = false, p4Rev = 0, p4RevHas = false;
+  for (const d of days) {
+    rn += d.rn; rev += d.rev;
+    bRn += d.budgetRn; bRev += d.budgetRev;
+    // STLY: closed days use 2025 actual, pace days use the D360 STLY on the 2026 axis.
+    sRn += d.isPace ? d.rnStly : d.rnLy;
+    sRev += d.isPace ? d.revStly : d.revLy;
+    // Projected final = current OTB + however much LY still picked up after this as-of.
+    pRn += d.rn + (d.isPace ? d.rnLy - d.rnStly : 0);
+    pRev += d.rev + (d.isPace ? d.revLy - d.revStly : 0);
+    if (d.pickupW != null) { pw += d.pickupW; pwHas = true; }
+    if (d.pickup4w != null) { p4 += d.pickup4w; p4Has = true; }
+    if (d.revPickupW != null) { pwRev += d.revPickupW; pwRevHas = true; }
+    if (d.revPickup4w != null) { p4Rev += d.revPickup4w; p4RevHas = true; }
+  }
+  return {
+    n, rn, rev, bRn, bRev, sRn, sRev, pRn, pRev,
+    pw: pwHas ? pw : null, p4: p4Has ? p4 : null,
+    pwRev: pwRevHas ? pwRev : null, p4Rev: p4RevHas ? p4Rev : null,
+    cap26, cap25,
+  };
+}
+
+// Metric value for a (section, metric) pair. Returns null when there's no basis
+// (e.g. STLY before the hotel had history, or revenue pickup which has no source yet).
+function paceValue(a: PaceAgg, section: PaceSectionKey, metric: PaceMetricKey): number | null {
+  const occ = (rn: number, cap: number) => (cap && a.n ? (rn / (cap * a.n)) * 100 : null);
+  const adr = (rev: number, rn: number) => (rn ? rev / rn : null);
+  const revpar = (rev: number, cap: number) => (cap && a.n ? rev / (cap * a.n) : null);
+  const of = (rn: number, rev: number, cap: number): number | null => {
+    switch (metric) {
+      case 'occ': return occ(rn, cap);
+      case 'adr': return adr(rev, rn);
+      case 'revpar': return revpar(rev, cap);
+      case 'rn': return rn;
+      case 'rev': return rev;
+    }
+  };
+
+  if (section === 'otb') return of(a.rn, a.rev, a.cap26);
+
+  if (section === 'pw' || section === 'p4') {
+    const puRn = section === 'pw' ? a.pw : a.p4;
+    const puRev = section === 'pw' ? a.pwRev : a.p4Rev;
+    switch (metric) {
+      case 'rn': return puRn;
+      case 'occ': return puRn != null ? occ(puRn, a.cap26) : null;
+      case 'rev': return puRev;
+      case 'revpar': return puRev != null ? revpar(puRev, a.cap26) : null;
+      case 'adr': {
+        // ADR pickup = current ADR − ADR at the prior snapshot (prior = current − pickup).
+        if (puRn == null || puRev == null) return null;
+        const adrNow = adr(a.rev, a.rn);
+        const adrPrev = adr(a.rev - puRev, a.rn - puRn);
+        return adrNow != null && adrPrev != null ? adrNow - adrPrev : null;
+      }
+    }
+  }
+
+  // Variance sections: current/projected basis − comparison basis.
+  let cur: number | null, ref: number | null;
+  if (section === 'stly') {
+    if (a.sRn === 0 && a.sRev === 0) return null; // no prior-year comparable (pre-opening)
+    cur = of(a.rn, a.rev, a.cap26);
+    ref = of(a.sRn, a.sRev, a.cap25);
+  } else if (section === 'reach') {
+    cur = of(a.rn, a.rev, a.cap26);
+    ref = of(a.bRn, a.bRev, a.cap26);
+  } else { // risk
+    cur = of(a.pRn, a.pRev, a.cap26);
+    ref = of(a.bRn, a.bRev, a.cap26);
+  }
+  return cur != null && ref != null ? cur - ref : null;
+}
+
+const PACE_METRICS: { key: PaceMetricKey; label: string }[] = [
+  { key: 'occ', label: 'Occ' },
+  { key: 'adr', label: 'ADR' },
+  { key: 'revpar', label: 'RevPAR' },
+  { key: 'rn', label: 'Room Nights' },
+  { key: 'rev', label: 'Revenue' },
+];
+const PACE_SECTIONS: { key: PaceSectionKey; label: string; variance: boolean }[] = [
+  { key: 'otb', label: 'On the Books', variance: false },
+  { key: 'stly', label: 'On the Books vs STLY', variance: true },
+  { key: 'reach', label: 'Reach to Budget', variance: true },
+  { key: 'pw', label: 'Last Week Pickup', variance: true },
+  { key: 'p4', label: 'Last 4 Week Pickup', variance: true },
+  { key: 'risk', label: 'Risk or Surplus', variance: true },
+];
+
+function fmtPace(metric: PaceMetricKey, v: number | null): string {
+  if (v == null) return '—';
+  switch (metric) {
+    case 'occ': return `${v.toFixed(1)}%`;
+    case 'adr':
+    case 'revpar': return v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    case 'rn': return Math.round(v).toLocaleString('en-US');
+    case 'rev': return `${(v / 1000).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}K`;
+  }
+}
+// Variance sections colour by sign (text only, no fill); actuals stay neutral.
+function paceColor(variance: boolean, v: number | null): string {
+  if (!variance) return 'var(--text-primary)';
+  if (v == null || v === 0) return 'var(--text-muted)';
+  return v > 0 ? 'var(--success)' : 'var(--danger)';
+}
+
+function MonthlyPaceBoard({ propertyName, asOf }: { propertyName: string; asOf: string }) {
+  const { getGridDaily, CAPACITY_2025, CAPACITY_2026 } = useOtb();
+  const days = useMemo(() => getGridDaily(TOTAL_KEY), [getGridDaily]);
+
+  // Columns: 12 months, a quarter subtotal after each 3rd month, then FY, plus
+  // YTD (realized) / ROY (rest-of-year pace) splits. emph = shaded subtotal column.
+  const columns = useMemo(() => {
+    const byMonth: GridDay[][] = Array.from({ length: 12 }, () => []);
+    for (const d of days) byMonth[Number(d.date.slice(5, 7)) - 1].push(d);
+    const cols: { key: string; label: string; days: GridDay[]; emph: boolean }[] = [];
+    for (let q = 0; q < 4; q++) {
+      const qDays: GridDay[] = [];
+      for (let m = q * 3; m < q * 3 + 3; m++) {
+        if (byMonth[m].length) cols.push({ key: `m${m}`, label: `${MONTH_ABBR[m]}-26`, days: byMonth[m], emph: false });
+        qDays.push(...byMonth[m]);
+      }
+      if (qDays.length) cols.push({ key: `q${q + 1}`, label: `Q${q + 1}`, days: qDays, emph: true });
+    }
+    // Trailing summary columns, in order: YTD (realized) → ROY (pace) → FY (full year).
+    const ytd = days.filter((d) => !d.isPace);
+    const roy = days.filter((d) => d.isPace);
+    if (ytd.length) cols.push({ key: 'ytd', label: 'YTD', days: ytd, emph: true });
+    if (roy.length) cols.push({ key: 'roy', label: 'ROY', days: roy, emph: true });
+    if (days.length) cols.push({ key: 'fy', label: 'FY', days, emph: true });
+    return cols;
+  }, [days]);
+
+  const aggs = useMemo(
+    () => columns.map((c) => aggregatePace(c.days, CAPACITY_2026, CAPACITY_2025)),
+    [columns, CAPACITY_2026, CAPACITY_2025],
+  );
+
   return (
-    <div className="bg-white border rounded-lg shadow-sm flex items-center justify-center" style={{ borderColor: 'var(--border)', minHeight: 260 }}>
-      <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{label} — próximamente</span>
+    <div className="bg-white border rounded-lg overflow-hidden shadow-sm" style={{ borderColor: 'var(--border)' }}>
+      <div className="px-3 py-2 border-b flex items-center justify-between gap-3 flex-wrap" style={{ background: 'var(--muted)', borderColor: 'var(--border)' }}>
+        <span className="text-sm font-bold tracking-tight" style={{ color: 'var(--primary)' }}>
+          Booking Pace — {propertyName}
+        </span>
+        <span className="text-[0.625rem]" style={{ color: 'var(--text-muted)' }}>
+          source: D360 · pace as of {asOf}
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-[0.75rem] whitespace-nowrap">
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              <th className="sticky left-0 z-10 bg-white px-3 py-1.5 text-left" style={{ minWidth: 150, width: 150 }} />
+              {columns.map((c) => (
+                <th key={c.key} className="px-2.5 py-1.5 text-right text-[0.6875rem] font-bold tabular-nums"
+                  style={{ color: 'var(--text-secondary)', minWidth: 60, background: c.emph ? 'var(--muted)' : undefined }}>
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {PACE_SECTIONS.map((section) => (
+              <Fragment key={section.key}>
+                <tr style={{ borderTop: '2px solid var(--border)' }}>
+                  <td className="sticky left-0 z-10 bg-white px-3 pt-2 pb-0.5 text-left font-bold"
+                    style={{ color: 'var(--primary)', minWidth: 150 }}>
+                    {section.label}
+                  </td>
+                  {columns.map((c) => (
+                    <td key={c.key} style={{ background: c.emph ? 'var(--muted)' : undefined }} />
+                  ))}
+                </tr>
+                {PACE_METRICS.map((metric) => (
+                  <tr key={metric.key}>
+                    <td className="sticky left-0 z-10 bg-white px-3 py-0.5 pl-5 text-left"
+                      style={{ color: 'var(--text-secondary)', minWidth: 150 }}>
+                      {metric.label}
+                    </td>
+                    {aggs.map((a, i) => {
+                      const v = paceValue(a, section.key, metric.key);
+                      return (
+                        <td key={columns[i].key} className="px-2.5 py-0.5 text-right tabular-nums"
+                          style={{
+                            color: paceColor(section.variance, v),
+                            fontWeight: section.key === 'otb' ? 600 : 400,
+                            background: columns[i].emph ? 'var(--muted)' : undefined,
+                          }}>
+                          {fmtPace(metric.key, v)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
