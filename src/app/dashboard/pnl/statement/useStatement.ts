@@ -20,7 +20,6 @@ import {
   type Month,
   type MetricDef,
   type MetricKey,
-  type Scenario,
   type Scope,
 } from './data';
 
@@ -53,8 +52,8 @@ export interface WeeklyOutlookPoint {
   week: string;
   outlook: number;
   budget: number;
-  // Week-over-week change in the Outlook vs the prior snapshot (metric units; 0 for the first week).
-  wow: number;
+  // Week-over-week change in the Outlook vs the prior snapshot (metric units; null for the first week).
+  wow: number | null;
 }
 
 export type ComparisonScenario = (typeof COMPARISON_SCENARIOS)[number];
@@ -495,6 +494,7 @@ export function useStatement(opts?: UseStatementOptions) {
       ly: totalLy,
       currentNoXR: totalCurrent.map(restateAtBudgetFx),
       // Budget at Budget FX = Budget unchanged (restatement factor = 1 by construction).
+      // Intentional alias — all consumers are read-only so a copy is unnecessary.
       budgetNoXR: totalBudget,
       lyNoXR: totalLy.map(restateAtBudgetFx),
     };
@@ -518,7 +518,7 @@ export function useStatement(opts?: UseStatementOptions) {
     let prev: number | null = null;
     return WEEKLY_OUTLOOK_DRIFTS.map(({ snapshotDate, multiplier }) => {
       const outlook = baseOutlook * multiplier;
-      const wow = prev === null ? 0 : outlook - prev;
+      const wow = prev === null ? null : outlook - prev;
       prev = outlook;
       return { week: snapshotDate, outlook, budget: baseBudget, wow };
     });

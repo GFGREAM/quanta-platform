@@ -10,7 +10,7 @@
 
 const LOGO_SRC = '/quanta_logo.png';
 const COPYRIGHT =
-  '© 2026 GFG Asset Management. All Rights Reserved. CONFIDENTIAL & PROPIETARY. ' +
+  '© 2026 GFG Asset Management. All Rights Reserved. CONFIDENTIAL & PROPRIETARY. ' +
   'May not be reproduced or distributed without written permission.';
 const NAVY: [number, number, number] = [27, 58, 91];   // brand navy (rule / accents)
 const HAIRLINE: [number, number, number] = [226, 232, 240]; // slate-200 dividers

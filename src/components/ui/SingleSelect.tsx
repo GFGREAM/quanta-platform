@@ -50,7 +50,7 @@ export function SingleSelect({
       </button>
       {open && (
         <div
-          className="absolute top-full left-0 mt-1 bg-white border rounded-md shadow-lg z-50 w-full"
+          className="absolute top-full left-0 mt-1 bg-white border rounded-md shadow-lg z-50 w-full max-h-64 overflow-y-auto"
           style={{ borderColor: 'var(--border)' }}
         >
           {options.map((opt) => {

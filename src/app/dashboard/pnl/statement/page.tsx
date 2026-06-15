@@ -3,9 +3,9 @@
 import { useMemo } from 'react';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { usePermissions } from '@/components/permissions-provider';
-import { VIEW_MODE_TO_SECTION, SECTION_TO_VIEW_MODE } from '@/lib/section-keys';
+import { VIEW_MODE_TO_SECTION } from '@/lib/section-keys';
 import { VIEW_ORDER } from './ui';
-import type { UseStatementOptions, ViewMode } from './useStatement';
+import type { UseStatementOptions } from './useStatement';
 import StatementDesktop from './StatementDesktop';
 import StatementMobile from './StatementMobile';
 
