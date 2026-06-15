@@ -7,11 +7,13 @@ import { getPnlAllowedHotels } from "../permissions";
 interface DimensionsResponse {
   years: number[];
   hotels: string[];
+  weeks: string[];
 }
 
 const EMPTY_DIMENSIONS: DimensionsResponse = {
   years: [],
   hotels: [],
+  weeks: [],
 };
 
 const SQL = `
@@ -24,10 +26,16 @@ hotels AS (
   SELECT DISTINCT hotel AS h
   FROM at_a_glance.aag
   ORDER BY h
+),
+weeks AS (
+  SELECT DISTINCT to_char(week, 'YYYY-MM-DD') AS w
+  FROM at_a_glance.aag
+  ORDER BY w
 )
 SELECT
   (SELECT array_agg(y ORDER BY y) FROM years) AS years,
-  (SELECT array_agg(h ORDER BY h) FROM hotels) AS hotels;
+  (SELECT array_agg(h ORDER BY h) FROM hotels) AS hotels,
+  (SELECT array_agg(w ORDER BY w) FROM weeks) AS weeks;
 `;
 
 const SQL_FILTERED = `
@@ -42,10 +50,17 @@ hotels AS (
   FROM at_a_glance.aag
   WHERE hotel = ANY($1::text[])
   ORDER BY h
+),
+weeks AS (
+  SELECT DISTINCT to_char(week, 'YYYY-MM-DD') AS w
+  FROM at_a_glance.aag
+  WHERE hotel = ANY($1::text[])
+  ORDER BY w
 )
 SELECT
   (SELECT array_agg(y ORDER BY y) FROM years) AS years,
-  (SELECT array_agg(h ORDER BY h) FROM hotels) AS hotels;
+  (SELECT array_agg(h ORDER BY h) FROM hotels) AS hotels,
+  (SELECT array_agg(w ORDER BY w) FROM weeks) AS weeks;
 `;
 
 export async function GET() {
@@ -74,6 +89,7 @@ export async function GET() {
     const payload: DimensionsResponse = {
       years: (row.years ?? []).map((y: string | number) => Number(y)),
       hotels: row.hotels ?? [],
+      weeks: row.weeks ?? [],
     };
 
     return NextResponse.json(payload);

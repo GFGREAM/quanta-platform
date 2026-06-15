@@ -118,9 +118,8 @@ export function useStatement(opts?: UseStatementOptions) {
 
   const defaultView = allowedModes && allowedModes.length > 0 ? allowedModes[0] : 'summary';
   const [year, setYear] = useState<number>(YEARS[0]);
-  // Weekly snapshot (ISO date) to view the Outlook as of. Defaults to the latest snapshot (no
-  // drift). Earlier dates re-scale the Outlook by that week's drift so the whole statement shows
-  // how it stood then. Real snapshot dates arrive with the SQL feed; this keys off them already.
+  // Weekly snapshot (ISO date) to view the Outlook as of. Defaults to the latest static snapshot;
+  // once the dynamic weeks arrive from the API the effect below syncs to the real latest week.
   const [week, setWeek] = useState<string>(() => WEEKLY_OUTLOOK_DRIFTS[WEEKLY_OUTLOOK_DRIFTS.length - 1].snapshotDate);
   const [metric, setMetric] = useState<MetricKey>('totalRevenue');
   const [scenario, setScenario] = useState<ComparisonScenario>('Outlook');
@@ -142,6 +141,7 @@ export function useStatement(opts?: UseStatementOptions) {
   const [loading, setLoading] = useState(false);
   const [dynamicHotels, setDynamicHotels] = useState<string[]>([]);
   const [dynamicYears, setDynamicYears] = useState<number[]>([]);
+  const [dynamicWeeks, setDynamicWeeks] = useState<string[]>([]);
   // All-years dataset, fetched lazily when viewMode === 'yearly'. Cached by
   // currency so flipping USD/Local refetches; flipping `year` does not.
   const [allYearsRows, setAllYearsRows] = useState<ForecastRow[]>([]);
@@ -157,6 +157,7 @@ export function useStatement(opts?: UseStatementOptions) {
         if (controller.signal.aborted) return;
         setDynamicHotels(data.hotels ?? []);
         setDynamicYears(data.years ?? []);
+        setDynamicWeeks(data.weeks ?? []);
       } catch {
         // dejamos vacios; el hook seguira con los defaults estaticos como fallback
       }
@@ -222,9 +223,34 @@ export function useStatement(opts?: UseStatementOptions) {
     return () => controller.abort();
   }, [viewMode, currency, allYearsLoaded]);
 
+  // Build the weekly drift list from the DB weeks when available, otherwise fall
+  // back to the static WEEKLY_OUTLOOK_DRIFTS. Multipliers are auto-generated:
+  // they climb linearly from ~0.95 (oldest) to 1.000 (latest week).
+  const weeklyDrifts = useMemo(() => {
+    if (dynamicWeeks.length === 0) return WEEKLY_OUTLOOK_DRIFTS;
+    const sorted = [...dynamicWeeks].sort();
+    const n = sorted.length;
+    const BASE = 0.95; // oldest snapshot starts at 95% of latest Outlook
+    return sorted.map((w, i) => ({
+      snapshotDate: w,
+      multiplier: n === 1 ? 1 : BASE + (1 - BASE) * (i / (n - 1)),
+    }));
+  }, [dynamicWeeks]);
+
+  // When dynamic weeks arrive, ensure the selected week still exists. If the
+  // current selection is not in the new list, jump to the latest available week.
+  useEffect(() => {
+    if (weeklyDrifts.length === 0) return;
+    const latestSnap = weeklyDrifts[weeklyDrifts.length - 1].snapshotDate;
+    setWeek((prev) => {
+      if (weeklyDrifts.some((d) => d.snapshotDate === prev)) return prev;
+      return latestSnap;
+    });
+  }, [weeklyDrifts]);
+
   const weekMultiplier = useMemo(
-    () => WEEKLY_OUTLOOK_DRIFTS.find((d) => d.snapshotDate === week)?.multiplier ?? 1,
-    [week],
+    () => weeklyDrifts.find((d) => d.snapshotDate === week)?.multiplier ?? 1,
+    [week, weeklyDrifts],
   );
 
   // The server already returns rows in the requested currency, so no client-side conversion is
@@ -516,13 +542,13 @@ export function useStatement(opts?: UseStatementOptions) {
     const baseOutlook = sumMetric(filterByPeriod(allCurrentYear.filter((r) => r.scenario === scenario), scope, periodMonth));
     const baseBudget = sumMetric(filterByPeriod(allCurrentYear.filter((r) => r.scenario === 'Budget'), scope, periodMonth));
     let prev: number | null = null;
-    return WEEKLY_OUTLOOK_DRIFTS.map(({ snapshotDate, multiplier }) => {
+    return weeklyDrifts.map(({ snapshotDate, multiplier }) => {
       const outlook = baseOutlook * multiplier;
       const wow = prev === null ? null : outlook - prev;
       prev = outlook;
       return { week: snapshotDate, outlook, budget: baseBudget, wow };
     });
-  }, [forecastRows, portfolioHotels, filteredPortfolioHotels, year, scenario, scope, periodMonth, metricDef]);
+  }, [forecastRows, portfolioHotels, filteredPortfolioHotels, year, scenario, scope, periodMonth, metricDef, weeklyDrifts]);
 
   const hotelSelectionLabel = allHotelsSelected
     ? 'All hotels'
@@ -561,8 +587,8 @@ export function useStatement(opts?: UseStatementOptions) {
     weeklyOutlookSeries,
     loading,
     // Newest snapshot first for the dropdown; latestWeek lets the UI mark the current one.
-    weekOptions: [...WEEKLY_OUTLOOK_DRIFTS].reverse().map((d) => d.snapshotDate),
-    latestWeek: WEEKLY_OUTLOOK_DRIFTS[WEEKLY_OUTLOOK_DRIFTS.length - 1].snapshotDate,
+    weekOptions: [...weeklyDrifts].reverse().map((d) => d.snapshotDate),
+    latestWeek: weeklyDrifts[weeklyDrifts.length - 1]?.snapshotDate ?? '',
     hotelOptions: filteredHotels,
     portfolioHotelOptions: filteredPortfolioHotels,
     yearOptions: dynamicYears.length > 0 ? dynamicYears : YEARS,
