@@ -18,7 +18,7 @@ import StatementQuarterlyTable from './StatementQuarterlyTable';
 import StatementYearlyTable from './StatementYearlyTable';
 import {
   MultiSelect, SingleSelect,
-  COLOR_COMPARISON, COLOR_BUDGET, COLOR_LY,
+  COLOR_COMPARISON, COLOR_BUDGET, COLOR_LY, HOTEL_PALETTE,
   VIEW_ORDER, VIEW_LABELS, SCOPE_LABELS, CURRENCY_LABELS, BASIS_LABELS,
   LegendDot, formatAxis,
 } from './ui';
@@ -298,14 +298,14 @@ export default function StatementDesktop({ permissionOpts }: { permissionOpts?: 
           <div>
             <div className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
               {isMultiHotel
-                ? 'Outlook · Week over Week'
+                ? 'Outlook · Weekly progression'
                 : viewMode === 'quarter' ? 'Quarterly trend'
                 : viewMode === 'yearly' ? 'Yearly trend'
                 : 'Monthly trend'}
             </div>
             <div className="text-base font-semibold" style={{ color: 'var(--primary)' }}>
               {isMultiHotel
-                ? `${metricDef.label} — WoW change (${scopeLabel(scope, periodMonth, year)})`
+                ? `${metricDef.label} — Outlook by week · last 3 months (${scopeLabel(scope, periodMonth, year)})`
                 : `${metricDef.label} — ${scenarioLabel(scenario)} vs Budget vs LY`}
             </div>
           </div>
@@ -388,10 +388,11 @@ export default function StatementDesktop({ permissionOpts }: { permissionOpts?: 
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={weeklyOutlookSeries} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
+              <LineChart data={weeklyOutlookSeries.points} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
                 <CartesianGrid stroke="#E5E5E5" strokeDasharray="3 3" vertical={false} />
                 <XAxis
                   dataKey="week"
+                  tickFormatter={(w: string) => w.slice(5).replace('-', '/')}
                   tick={{ fill: '#6B7280', fontSize: 12 }}
                   tickLine={false}
                   axisLine={{ stroke: '#E5E5E5' }}
@@ -418,15 +419,18 @@ export default function StatementDesktop({ permissionOpts }: { permissionOpts?: 
                   wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
                   iconType="circle"
                 />
-                <Line
-                  type="monotone"
-                  dataKey="wow"
-                  name="WoW change"
-                  stroke={COLOR_COMPARISON}
-                  strokeWidth={2.5}
-                  dot={{ r: 4, fill: COLOR_COMPARISON }}
-                  activeDot={{ r: 6 }}
-                />
+                {weeklyOutlookSeries.hotels.map((h, i) => (
+                  <Line
+                    key={h}
+                    type="monotone"
+                    dataKey={h}
+                    name={h}
+                    stroke={HOTEL_PALETTE[i % HOTEL_PALETTE.length]}
+                    strokeWidth={2}
+                    dot={{ r: 2 }}
+                    activeDot={{ r: 4 }}
+                  />
+                ))}
               </LineChart>
             </ResponsiveContainer>
           )}

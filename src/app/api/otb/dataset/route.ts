@@ -51,6 +51,7 @@ const SQL_DAILY = `
          cs_revenue::numeric      AS cs_revenue,
          rn_change_vs_ly::numeric AS rn_change_vs_ly,
          rn_change_vs_lw::numeric AS rn_change_vs_lw,
+         rev_change_vs_lw::numeric   AS rev_change_vs_lw,
          rev_change_vs_ly::numeric   AS rev_change_vs_ly,
          cs_rn_change_vs_ly::numeric AS cs_rn_change_vs_ly,
          cs_rev_change_vs_ly::numeric AS cs_rev_change_vs_ly
@@ -63,7 +64,8 @@ const SQL_DAILY = `
 // Returns empty if no such snapshot exists — pickups auto-activate as weekly loads accumulate.
 const SQL_PICKUP_4W = `
   SELECT stay_date::text AS stay_date, year::int AS year, segment_key,
-         room_nights::numeric AS room_nights
+         room_nights::numeric AS room_nights,
+         rooms_revenue::numeric AS rooms_revenue
   FROM daily_segmentation_otb.daily_actuals
   WHERE property_code = $1
     AND snapshot_date = (
@@ -247,18 +249,23 @@ export async function GET(request: Request) {
     }
 
     // ─── Pickups ─────────────────────────────────────────────────
-    // Last-week pickup: rn_change_vs_lw from D360 (current year, 2026 axis)
+    // Last-week pickup: rn_change_vs_lw / rev_change_vs_lw from D360 (current year, 2026 axis)
     const pickupLw2026 = pivotMetric(rows, segments, dateIdx2026, currentYear, "rn_change_vs_lw", len);
+    const revPickupLw2026 = pivotMetric(rows, segments, dateIdx2026, currentYear, "rev_change_vs_lw", len);
 
-    // 4-week pickup: current RN − RN from snapshot ~28 days ago.
+    // 4-week pickup: current − snapshot ~28 days ago, for both RN and Revenue.
     // If no old snapshot exists (< 28 days of history), returns null → UI shows "—".
     // Auto-activates as weekly loads accumulate without code changes.
     let pickup4w2026: SegArrays | null = null;
+    let pickup4wRev2026: SegArrays | null = null;
     if (pickup4wRes.rows.length > 0) {
       const oldRn = pivotMetric(pickup4wRes.rows, segments, dateIdx2026, currentYear, "room_nights", len);
+      const oldRev = pivotMetric(pickup4wRes.rows, segments, dateIdx2026, currentYear, "rooms_revenue", len);
       pickup4w2026 = {};
+      pickup4wRev2026 = {};
       for (const s of segments) {
         pickup4w2026[s] = dates2026.map((_, i) => Math.round(actual2026[s][i] - (oldRn[s]?.[i] ?? 0)));
+        pickup4wRev2026[s] = dates2026.map((_, i) => Math.round(revenue2026[s][i] - (oldRev[s]?.[i] ?? 0)));
       }
     }
 
@@ -289,7 +296,9 @@ export async function GET(request: Request) {
       budgetTcM,
       budgetRevTcM,
       pickupLw2026,
+      revPickupLw2026,
       pickup4w2026,
+      pickup4wRev2026,
     });
   } catch (error) {
     console.error("OTB dataset API error:", error);

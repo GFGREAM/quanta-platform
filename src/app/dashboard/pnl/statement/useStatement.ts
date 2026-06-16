@@ -56,6 +56,9 @@ export interface WeeklyOutlookPoint {
   wow: number | null;
 }
 
+/** A weekly-snapshot forecast row from /api/aag/weekly-outlook (Outlook scenario only). */
+type WeeklyRow = ForecastRow & { week: string };
+
 export type ComparisonScenario = (typeof COMPARISON_SCENARIOS)[number];
 
 export interface ChartPoint {
@@ -138,6 +141,7 @@ export function useStatement(opts?: UseStatementOptions) {
     setViewMode(v);
   }, [allowedModes]);
   const [forecastRows, setForecastRows] = useState<ForecastRow[]>([]);
+  const [weeklyRows, setWeeklyRows] = useState<WeeklyRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [dynamicHotels, setDynamicHotels] = useState<string[]>([]);
   const [dynamicYears, setDynamicYears] = useState<number[]>([]);
@@ -194,6 +198,29 @@ export function useStatement(opts?: UseStatementOptions) {
           setForecastRows([]);
           setLoading(false);
         }
+      }
+    })();
+    return () => controller.abort();
+  }, [year, currency]);
+
+  // Weekly Outlook snapshots (last 3 months) for the WoW progression chart — real published
+  // totals per week, independent of the main table fetch.
+  useEffect(() => {
+    const controller = new AbortController();
+    (async () => {
+      try {
+        // Fetch up to a year of weekly snapshots; the chart slices a period-relative 3-month
+        // window client-side (a past month needs snapshots from before today's 3-month window).
+        const params = new URLSearchParams({ year: String(year), currency, months: '12' });
+        const res = await fetch(`/api/aag/weekly-outlook?${params}`, { signal: controller.signal });
+        if (!res.ok) {
+          if (!controller.signal.aborted) setWeeklyRows([]);
+          return;
+        }
+        const data: WeeklyRow[] = await res.json();
+        if (!controller.signal.aborted) setWeeklyRows(data);
+      } catch {
+        if (!controller.signal.aborted) setWeeklyRows([]);
       }
     })();
     return () => controller.abort();
@@ -532,23 +559,52 @@ export function useStatement(opts?: UseStatementOptions) {
   // selected metric, aggregated across the chosen portfolio total. Each point
   // is an Outlook snapshot taken at a different week; Budget is shown as a
   // constant horizontal reference.
-  const weeklyOutlookSeries = useMemo<WeeklyOutlookPoint[]>(() => {
+  const weeklyOutlookSeries = useMemo<{ points: Array<Record<string, number | string>>; hotels: string[] }>(() => {
     const orderedSelection = filteredPortfolioHotels.filter((h) => portfolioHotels.includes(h));
-    if (orderedSelection.length === 0) return [];
-    // Anchor on the RAW (unscaled) rows so the progression is independent of the Week selector —
-    // it always plots the true latest Outlook, then applies each week's drift to walk it back.
-    const sumMetric = (rs: ForecastRow[]) => rs.reduce((s, r) => s + metricDef.calc(r), 0);
-    const allCurrentYear = forecastRows.filter((r) => r.year === year && orderedSelection.includes(r.hotel));
-    const baseOutlook = sumMetric(filterByPeriod(allCurrentYear.filter((r) => r.scenario === scenario), scope, periodMonth));
-    const baseBudget = sumMetric(filterByPeriod(allCurrentYear.filter((r) => r.scenario === 'Budget'), scope, periodMonth));
-    let prev: number | null = null;
-    return weeklyDrifts.map(({ snapshotDate, multiplier }) => {
-      const outlook = baseOutlook * multiplier;
-      const wow = prev === null ? null : outlook - prev;
-      prev = outlook;
-      return { week: snapshotDate, outlook, budget: baseBudget, wow };
+    if (orderedSelection.length === 0 || weeklyRows.length === 0) return { points: [], hotels: [] };
+    // Group the real weekly snapshots by week, then by hotel — one Outlook line per hotel so the
+    // chart compares how each hotel forecast moved week to week.
+    const selected = new Set(orderedSelection);
+    const byWeek = new Map<string, Map<string, WeeklyRow[]>>();
+    for (const r of weeklyRows) {
+      if (!selected.has(r.hotel)) continue;
+      let wh = byWeek.get(r.week);
+      if (!wh) { wh = new Map(); byWeek.set(r.week, wh); }
+      const arr = wh.get(r.hotel);
+      if (arr) arr.push(r); else wh.set(r.hotel, [r]);
+    }
+    const allWeeks = [...byWeek.keys()].sort();
+    if (allWeeks.length === 0) return { points: [], hotels: [] };
+
+    // Anchor the window on the selected period's close. A month's Outlook stops moving once its
+    // close lands (~day 10-12 of the following month); we keep showing that closed value for a
+    // short tail (FLAT_TAIL_WEEKS) and the trailing 3 months before it. So a past month reveals
+    // how its Outlook fell into the close instead of a long flat line, while the open period
+    // (close still in the future → anchor capped at the latest snapshot) shows up to today.
+    const FLAT_TAIL_WEEKS = 3;
+    const lastMonthIdx = scope === 'fy' ? 11 : MONTHS.indexOf(periodMonth);
+    const closeDate = new Date(year, lastMonthIdx + 1, 12);
+    const latest = new Date(`${allWeeks[allWeeks.length - 1]}T00:00:00`);
+    let anchorEnd = new Date(closeDate.getTime() + FLAT_TAIL_WEEKS * 7 * 86_400_000);
+    if (anchorEnd > latest) anchorEnd = latest;
+    const windowStart = new Date(anchorEnd);
+    windowStart.setMonth(windowStart.getMonth() - 3);
+    const weeks = allWeeks.filter((wk) => {
+      const d = new Date(`${wk}T00:00:00`);
+      return d >= windowStart && d <= anchorEnd;
     });
-  }, [forecastRows, portfolioHotels, filteredPortfolioHotels, year, scenario, scope, periodMonth, metricDef, weeklyDrifts]);
+
+    const points = weeks.map((wk) => {
+      const wh = byWeek.get(wk)!;
+      const point: Record<string, number | string> = { week: wk };
+      for (const hotel of orderedSelection) {
+        const rows = wh.get(hotel);
+        point[hotel] = rows ? (aggregateRowsMetric(filterByPeriod(rows, scope, periodMonth), metricDef) ?? 0) : 0;
+      }
+      return point;
+    });
+    return { points, hotels: orderedSelection };
+  }, [weeklyRows, portfolioHotels, filteredPortfolioHotels, scope, periodMonth, year, metricDef]);
 
   const hotelSelectionLabel = allHotelsSelected
     ? 'All hotels'

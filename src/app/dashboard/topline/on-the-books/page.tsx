@@ -1,7 +1,7 @@
 ﻿'use client';
 
-import { createContext, Fragment, useContext, useMemo, useState } from 'react';
-import { ChevronRight, ChevronDown } from 'lucide-react';
+import { createContext, Fragment, useContext, useMemo, useRef, useState } from 'react';
+import { ChevronRight, ChevronDown, Download } from 'lucide-react';
 import {
   CartesianGrid, Legend, Line, LineChart, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -9,6 +9,8 @@ import {
 import KpiCard from '@/components/ui/KpiCard';
 import { MultiSelect } from '@/components/ui/MultiSelect';
 import { selectStyle } from '@/lib/selectStyle';
+import { exportNodeToPdf } from '@/lib/pdfExport';
+import { usePermissions } from '@/components/permissions-provider';
 import {
   useOtbData, TOTAL_KEY,
   type OtbData, type TcSegment, type SegmentKey, type GridDay,
@@ -49,17 +51,32 @@ const BOARD_VIEWS: { key: BoardView; label: string }[] = [
 ];
 
 export default function OnTheBooksPage() {
-  const [boardView, setBoardView] = useState<BoardView>('daily');
+  const [boardView, setBoardView] = useState<BoardView>('monthly');
 
   const [propertyCode, setPropertyCode] = useState<string>('WACCR');
   const otb = useOtbData(propertyCode);
-  const { loading, AS_OF, TC_SEGMENTS, CAPACITY_2025, CAPACITY_2026, PROPERTIES, getSegmentSummary, getGridDaily, getGroupDaily } = otb;
+  const { loading, AS_OF, TC_SEGMENTS, CAPACITY_2025, CAPACITY_2026, PROPERTIES, snapshots, snapshot, setSnapshot, getSegmentSummary, getGridDaily, getGroupDaily } = otb;
   const property = PROPERTIES.find((p) => p.code === propertyCode) ?? PROPERTIES[0];
   const [segSel, setSegSel] = useState<string[]>([]);
   const [view, setView] = useState<ViewMode>('cumulative');
   const [month, setMonth] = useState<MonthFilter>('all');
   const [metric, setMetric] = useState<Metric>('RN');
   const isOcc = metric === 'OCC';
+  // PDF export of the visuals (KPIs + chart + pace board). Admins (full access)
+  // get the clean internal copy; everyone else gets the confidentiality watermark.
+  const { hasFullAccess } = usePermissions();
+  const exportRef = useRef<HTMLDivElement>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const handleExportPdf = async () => {
+    if (exportingPdf || !exportRef.current) return;
+    setExportingPdf(true);
+    try {
+      const fileBase = `on-the-books-${propertyCode}-${boardView}-${new Date().toISOString().slice(0, 10)}`;
+      await exportNodeToPdf(exportRef.current, fileBase, { watermark: !hasFullAccess });
+    } finally {
+      setExportingPdf(false);
+    }
+  };
   const showTrend = boardView !== 'monthly'; // controls + KPIs + chart (Daily & Daily Segment; Monthly is blank)
   // Daily is hotel-wide (Total); Daily Segment uses a multi-select over the segment
   // hierarchy. Indentation is carried in the option label (NBSP per depth) so the
@@ -77,13 +94,13 @@ export default function OnTheBooksPage() {
 
   // Union of the selected groupings' segments (deduped). Empty selection = all.
   const selectedSegs = useMemo(() => {
-    if (boardView !== 'dailySegment' || segSel.length === 0) return TC_SEGMENTS;
+    if ((boardView !== 'dailySegment' && boardView !== 'monthly') || segSel.length === 0) return TC_SEGMENTS;
     const set = new Set<string>();
     for (const key of segSel) segChoices.find((c) => c.key === key)?.segs.forEach((s) => set.add(s));
     return [...set] as TcSegment[];
   }, [boardView, segSel, segChoices]);
 
-  const selectedLabel = boardView !== 'dailySegment' || segSel.length === 0 ? 'Total'
+  const selectedLabel = (boardView !== 'dailySegment' && boardView !== 'monthly') || segSel.length === 0 ? 'Total'
     : segSel.length === 1 ? (segChoices.find((c) => c.key === segSel[0])?.plain ?? 'Total')
     : `${segSel.length} segments`;
 
@@ -216,13 +233,24 @@ export default function OnTheBooksPage() {
         <span style={{ color: 'var(--primary)' }}>On the Books</span>
       </div>
 
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight m-0" style={{ color: 'var(--primary)' }}>
-          Daily On The Books — {selectedLabel}
-        </h1>
-        <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-          {property.name} · Room Nights by TC segment · FY26 budget mapped onto actuals · pace as of {AS_OF}
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight m-0" style={{ color: 'var(--primary)' }}>
+            Daily On The Books — {selectedLabel}
+          </h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+            {property.name} · Room Nights by TC segment · FY26 budget mapped onto actuals · pace as of {AS_OF}
+          </p>
+        </div>
+        <button
+          onClick={handleExportPdf}
+          disabled={exportingPdf}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors hover:bg-[var(--bg-hover)] disabled:opacity-60 disabled:cursor-wait shrink-0"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+          title="Download the visuals as a PDF"
+        >
+          <Download size={13} /> {exportingPdf ? 'Generating…' : 'PDF'}
+        </button>
       </div>
 
       {/* view toggle — Monthly / Daily / Daily Segment */}
@@ -235,6 +263,55 @@ export default function OnTheBooksPage() {
           </button>
         ))}
       </div>
+
+      {/* Monthly controls — Property + Week (snapshot) */}
+      {boardView === 'monthly' && (
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+            Property
+          </label>
+          <select
+            value={propertyCode}
+            onChange={(e) => setPropertyCode(e.target.value)}
+            style={selectStyle}
+            className="h-9 w-52 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
+          >
+            {PROPERTIES.map((p) => (
+              <option key={p.code} value={p.code}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+            Week
+          </label>
+          <select
+            value={snapshot}
+            onChange={(e) => setSnapshot(e.target.value)}
+            style={selectStyle}
+            className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
+          >
+            {snapshots.map((s, i) => (
+              <option key={s} value={s}>{i === 0 ? `${s} (latest)` : s}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+            Segment
+          </label>
+          <MultiSelect
+            options={segLabels}
+            selected={segSel}
+            onChange={setSegSel}
+            width="15rem"
+            noun="segments"
+            placeholder="All segments"
+          />
+        </div>
+      </div>
+      )}
 
       {/* controls */}
       {showTrend && (
@@ -334,6 +411,7 @@ export default function OnTheBooksPage() {
       </div>
       )}
 
+      <div ref={exportRef} className="flex flex-col gap-5 bg-[var(--background)]">
       {showTrend && (<>
       {/* KPIs */}
       <div className="grid grid-cols-4 gap-3 max-[860px]:grid-cols-2 max-[480px]:grid-cols-1">
@@ -438,7 +516,8 @@ export default function OnTheBooksPage() {
       {/* lower section — Daily: pace board · Daily Segment: hierarchical drill-down · Monthly: TBD */}
       {boardView === 'daily' && <SegmentGrid segment={TOTAL_KEY} month={month} isOcc={isOcc} granularity="daily" />}
       {boardView === 'dailySegment' && <SegmentTree month={month} />}
-      {boardView === 'monthly' && <BlankView label="Monthly" />}
+      {boardView === 'monthly' && <MonthlyBoard segments={selectedSegs} />}
+      </div>
     </div>
     </OtbCtx.Provider>
   );
@@ -496,13 +575,14 @@ function dowAbbr(iso: string): string {
 }
 
 interface FamVals { a: number | null; b: number | null }
-interface ColMetrics { rn: FamVals; occ: FamVals; rev: FamVals; adr: FamVals; revpar: FamVals; pickupW: number | null; pickup4w: number | null }
+interface PickupVals { rn: number | null; occ: number | null; rev: number | null; adr: number | null; revpar: number | null }
+interface ColMetrics { rn: FamVals; occ: FamVals; rev: FamVals; adr: FamVals; revpar: FamVals; pickupW: PickupVals; pickup4w: PickupVals }
 
 // `b` is the comparison series chosen in the header: Budget, Last Year (2025), STLY, or Forecast (no data yet).
 function computeMetrics(days: GridDay[], compare: CompareBasis, cap26: number, cap25: number): ColMetrics {
   const n = days.length || 1;
   let rnA = 0, revA = 0, rnB = 0, revB = 0;
-  let pwSum = 0, pwHas = false, p4wSum = 0, p4wHas = false;
+  let pwSum = 0, pwRevSum = 0, pwHas = false, p4wSum = 0, p4wRevSum = 0, p4wHas = false;
   for (const d of days) {
     rnA += d.rn; revA += d.rev;
     if (compare === 'budget') { rnB += d.budgetRn; revB += d.budgetRev; }
@@ -514,7 +594,9 @@ function computeMetrics(days: GridDay[], compare: CompareBasis, cap26: number, c
       revB += d.isPace ? d.stlyRev : d.revLy;
     }
     if (d.pickupW != null) { pwSum += d.pickupW; pwHas = true; }
+    if (d.revPickupW != null) pwRevSum += d.revPickupW;
     if (d.pickup4w != null) { p4wSum += d.pickup4w; p4wHas = true; }
+    if (d.revPickup4w != null) p4wRevSum += d.revPickup4w;
   }
   const hasRnB = compare !== 'forecast';
   const hasRevB = compare !== 'forecast';
@@ -525,20 +607,35 @@ function computeMetrics(days: GridDay[], compare: CompareBasis, cap26: number, c
   const rnBcmp = hasRnB && !(priorYear && rnB === 0) ? rnB : null;
   const revBcmp = hasRevB && !(priorYear && revB === 0) ? revB : null;
   const div = (x: number, y: number) => (y ? x / y : null);
+  // Pickup across all families: RN/Rev are the raw deltas; Occ/RevPAR/ADR are derived from
+  // current vs prior-period totals (prior = current − delta) so rates aren't summed daily.
+  const occOf = (rn: number) => (rn / (cap26 * n)) * 100;
+  const revparOf = (rev: number) => rev / (cap26 * n);
+  const mkPickup = (rnD: number, revD: number, has: boolean): PickupVals => {
+    if (!has) return { rn: null, occ: null, rev: null, adr: null, revpar: null };
+    const rnPrev = rnA - rnD, revPrev = revA - revD;
+    return {
+      rn: rnD,
+      occ: occOf(rnA) - occOf(rnPrev),
+      rev: revD,
+      adr: (div(revA, rnA) ?? 0) - (div(revPrev, rnPrev) ?? 0),
+      revpar: revparOf(revA) - revparOf(revPrev),
+    };
+  };
   return {
     rn: { a: rnA, b: rnBcmp },
     occ: { a: (rnA / (cap26 * n)) * 100, b: rnBcmp != null ? (rnBcmp / (capB * n)) * 100 : null },
     rev: { a: revA, b: revBcmp },
     adr: { a: div(revA, rnA), b: revBcmp != null && rnBcmp ? div(revBcmp, rnBcmp) : null },
     revpar: { a: revA / (cap26 * n), b: revBcmp != null ? revBcmp / (capB * n) : null },
-    pickupW: pwHas ? pwSum : null,
-    pickup4w: p4wHas ? p4wSum : null,
+    pickupW: mkPickup(pwSum, pwRevSum, pwHas),
+    pickup4w: mkPickup(p4wSum, p4wRevSum, p4wHas),
   };
 }
 
 function cellValue(m: ColMetrics, famKey: string, sub: string): { v: number | null; pct?: boolean; signed?: boolean } {
-  if (sub === 'pickupW') return { v: famKey === 'rn' ? m.pickupW : null, signed: true };
-  if (sub === 'pickup4') return { v: famKey === 'rn' ? m.pickup4w : null, signed: true };
+  if (sub === 'pickupW') return { v: m.pickupW[famKey as keyof PickupVals], signed: true };
+  if (sub === 'pickup4') return { v: m.pickup4w[famKey as keyof PickupVals], signed: true };
   const x = m[famKey as keyof ColMetrics] as FamVals;
   switch (sub) {
     case 'act': return { v: x.a };
@@ -683,11 +780,247 @@ function SegmentGrid({ segment, month, isOcc, granularity }: { segment: SegmentK
   );
 }
 
-// Placeholder for views not built yet (Monthly).
-function BlankView({ label }: { label: string }) {
+// ---- Monthly view: Booking Pace board (6 sections × 5 metrics × month/Q/FY/YTD/ROY) ----
+// Columns: 12 months grouped into quarters, plus FY, YTD (≤ as-of) and ROY (rest of year).
+// Sections stack absolute On-the-Books over five variance views. Per the user's preference,
+// variance is shown with green/red TEXT only — no background fill.
+type PaceSection = 'otb' | 'stly' | 'puLw' | 'pu4w' | 'budget' | 'risk';
+const PACE_SECTIONS: { key: PaceSection; label: string; variance: boolean }[] = [
+  { key: 'otb', label: 'On the Books', variance: false },
+  { key: 'stly', label: 'On the Books vs STLY', variance: true },
+  { key: 'budget', label: 'Reach to Budget', variance: true },
+  { key: 'puLw', label: 'Last Week Pickup', variance: true },
+  { key: 'pu4w', label: 'Last 4 Weeks Pickup', variance: true },
+  { key: 'risk', label: 'Risk or Surplus', variance: true },
+];
+type PaceMetric = 'occ' | 'adr' | 'revpar' | 'rn' | 'rev';
+const PACE_METRICS: { key: PaceMetric; label: string }[] = [
+  { key: 'occ', label: 'Occ' },
+  { key: 'adr', label: 'ADR' },
+  { key: 'revpar', label: 'RevPAR' },
+  { key: 'rn', label: 'Room Nights' },
+  { key: 'rev', label: 'Revenue' },
+];
+
+interface PaceAgg {
+  n: number; cap: number; capLy: number;
+  rn: number; rev: number; budRn: number; budRev: number;
+  stlyRn: number; stlyRev: number; lyPaceRn: number; lyPaceRev: number;
+  puRn: number | null; puRev: number | null;
+  pu4Rn: number | null; pu4Rev: number | null;
+}
+
+// Sum the daily Total grid over a period. Pickups stay null when no prior snapshot
+// contributed (so the section renders "—" instead of a misleading zero).
+function aggregatePace(days: GridDay[], cap: number, capLy: number): PaceAgg {
+  let rn = 0, rev = 0, budRn = 0, budRev = 0, stlyRn = 0, stlyRev = 0, lyPaceRn = 0, lyPaceRev = 0;
+  let puRn = 0, puRev = 0, puHas = false, pu4Rn = 0, pu4Rev = 0, pu4Has = false;
+  for (const d of days) {
+    rn += d.rn; rev += d.rev;
+    budRn += d.budgetRn; budRev += d.budgetRev;
+    stlyRn += d.rnStly; stlyRev += d.stlyRev;
+    if (d.isPace) { lyPaceRn += d.rnLy; lyPaceRev += d.revLy; }
+    if (d.pickupW != null) { puRn += d.pickupW; puHas = true; }
+    if (d.revPickupW != null) puRev += d.revPickupW;
+    if (d.pickup4w != null) { pu4Rn += d.pickup4w; pu4Has = true; }
+    if (d.revPickup4w != null) pu4Rev += d.revPickup4w;
+  }
+  return {
+    n: days.length, cap, capLy, rn, rev, budRn, budRev, stlyRn, stlyRev, lyPaceRn, lyPaceRev,
+    puRn: puHas ? puRn : null, puRev: puHas ? puRev : null,
+    pu4Rn: pu4Has ? pu4Rn : null, pu4Rev: pu4Has ? pu4Rev : null,
+  };
+}
+
+const paceOcc = (rn: number, cap: number, n: number) => (cap && n ? (rn / (cap * n)) * 100 : 0);
+const paceAdr = (rn: number, rev: number) => (rn ? rev / rn : 0);
+const paceRevpar = (rev: number, cap: number, n: number) => (cap && n ? rev / (cap * n) : 0);
+
+// Cell value for a (section, metric). Rates/occupancy are derived from aggregated RN+Rev so
+// ADR/RevPAR variances are computed on period totals, never by summing daily ratios. Returns
+// null when a pickup has no prior snapshot.
+function paceCellValue(section: PaceSection, metric: PaceMetric, a: PaceAgg): number | null {
+  const metricOf = (rn: number, rev: number): number => {
+    switch (metric) {
+      case 'occ': return paceOcc(rn, a.cap, a.n);
+      case 'adr': return paceAdr(rn, rev);
+      case 'revpar': return paceRevpar(rev, a.cap, a.n);
+      case 'rn': return rn;
+      default: return rev;
+    }
+  };
+  // STLY occupancy/RevPAR use last year's capacity.
+  const metricLy = (rn: number, rev: number): number => {
+    switch (metric) {
+      case 'occ': return paceOcc(rn, a.capLy, a.n);
+      case 'revpar': return paceRevpar(rev, a.capLy, a.n);
+      case 'adr': return paceAdr(rn, rev);
+      case 'rn': return rn;
+      default: return rev;
+    }
+  };
+  switch (section) {
+    case 'otb':
+      return metricOf(a.rn, a.rev);
+    case 'stly':
+      return metricOf(a.rn, a.rev) - metricLy(a.stlyRn, a.stlyRev);
+    case 'puLw': {
+      if (a.puRn == null) return null;
+      return metricOf(a.rn, a.rev) - metricOf(a.rn - a.puRn, a.rev - (a.puRev ?? 0));
+    }
+    case 'pu4w': {
+      if (a.pu4Rn == null) return null;
+      return metricOf(a.rn, a.rev) - metricOf(a.rn - a.pu4Rn, a.rev - (a.pu4Rev ?? 0));
+    }
+    case 'budget':
+      return metricOf(a.rn, a.rev) - metricOf(a.budRn, a.budRev);
+    case 'risk':
+      // (OTB + last-year rest-of-year) − Budget.
+      return metricOf(a.rn + a.lyPaceRn, a.rev + a.lyPaceRev) - metricOf(a.budRn, a.budRev);
+  }
+}
+
+const fmtPaceRev = (v: number) =>
+  `${(v / 1000).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}K`;
+function fmtPaceCell(metric: PaceMetric, v: number | null): string {
+  if (v == null) return '—';
+  switch (metric) {
+    case 'occ': return `${v.toFixed(1)}%`;
+    case 'adr':
+    case 'revpar': return v.toFixed(1);
+    case 'rn': return Math.round(v).toLocaleString('en-US');
+    default: return fmtPaceRev(v);
+  }
+}
+
+interface PaceCol { key: string; label: string; group: boolean; days: GridDay[] }
+
+// Sum a set of per-segment daily grids into one combined GridDay[] (additive fields; pickups
+// stay null unless at least one segment reported them).
+function combineGridDays(parts: GridDay[][]): GridDay[] {
+  if (parts.length === 0 || parts[0].length === 0) return [];
+  const len = parts[0].length;
+  const out: GridDay[] = [];
+  for (let i = 0; i < len; i++) {
+    const base = parts[0][i];
+    const day: GridDay = {
+      date: base.date, isPace: base.isPace,
+      rn: 0, rev: 0, budgetRn: 0, budgetRev: 0, rnLy: 0, revLy: 0,
+      rnStly: 0, stlyRev: 0, csStlyRn: 0, csStlyRev: 0,
+      pickupW: null, revPickupW: null, pickup4w: null, revPickup4w: null,
+    };
+    for (const p of parts) {
+      const d = p[i];
+      if (!d) continue;
+      day.rn += d.rn; day.rev += d.rev;
+      day.budgetRn += d.budgetRn; day.budgetRev += d.budgetRev;
+      day.rnLy += d.rnLy; day.revLy += d.revLy;
+      day.rnStly += d.rnStly; day.stlyRev += d.stlyRev;
+      day.csStlyRn += d.csStlyRn; day.csStlyRev += d.csStlyRev;
+      if (d.pickupW != null) day.pickupW = (day.pickupW ?? 0) + d.pickupW;
+      if (d.revPickupW != null) day.revPickupW = (day.revPickupW ?? 0) + d.revPickupW;
+      if (d.pickup4w != null) day.pickup4w = (day.pickup4w ?? 0) + d.pickup4w;
+      if (d.revPickup4w != null) day.revPickup4w = (day.revPickup4w ?? 0) + d.revPickup4w;
+    }
+    out.push(day);
+  }
+  return out;
+}
+
+function MonthlyBoard({ segments }: { segments: TcSegment[] }) {
+  const { getGridDaily, TC_SEGMENTS, CAPACITY_2025, CAPACITY_2026, AS_OF, PROPERTIES } = useOtb();
+  // Total when all (or no) segments are selected; otherwise sum the chosen segments per day.
+  const days = useMemo(() => {
+    if (segments.length === 0 || segments.length >= TC_SEGMENTS.length) return getGridDaily(TOTAL_KEY);
+    return combineGridDays(segments.map((s) => getGridDaily(s)));
+  }, [getGridDaily, segments, TC_SEGMENTS]);
+  const yy = AS_OF.slice(2, 4); // "26"
+  const propertyName = PROPERTIES[0]?.name ?? '';
+
+  // Month → quarter → FY columns, then YTD (≤ as-of) and ROY (after).
+  const columns = useMemo<PaceCol[]>(() => {
+    if (days.length === 0) return [];
+    const inMonth = (d: GridDay, m: number) => Number(d.date.slice(5, 7)) - 1 === m;
+    const cols: PaceCol[] = [];
+    [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]].forEach((q, qi) => {
+      q.forEach((m) => cols.push({ key: MONTH_ABBR[m], label: `${MONTH_ABBR[m]}-${yy}`, group: false, days: days.filter((d) => inMonth(d, m)) }));
+      cols.push({ key: `Q${qi + 1}`, label: `Q${qi + 1}`, group: true, days: days.filter((d) => q.some((m) => inMonth(d, m))) });
+    });
+    cols.push({ key: 'FY', label: 'FY', group: true, days });
+    cols.push({ key: 'YTD', label: 'YTD', group: true, days: days.filter((d) => d.date <= AS_OF) });
+    cols.push({ key: 'ROY', label: 'ROY', group: true, days: days.filter((d) => d.date > AS_OF) });
+    return cols;
+  }, [days, AS_OF, yy]);
+
+  const aggs = useMemo(
+    () => columns.map((c) => aggregatePace(c.days, CAPACITY_2026, CAPACITY_2025)),
+    [columns, CAPACITY_2026, CAPACITY_2025],
+  );
+
+  if (days.length === 0) {
+    return (
+      <div className="bg-white border rounded-lg shadow-sm flex items-center justify-center" style={{ borderColor: 'var(--border)', minHeight: 260 }}>
+        <span className="text-sm" style={{ color: 'var(--text-muted)' }}>No data</span>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-white border rounded-lg shadow-sm flex items-center justify-center" style={{ borderColor: 'var(--border)', minHeight: 260 }}>
-      <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{label} — próximamente</span>
+    <div className="bg-white border rounded-lg overflow-hidden shadow-sm" style={{ borderColor: 'var(--border)' }}>
+      <div className="px-3 py-2 border-b text-center" style={{ background: 'var(--muted)', borderColor: 'var(--border)' }}>
+        <span className="text-sm font-bold" style={{ color: 'var(--primary)' }}>Booking Pace {propertyName}</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full table-fixed border-collapse text-[0.75rem] whitespace-nowrap">
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              <th className="sticky left-0 z-10 bg-white px-3 py-1.5 text-left" style={{ minWidth: 150, width: 150 }} />
+              {columns.map((c, i) => (
+                <th key={i} className="px-2 py-1.5 text-center text-[0.6875rem] font-bold tabular-nums"
+                  style={{ color: 'var(--text-secondary)', minWidth: 58, width: 58, background: c.group ? 'var(--muted)' : undefined }}>
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {PACE_SECTIONS.map((section) => (
+              <Fragment key={section.key}>
+                <tr>
+                  <td className="sticky left-0 z-10 bg-white px-3 pt-3 pb-0.5 text-left text-[0.8125rem] font-bold underline"
+                    style={{ color: 'var(--primary)', minWidth: 150 }}>
+                    {section.label}
+                  </td>
+                  {columns.map((c, i) => (
+                    <td key={i} style={{ background: c.group ? 'var(--muted)' : undefined }} />
+                  ))}
+                </tr>
+                {PACE_METRICS.map((m) => (
+                  <tr key={m.key}>
+                    <td className="sticky left-0 z-10 bg-white px-3 py-0.5 text-left"
+                      style={{ color: 'var(--text-secondary)', minWidth: 150 }}>
+                      {m.label}
+                    </td>
+                    {aggs.map((a, i) => {
+                      const v = paceCellValue(section.key, m.key, a);
+                      const color = !section.variance
+                        ? 'var(--text-primary)'
+                        : v == null || Math.abs(v) < 0.05 ? 'var(--text-muted)'
+                        : v > 0 ? 'var(--success)' : 'var(--danger)';
+                      return (
+                        <td key={i} className="px-2 py-0.5 text-center tabular-nums"
+                          style={{ color, fontWeight: section.key === 'otb' ? 600 : 400, background: columns[i].group ? 'var(--muted)' : undefined }}>
+                          {fmtPaceCell(m.key, v)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -752,13 +1085,16 @@ function SegmentTree({ month }: { month: MonthFilter }) {
   const paceFlags = useMemo(() => sample.map((d) => d.isPace), [sample]);
   const series = useMemo(() => {
     const mk = () => ({} as Record<string, number[]>);
-    const rn = mk(), bud = mk(), ly = mk(), rev = mk(), budRev = mk(), revLy = mk();
+    const rn = mk(), bud = mk(), ly = mk(), rev = mk(), budRev = mk(), revLy = mk(), stly = mk(), stlyRev = mk();
     TC_SEGMENTS.forEach((seg) => {
       const g = getGridDaily(seg);
       rn[seg] = g.map((d) => d.rn); bud[seg] = g.map((d) => d.budgetRn); ly[seg] = g.map((d) => d.rnLy);
       rev[seg] = g.map((d) => d.rev); budRev[seg] = g.map((d) => d.budgetRev); revLy[seg] = g.map((d) => d.revLy);
+      // STLY blends per day: closed days use the 2025 actual, pace days the 2026 STLY (same as SegmentGrid).
+      stly[seg] = g.map((d) => (d.isPace ? d.rnStly : d.rnLy));
+      stlyRev[seg] = g.map((d) => (d.isPace ? d.stlyRev : d.revLy));
     });
-    return { rn, bud, ly, rev, budRev, revLy };
+    return { rn, bud, ly, rev, budRev, revLy, stly, stlyRev };
   }, [TC_SEGMENTS, getGridDaily]);
 
   const columns = useMemo(() => dates
@@ -783,6 +1119,8 @@ function SegmentTree({ month }: { month: MonthFilter }) {
   const actSeries = { rn: series.rn, rev: series.rev, cap: CAPACITY_2026 };
   const cmpSeries = compare === 'ly'
     ? { rn: series.ly, rev: series.revLy, cap: CAPACITY_2025 }
+    : compare === 'stly'
+    ? { rn: series.stly, rev: series.stlyRev, cap: CAPACITY_2025 }
     : { rn: series.bud, rev: series.budRev, cap: CAPACITY_2026 };
 
   type Ser = { rn: Record<string, number[]>; rev: Record<string, number[]>; cap: number };
@@ -871,7 +1209,7 @@ function SegmentTree({ month }: { month: MonthFilter }) {
           </div>
           <span style={{ color: 'var(--border)' }}>|</span>
           <div className="flex gap-1">
-            {COMPARE_OPTIONS.filter((o) => o.key !== 'stly').map((o) => (
+            {COMPARE_OPTIONS.map((o) => (
               <button key={o.key} type="button" onClick={() => setCompare(o.key)}
                 className="px-2.5 py-0.5 rounded border text-[0.625rem] font-semibold cursor-pointer transition-colors"
                 style={{ background: compare === o.key ? 'var(--primary)' : 'white', color: compare === o.key ? '#fff' : 'var(--text-secondary)', borderColor: compare === o.key ? 'var(--primary)' : 'var(--border)' }}>

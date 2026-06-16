@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getSessionOrBypass } from '@/lib/auth';
 import { auditsPool as pool } from '@/lib/db-audits';
 
 /**
@@ -14,7 +13,7 @@ export async function guardDraftAudit(
   | { ok: true; auditId: number; email: string }
   | { ok: false; response: NextResponse }
 > {
-  const session = await getServerSession(authOptions);
+  const session = await getSessionOrBypass();
   if (!session?.user?.email) {
     return { ok: false, response: NextResponse.json({ error: 'Not authenticated' }, { status: 401 }) };
   }

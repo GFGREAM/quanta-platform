@@ -1,5 +1,6 @@
 import { pool } from './db';
 import { SECTION_LABELS } from './section-keys';
+import { isDevAuthBypass } from './auth';
 
 export interface UserPermissions {
   hasFullAccess: boolean;
@@ -13,6 +14,11 @@ export interface UserPermissions {
  * - No rows at all           → hasFullAccess: false, no sections (denied).
  */
 export async function getUserPermissions(email: string): Promise<UserPermissions> {
+  // Local-dev bypass: grant full access so the whole app is visible without a
+  // real login. Guarded by NODE_ENV — never active in production.
+  if (isDevAuthBypass()) {
+    return { hasFullAccess: true, sections: {} };
+  }
   const { rows } = await pool.query<{ section_key: string; allowed_properties: string[] }>(
     'SELECT section_key, allowed_properties FROM auth_quanta.user_permissions WHERE LOWER(email) = LOWER($1)',
     [email],
