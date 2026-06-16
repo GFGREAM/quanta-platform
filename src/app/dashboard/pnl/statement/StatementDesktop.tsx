@@ -419,18 +419,33 @@ export default function StatementDesktop({ permissionOpts }: { permissionOpts?: 
                   wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
                   iconType="circle"
                 />
-                {weeklyOutlookSeries.hotels.map((h, i) => (
-                  <Line
-                    key={h}
-                    type="monotone"
-                    dataKey={h}
-                    name={h}
-                    stroke={HOTEL_PALETTE[i % HOTEL_PALETTE.length]}
-                    strokeWidth={2}
-                    dot={{ r: 2 }}
-                    activeDot={{ r: 4 }}
-                  />
-                ))}
+                {weeklyOutlookSeries.hotels.flatMap((h, i) => {
+                  const c = HOTEL_PALETTE[i % HOTEL_PALETTE.length];
+                  return [
+                    <Line
+                      key={h}
+                      type="monotone"
+                      dataKey={h}
+                      name={h}
+                      stroke={c}
+                      strokeWidth={2}
+                      dot={{ r: 2 }}
+                      activeDot={{ r: 4 }}
+                    />,
+                    <Line
+                      key={`${h}__budget`}
+                      type="monotone"
+                      dataKey={`${h}__budget`}
+                      name={`${h} Budget`}
+                      stroke={c}
+                      strokeWidth={1.5}
+                      strokeDasharray="5 4"
+                      dot={false}
+                      activeDot={false}
+                      legendType="none"
+                    />,
+                  ];
+                })}
               </LineChart>
             </ResponsiveContainer>
           )}
