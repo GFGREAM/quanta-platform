@@ -417,18 +417,33 @@ export default function StatementMobile({ permissionOpts }: { permissionOpts?: U
                   formatter={(v) => fmtMetric(typeof v === 'number' ? v : Number(v), metricDef.format)}
                   labelStyle={{ color: '#172951', fontWeight: 600 }}
                 />
-                {weeklyOutlookSeries.hotels.map((h, i) => (
-                  <Line
-                    key={h}
-                    type="monotone"
-                    dataKey={h}
-                    name={h}
-                    stroke={HOTEL_PALETTE[i % HOTEL_PALETTE.length]}
-                    strokeWidth={2}
-                    dot={{ r: 2 }}
-                    activeDot={{ r: 4 }}
-                  />
-                ))}
+                {weeklyOutlookSeries.hotels.flatMap((h, i) => {
+                  const c = HOTEL_PALETTE[i % HOTEL_PALETTE.length];
+                  return [
+                    <Line
+                      key={h}
+                      type="monotone"
+                      dataKey={h}
+                      name={h}
+                      stroke={c}
+                      strokeWidth={2}
+                      dot={{ r: 2 }}
+                      activeDot={{ r: 4 }}
+                    />,
+                    <Line
+                      key={`${h}__budget`}
+                      type="monotone"
+                      dataKey={`${h}__budget`}
+                      name={`${h} Budget`}
+                      stroke={c}
+                      strokeWidth={1.5}
+                      strokeDasharray="5 4"
+                      dot={false}
+                      activeDot={false}
+                      legendType="none"
+                    />,
+                  ];
+                })}
               </LineChart>
             </ResponsiveContainer>
           )}
