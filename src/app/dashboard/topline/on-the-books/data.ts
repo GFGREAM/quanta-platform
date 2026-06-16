@@ -58,8 +58,10 @@ export interface GridDay {
   stlyRev: number;           // STLY revenue (rooms_revenue - rev_change_vs_ly)
   csStlyRn: number;          // Comp Set STLY room nights
   csStlyRev: number;         // Comp Set STLY revenue
-  pickupW: number | null;   // RN change vs last week (from D360)
-  pickup4w: number | null;  // RN diff vs snapshot ~28 days ago
+  pickupW: number | null;     // RN change vs last week (from D360)
+  revPickupW: number | null;  // Revenue change vs last week (from D360)
+  pickup4w: number | null;    // RN diff vs snapshot ~28 days ago
+  revPickup4w: number | null; // Revenue diff vs snapshot ~28 days ago
 }
 
 // ─── API response shape ────────────────────────────────────────
@@ -86,7 +88,9 @@ interface OtbApiResponse {
   budgetTcM: Record<string, number[]>;
   budgetRevTcM: Record<string, number[]>;
   pickupLw2026: Record<string, number[]>;
+  revPickupLw2026: Record<string, number[]>;
   pickup4w2026: Record<string, number[]> | null;
+  pickup4wRev2026: Record<string, number[]> | null;
 }
 
 // ─── Budget spread (runs client-side, same logic as before) ────
@@ -139,6 +143,8 @@ export interface OtbData {
   PROPERTIES: PropertyMeta[];
   DEFAULT_PROPERTY: string;
   snapshots: string[];
+  snapshot: string;
+  setSnapshot: (s: string) => void;
   getSegmentDaily: (seg: SegmentKey) => DailyPoint[];
   getGridDaily: (seg: SegmentKey) => GridDay[];
   getGroupDaily: (segs: TcSegment[]) => DailyPoint[];
@@ -155,13 +161,16 @@ const EMPTY_SUMMARY: SegmentSummary = {
 export function useOtbData(propertyCode: string): OtbData {
   const [data, setData] = useState<OtbApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  // Selected weekly snapshot (null = latest). Lets the Monthly board view a prior week.
+  const [snapshot, setSnapshot] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     (async () => {
       try {
-        const res = await fetch(`/api/otb/dataset?property=${encodeURIComponent(propertyCode)}`);
+        const url = `/api/otb/dataset?property=${encodeURIComponent(propertyCode)}${snapshot ? `&snapshot=${encodeURIComponent(snapshot)}` : ''}`;
+        const res = await fetch(url);
         if (!res.ok) { if (!cancelled) setLoading(false); return; }
         const json: OtbApiResponse = await res.json();
         if (!cancelled) { setData(json); setLoading(false); }
@@ -170,7 +179,7 @@ export function useOtbData(propertyCode: string): OtbData {
       }
     })();
     return () => { cancelled = true; };
-  }, [propertyCode]);
+  }, [propertyCode, snapshot]);
 
   // Derived values from the fetched dataset
   const derived = useMemo(() => {
@@ -179,7 +188,8 @@ export function useOtbData(propertyCode: string): OtbData {
     const { segments, dates2025, dates2026, actual2025, actual2026, stly2026,
       stlyRev2026, csStlyRn2026, csStlyRev2026,
       revenue2025, revenue2026, csRn2025, csRev2025, csTotal2025, csRevTotal2025,
-      budgetTcM, budgetRevTcM, pickupLw2026, pickup4w2026, asOf } = data;
+      budgetTcM, budgetRevTcM, pickupLw2026, pickup4w2026,
+      revPickupLw2026, pickup4wRev2026, asOf } = data;
 
     const tcSegments = segments as TcSegment[];
 
@@ -219,7 +229,7 @@ export function useOtbData(propertyCode: string): OtbData {
       budgetTcM, budgetRevTcM,
       segBudgetRn, segBudgetRev, segFallback,
       csTotal2025, csRevTotal2025, csRn2025, csRev2025,
-      pickupLw2026, pickup4w2026,
+      pickupLw2026, pickup4w2026, revPickupLw2026, pickup4wRev2026,
     };
   }, [data]);
 
@@ -252,7 +262,7 @@ export function useOtbData(propertyCode: string): OtbData {
       totalBudgetDailyRn, totalBudgetDailyRev, segBudgetRn, segBudgetRev,
       csTotal2025, csRevTotal2025, csRn2025, csRev2025,
       stlyRev2026, csStlyRn2026, csStlyRev2026,
-      pickupLw2026, pickup4w2026 } = derived;
+      pickupLw2026, pickup4w2026, revPickupLw2026, pickup4wRev2026 } = derived;
     const isTotal = seg === TOTAL_KEY;
     const tcSegs = derived.tcSegments;
     const rn26 = isTotal ? total2026 : actual2026[seg];
@@ -277,6 +287,12 @@ export function useOtbData(propertyCode: string): OtbData {
     const p4wArr = isTotal
       ? (pickup4w2026 ? dates2026.map((_, i) => tcSegs.reduce((acc, s) => acc + (pickup4w2026[s]?.[i] ?? 0), 0)) : null)
       : (pickup4w2026?.[seg] ?? null);
+    const revLwArr = isTotal
+      ? (revPickupLw2026 ? dates2026.map((_, i) => tcSegs.reduce((acc, s) => acc + (revPickupLw2026[s]?.[i] ?? 0), 0)) : null)
+      : (revPickupLw2026?.[seg] ?? null);
+    const revP4wArr = isTotal
+      ? (pickup4wRev2026 ? dates2026.map((_, i) => tcSegs.reduce((acc, s) => acc + (pickup4wRev2026[s]?.[i] ?? 0), 0)) : null)
+      : (pickup4wRev2026?.[seg] ?? null);
     if (!rn26) return EMPTY_GRID;
     return dates2026.map((date, i) => ({
       date,
@@ -292,7 +308,9 @@ export function useOtbData(propertyCode: string): OtbData {
       csStlyRn: csStlyRnArr?.[i] ?? 0,
       csStlyRev: csStlyRevArr?.[i] ?? 0,
       pickupW: lwArr?.[i] ?? null,
+      revPickupW: revLwArr?.[i] ?? null,
       pickup4w: p4wArr?.[i] ?? null,
+      revPickup4w: revP4wArr?.[i] ?? null,
     }));
   }, [derived]);
 
@@ -346,6 +364,8 @@ export function useOtbData(propertyCode: string): OtbData {
     PROPERTIES: data ? [{ code: data.property.code, name: data.property.name, rooms: data.property.capacity }] : [],
     DEFAULT_PROPERTY: data?.property.code ?? '',
     snapshots: data?.snapshots ?? [],
+    snapshot: snapshot ?? data?.asOf ?? '',
+    setSnapshot,
     getSegmentDaily,
     getGridDaily,
     getGroupDaily,
