@@ -18,7 +18,7 @@ import StatementQuarterlyTable from './StatementQuarterlyTable';
 import StatementYearlyTable from './StatementYearlyTable';
 import {
   MultiSelect, SingleSelect,
-  COLOR_COMPARISON, COLOR_BUDGET, COLOR_LY,
+  COLOR_COMPARISON, COLOR_BUDGET, COLOR_LY, HOTEL_PALETTE,
   VIEW_ORDER, VIEW_LABELS, SCOPE_LABELS, CURRENCY_LABELS, BASIS_LABELS,
   LegendDot, formatAxis,
 } from './ui';
@@ -291,7 +291,7 @@ export default function StatementMobile({ permissionOpts }: { permissionOpts?: U
           <div className="min-w-0">
             <div className="text-[0.625rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
               {isMultiHotel
-                ? 'Outlook · WoW'
+                ? 'Outlook · Weekly'
                 : viewMode === 'quarter' ? 'Quarterly trend'
                 : viewMode === 'yearly' ? 'Yearly trend'
                 : 'Monthly trend'}
@@ -311,7 +311,11 @@ export default function StatementMobile({ permissionOpts }: { permissionOpts?: U
         </div>
         <div className="flex items-center gap-2 text-[0.6875rem] mb-2 justify-end" style={{ color: 'var(--text-secondary)' }}>
           {isMultiHotel ? (
-            <LegendDot color={COLOR_COMPARISON} label="WoW change" size="sm" />
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {weeklyOutlookSeries.hotels.map((h, i) => (
+                <LegendDot key={h} color={HOTEL_PALETTE[i % HOTEL_PALETTE.length]} label={h} size="sm" />
+              ))}
+            </div>
           ) : (
             <>
               <LegendDot color={COLOR_COMPARISON} label={scenarioLabel(scenario)} size="sm" />
@@ -386,10 +390,11 @@ export default function StatementMobile({ permissionOpts }: { permissionOpts?: U
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={weeklyOutlookSeries} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <LineChart data={weeklyOutlookSeries.points} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke="#E5E5E5" strokeDasharray="3 3" vertical={false} />
                 <XAxis
                   dataKey="week"
+                  tickFormatter={(w: string) => w.slice(5).replace('-', '/')}
                   tick={{ fill: '#6B7280', fontSize: 10 }}
                   tickLine={false}
                   axisLine={{ stroke: '#E5E5E5' }}
@@ -412,15 +417,18 @@ export default function StatementMobile({ permissionOpts }: { permissionOpts?: U
                   formatter={(v) => fmtMetric(typeof v === 'number' ? v : Number(v), metricDef.format)}
                   labelStyle={{ color: '#172951', fontWeight: 600 }}
                 />
-                <Line
-                  type="monotone"
-                  dataKey="wow"
-                  name="WoW change"
-                  stroke={COLOR_COMPARISON}
-                  strokeWidth={2}
-                  dot={{ r: 3, fill: COLOR_COMPARISON }}
-                  activeDot={{ r: 5 }}
-                />
+                {weeklyOutlookSeries.hotels.map((h, i) => (
+                  <Line
+                    key={h}
+                    type="monotone"
+                    dataKey={h}
+                    name={h}
+                    stroke={HOTEL_PALETTE[i % HOTEL_PALETTE.length]}
+                    strokeWidth={2}
+                    dot={{ r: 2 }}
+                    activeDot={{ r: 4 }}
+                  />
+                ))}
               </LineChart>
             </ResponsiveContainer>
           )}

@@ -17,6 +17,12 @@ export const COLOR_COMPARISON = '#00AFAD'; // var(--accent) — Actual/Outlook/F
 export const COLOR_BUDGET = '#172951';     // var(--primary) — Budget reference line
 export const COLOR_LY = '#9CA3AF';         // var(--text-muted) — Last Year reference line
 
+// Distinct strokes for the per-hotel WoW lines (cycled when more hotels than colors).
+export const HOTEL_PALETTE = [
+  '#00AFAD', '#172951', '#E8743B', '#1AA260', '#9B59B6', '#E74C3C',
+  '#3498DB', '#F1C40F', '#16A085', '#D35400', '#7F8C8D', '#C0392B',
+];
+
 // ─── Label maps ─────────────────────────────────────────────────
 
 export const VIEW_ORDER: ViewMode[] = ['summary', 'single', 'monthly', 'quarter', 'yearly', 'portfolio'];
