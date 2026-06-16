@@ -43,15 +43,17 @@ const COLORS = {
 
 type MonthFilter = number | 'all';
 
-type BoardView = 'monthly' | 'daily' | 'dailySegment';
+type BoardView = 'summary' | 'fullYear' | 'monthly' | 'daily' | 'dailySegment';
 const BOARD_VIEWS: { key: BoardView; label: string }[] = [
+  { key: 'summary', label: 'Summary' },
+  { key: 'fullYear', label: 'Full Year' },
   { key: 'monthly', label: 'Monthly' },
   { key: 'daily', label: 'Daily' },
   { key: 'dailySegment', label: 'Daily Segment' },
 ];
 
 export default function OnTheBooksPage() {
-  const [boardView, setBoardView] = useState<BoardView>('monthly');
+  const [boardView, setBoardView] = useState<BoardView>('fullYear');
 
   const [propertyCode, setPropertyCode] = useState<string>('WACCR');
   const otb = useOtbData(propertyCode);
@@ -77,7 +79,7 @@ export default function OnTheBooksPage() {
       setExportingPdf(false);
     }
   };
-  const showTrend = boardView !== 'monthly'; // controls + KPIs + chart (Daily & Daily Segment; Monthly is blank)
+  const showTrend = boardView === 'daily' || boardView === 'dailySegment'; // controls + KPIs + chart only on Daily views
   // Daily is hotel-wide (Total); Daily Segment uses a multi-select over the segment
   // hierarchy. Indentation is carried in the option label (NBSP per depth) so the
   // checkbox list keeps the macro → micro shape; the Total node is dropped because
@@ -94,13 +96,13 @@ export default function OnTheBooksPage() {
 
   // Union of the selected groupings' segments (deduped). Empty selection = all.
   const selectedSegs = useMemo(() => {
-    if ((boardView !== 'dailySegment' && boardView !== 'monthly') || segSel.length === 0) return TC_SEGMENTS;
+    if ((boardView !== 'dailySegment' && boardView !== 'fullYear') || segSel.length === 0) return TC_SEGMENTS;
     const set = new Set<string>();
     for (const key of segSel) segChoices.find((c) => c.key === key)?.segs.forEach((s) => set.add(s));
     return [...set] as TcSegment[];
   }, [boardView, segSel, segChoices]);
 
-  const selectedLabel = (boardView !== 'dailySegment' && boardView !== 'monthly') || segSel.length === 0 ? 'Total'
+  const selectedLabel = (boardView !== 'dailySegment' && boardView !== 'fullYear') || segSel.length === 0 ? 'Total'
     : segSel.length === 1 ? (segChoices.find((c) => c.key === segSel[0])?.plain ?? 'Total')
     : `${segSel.length} segments`;
 
@@ -236,7 +238,7 @@ export default function OnTheBooksPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight m-0" style={{ color: 'var(--primary)' }}>
-            Daily On The Books — {selectedLabel}
+            {BOARD_VIEWS.find((v) => v.key === boardView)?.label ?? 'Daily'} On The Books — {selectedLabel}
           </h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
             {property.name} · Room Nights by TC segment · FY26 budget mapped onto actuals · pace as of {AS_OF}
@@ -264,8 +266,8 @@ export default function OnTheBooksPage() {
         ))}
       </div>
 
-      {/* Monthly controls — Property + Week (snapshot) */}
-      {boardView === 'monthly' && (
+      {/* Full Year controls — Property + Week (snapshot) + Segment */}
+      {boardView === 'fullYear' && (
       <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
         <div className="flex flex-col gap-1.5">
           <label className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
@@ -516,7 +518,9 @@ export default function OnTheBooksPage() {
       {/* lower section — Daily: pace board · Daily Segment: hierarchical drill-down · Monthly: TBD */}
       {boardView === 'daily' && <SegmentGrid segment={TOTAL_KEY} month={month} isOcc={isOcc} granularity="daily" />}
       {boardView === 'dailySegment' && <SegmentTree month={month} />}
-      {boardView === 'monthly' && <MonthlyBoard segments={selectedSegs} />}
+      {boardView === 'fullYear' && <MonthlyBoard segments={selectedSegs} />}
+      {boardView === 'summary' && <BlankView label="Summary" />}
+      {boardView === 'monthly' && <BlankView label="Monthly" />}
       </div>
     </div>
     </OtbCtx.Provider>
@@ -895,6 +899,15 @@ function fmtPaceCell(metric: PaceMetric, v: number | null): string {
 
 interface PaceCol { key: string; label: string; group: boolean; days: GridDay[] }
 
+// Placeholder for board views not built yet (Summary, Monthly).
+function BlankView({ label }: { label: string }) {
+  return (
+    <div className="bg-white border rounded-lg shadow-sm flex items-center justify-center" style={{ borderColor: 'var(--border)', minHeight: 260 }}>
+      <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{label} — coming soon</span>
+    </div>
+  );
+}
+
 // Sum a set of per-segment daily grids into one combined GridDay[] (additive fields; pickups
 // stay null unless at least one segment reported them).
 function combineGridDays(parts: GridDay[][]): GridDay[] {
@@ -946,9 +959,9 @@ function MonthlyBoard({ segments }: { segments: TcSegment[] }) {
       q.forEach((m) => cols.push({ key: MONTH_ABBR[m], label: `${MONTH_ABBR[m]}-${yy}`, group: false, days: days.filter((d) => inMonth(d, m)) }));
       cols.push({ key: `Q${qi + 1}`, label: `Q${qi + 1}`, group: true, days: days.filter((d) => q.some((m) => inMonth(d, m))) });
     });
-    cols.push({ key: 'FY', label: 'FY', group: true, days });
     cols.push({ key: 'YTD', label: 'YTD', group: true, days: days.filter((d) => d.date <= AS_OF) });
     cols.push({ key: 'ROY', label: 'ROY', group: true, days: days.filter((d) => d.date > AS_OF) });
+    cols.push({ key: 'FY', label: 'FY', group: true, days });
     return cols;
   }, [days, AS_OF, yy]);
 
@@ -1011,6 +1024,24 @@ function MonthlyBoard({ segments }: { segments: TcSegment[] }) {
                         <td key={i} className="px-2 py-0.5 text-center tabular-nums"
                           style={{ color, fontWeight: section.key === 'otb' ? 600 : 400, background: columns[i].group ? 'var(--muted)' : undefined }}>
                           {fmtPaceCell(m.key, v)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+                {section.key === 'risk' && (['lw', 'l4w'] as const).map((kind) => (
+                  <tr key={kind}>
+                    <td className="sticky left-0 z-10 bg-white px-3 py-0.5 text-left"
+                      style={{ color: 'var(--text-secondary)', minWidth: 150 }}>
+                      {kind === 'lw' ? 'vs LW' : 'vs L4W'}
+                    </td>
+                    {aggs.map((a, i) => {
+                      const v = kind === 'lw' ? a.puRev : a.pu4Rev;
+                      const color = v == null || Math.abs(v) < 0.5 ? 'var(--text-muted)' : v > 0 ? 'var(--success)' : 'var(--danger)';
+                      return (
+                        <td key={i} className="px-2 py-0.5 text-center tabular-nums"
+                          style={{ color, background: columns[i].group ? 'var(--muted)' : undefined }}>
+                          {v == null ? '—' : fmtPaceRev(v)}
                         </td>
                       );
                     })}
