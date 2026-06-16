@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getSessionOrBypass } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30; // ya no esperamos el PDF, solo el accepted
@@ -18,7 +17,7 @@ interface SnapshotPayload {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getSessionOrBypass();
   if (!session) {
     return NextResponse.json(
       { error: 'Unauthorized: no active session' },
