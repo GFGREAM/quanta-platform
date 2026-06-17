@@ -97,11 +97,12 @@ export default function OnTheBooksPage() {
   // Union of the selected groupings' segments (deduped). Empty selection = all.
   const segFiltered = boardView === 'dailySegment' || boardView === 'fullYear' || boardView === 'summary';
   const selectedSegs = useMemo(() => {
-    if (!segFiltered || segSel.length === 0) return TC_SEGMENTS;
+    const filtered = boardView === 'dailySegment' || boardView === 'fullYear' || boardView === 'summary';
+    if (!filtered || segSel.length === 0) return TC_SEGMENTS;
     const set = new Set<string>();
     for (const key of segSel) segChoices.find((c) => c.key === key)?.segs.forEach((s) => set.add(s));
     return [...set] as TcSegment[];
-  }, [segFiltered, segSel, segChoices]);
+  }, [boardView, segSel, segChoices]);
 
   const selectedLabel = !segFiltered || segSel.length === 0 ? 'Total'
     : segSel.length === 1 ? (segChoices.find((c) => c.key === segSel[0])?.plain ?? 'Total')
@@ -267,57 +268,8 @@ export default function OnTheBooksPage() {
         ))}
       </div>
 
-      {/* Summary controls — Property + Week (snapshot) + Segment */}
-      {boardView === 'summary' && (
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-            Property
-          </label>
-          <select
-            value={propertyCode}
-            onChange={(e) => setPropertyCode(e.target.value)}
-            style={selectStyle}
-            className="h-9 w-52 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
-          >
-            {PROPERTIES.map((p) => (
-              <option key={p.code} value={p.code}>{p.name}</option>
-            ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-            Week
-          </label>
-          <select
-            value={snapshot}
-            onChange={(e) => setSnapshot(e.target.value)}
-            style={selectStyle}
-            className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
-          >
-            {snapshots.map((s, i) => (
-              <option key={s} value={s}>{i === 0 ? `${s} (latest)` : s}</option>
-            ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-            Segment
-          </label>
-          <MultiSelect
-            options={segLabels}
-            selected={segSel}
-            onChange={setSegSel}
-            width="15rem"
-            noun="segments"
-            placeholder="All segments"
-          />
-        </div>
-      </div>
-      )}
-
-      {/* Full Year controls — Property + Week (snapshot) + Segment */}
-      {boardView === 'fullYear' && (
+      {/* Summary / Full Year controls — Property + Week (snapshot) + Segment */}
+      {(boardView === 'summary' || boardView === 'fullYear') && (
       <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
         <div className="flex flex-col gap-1.5">
           <label className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
@@ -999,15 +951,6 @@ function fmtPaceCell(metric: PaceMetric, v: number | null): string {
 
 interface PaceCol { key: string; label: string; group: boolean; days: GridDay[] }
 
-// Placeholder for board views not built yet.
-function BlankView({ label }: { label: string }) {
-  return (
-    <div className="bg-white border rounded-lg shadow-sm flex items-center justify-center" style={{ borderColor: 'var(--border)', minHeight: 260 }}>
-      <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{label} — coming soon</span>
-    </div>
-  );
-}
-
 // ---- Summary view: month-by-month board (Current Year / to STLY / to Budget / Risk / Comp Set / Pickup) ----
 // Reuses aggregatePace + paceCellValue (same logic as the Monthly pace board) so the metrics stay
 // consistent across views. Comp Set + 4-Week Pickup columns are placeholders ("—") until the comp
@@ -1449,7 +1392,15 @@ function MonthlyView({ month }: { month: MonthFilter }) {
     }
     return acc;
   };
-  const denom = useMemo(() => aggOf(GRAND), [segAgg]);
+  const denom = useMemo(() => {
+    const acc = { ...EMPTY_MAGG };
+    for (const s of GRAND) {
+      const a = segAgg[s]; if (!a) continue;
+      acc.rn += a.rn; acc.rev += a.rev; acc.budRn += a.budRn; acc.budRev += a.budRev;
+      acc.rnLy += a.rnLy; acc.revLy += a.revLy; acc.csRev += a.csRev;
+    }
+    return acc;
+  }, [segAgg]);
 
   if (TC_SEGMENTS.length === 0) {
     return (
