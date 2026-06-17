@@ -1001,6 +1001,11 @@ function fmtSummary(metric: PaceMetric, v: number): string {
 const sumNearZero = (metric: PaceMetric, v: number) =>
   metric === 'rn' ? Math.abs(v) < 0.5 : metric === 'rev' ? Math.abs(v) < 500 : Math.abs(v) < 0.05;
 
+// Segment excluded from the hotel "Total" rollup: Comp-Permanent-Other (Complimentary) carries
+// no revenue. Unsold Block (tentative group blocks) IS counted — it rolls up under Groups. This
+// keeps Full Year / Summary equal to the Monthly board's Grand Total (w/o Comps).
+const NON_DEFINITE: string[] = ['Comp-Permanent-Other'];
+
 function SummaryView({ segments }: { segments: TcSegment[] }) {
   const { getGridDaily, TC_SEGMENTS, CAPACITY_2025, CAPACITY_2026, PROPERTIES } = useOtb();
   const propertyName = PROPERTIES[0]?.name ?? '';
@@ -1008,8 +1013,10 @@ function SummaryView({ segments }: { segments: TcSegment[] }) {
   const groups: SumGroup[] = [SUMMARY_CY, ...SUMMARY_CMP.filter((g) => g.compare === compare)];
   // Total when all (or no) segments are selected; otherwise sum the chosen segments per day.
   const days = useMemo(() => {
-    if (segments.length === 0 || segments.length >= TC_SEGMENTS.length) return getGridDaily(TOTAL_KEY);
-    return combineGridDays(segments.map((s) => getGridDaily(s)));
+    const allSel = segments.length === 0 || segments.length >= TC_SEGMENTS.length;
+    // "All" rolls up only definite/sold business (excludes Unsold Block + Comps).
+    const segs = allSel ? (TC_SEGMENTS.filter((s) => !NON_DEFINITE.includes(s)) as TcSegment[]) : segments;
+    return combineGridDays(segs.map((s) => getGridDaily(s)));
   }, [getGridDaily, segments, TC_SEGMENTS]);
 
   // One aggregate per month (full month = act + pace), plus a Grand Total over the whole year.
@@ -1147,8 +1154,10 @@ function MonthlyBoard({ segments }: { segments: TcSegment[] }) {
   const { getGridDaily, TC_SEGMENTS, CAPACITY_2025, CAPACITY_2026, AS_OF, PROPERTIES } = useOtb();
   // Total when all (or no) segments are selected; otherwise sum the chosen segments per day.
   const days = useMemo(() => {
-    if (segments.length === 0 || segments.length >= TC_SEGMENTS.length) return getGridDaily(TOTAL_KEY);
-    return combineGridDays(segments.map((s) => getGridDaily(s)));
+    const allSel = segments.length === 0 || segments.length >= TC_SEGMENTS.length;
+    // "All" rolls up only definite/sold business (excludes Unsold Block + Comps).
+    const segs = allSel ? (TC_SEGMENTS.filter((s) => !NON_DEFINITE.includes(s)) as TcSegment[]) : segments;
+    return combineGridDays(segs.map((s) => getGridDaily(s)));
   }, [getGridDaily, segments, TC_SEGMENTS]);
   const yy = AS_OF.slice(2, 4); // "26"
   const propertyName = PROPERTIES[0]?.name ?? '';
@@ -1262,7 +1271,7 @@ function MonthlyBoard({ segments }: { segments: TcSegment[] }) {
 // ---- Monthly view: segmentation report (segment rows × RN / Revenue / ADR / Mix%) ----
 // Rows map the report taxonomy onto the TC detail segments. "vs Plan" = budget, "vs LY" = 2025
 // actual. Variance is green/red TEXT only (no fill) per the user's preference. Grand Total excludes
-// Complimentary (comps) and Unsold Block.
+// Complimentary (comps); Unsold Block (tentative groups) is counted under Groups.
 type MonthlyRowDef = { label: string; segs: string[]; bold?: boolean; topBorder?: boolean };
 const T_RETAIL = ['General Retail'];
 const T_DISC = ['Advance Purchase', 'General Discount', 'OTA Opaque', 'Package-Promotion'];
@@ -1270,11 +1279,13 @@ const T_NEG = ['Consortia', 'Corporate'];
 const T_QUAL = ['AAA', 'AARP', 'Government', 'General Qualified'];
 const T_WHOLE = ['General Wholesale'];
 const TRANSIENT = [...T_RETAIL, ...T_DISC, ...T_NEG, ...T_QUAL, ...T_WHOLE];
-const GROUPS = ['General Group'];
+const GROUPS_DEF = ['General Group'];          // definite group business (Corporate)
+const GROUPS_TENT = ['Unsold Block'];          // tentative group blocks (not yet definite) — still Groups
+const GROUPS = [...GROUPS_DEF, ...GROUPS_TENT];
 const CONTRACT = ['Crew-Contract'];
 const OTHER_TOTAL = [...CONTRACT]; // Contract + Other (Other has no TC segment → 0)
 const COMP = ['Comp-Permanent-Other'];
-const GRAND = [...TRANSIENT, ...GROUPS, ...OTHER_TOTAL]; // w/o Comps & Unsold Block
+const GRAND = [...TRANSIENT, ...GROUPS, ...OTHER_TOTAL]; // w/o Comps (Unsold Block counted under Groups)
 
 const MONTHLY_ROWS: MonthlyRowDef[] = [
   { label: 'Transient Retail', segs: T_RETAIL },
@@ -1283,9 +1294,10 @@ const MONTHLY_ROWS: MonthlyRowDef[] = [
   { label: 'Transient Qualified', segs: T_QUAL },
   { label: 'Transient Wholesale', segs: T_WHOLE },
   { label: 'Transient Total', segs: TRANSIENT, bold: true, topBorder: true },
-  { label: 'Groups Corporate', segs: GROUPS, topBorder: true },
+  { label: 'Groups Corporate', segs: GROUPS_DEF, topBorder: true },
   { label: 'Groups Association', segs: [] },
   { label: 'Groups Other', segs: [] },
+  { label: 'Unsold Block (tentative)', segs: GROUPS_TENT },
   { label: 'Groups Total', segs: GROUPS, bold: true, topBorder: true },
   { label: 'Contract', segs: CONTRACT, topBorder: true },
   { label: 'Other', segs: [] },
