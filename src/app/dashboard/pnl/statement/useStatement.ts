@@ -603,8 +603,21 @@ export function useStatement(opts?: UseStatementOptions) {
       }
       return point;
     });
+    // Per-hotel period Budget (constant across weeks) → flat dashed reference line per hotel,
+    // so you can see each hotel's Outlook fall relative to its budget. Keyed `${hotel}__budget`.
+    const budgetByHotel: Record<string, number> = {};
+    for (const hotel of orderedSelection) {
+      const bRows = filterByPeriod(
+        forecastRows.filter((r) => r.scenario === 'Budget' && r.hotel === hotel && r.year === year),
+        scope, periodMonth,
+      );
+      budgetByHotel[hotel] = aggregateRowsMetric(bRows, metricDef) ?? 0;
+    }
+    for (const point of points) {
+      for (const hotel of orderedSelection) point[`${hotel}__budget`] = budgetByHotel[hotel];
+    }
     return { points, hotels: orderedSelection };
-  }, [weeklyRows, portfolioHotels, filteredPortfolioHotels, scope, periodMonth, year, metricDef]);
+  }, [weeklyRows, forecastRows, portfolioHotels, filteredPortfolioHotels, scope, periodMonth, year, metricDef]);
 
   const hotelSelectionLabel = allHotelsSelected
     ? 'All hotels'

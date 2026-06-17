@@ -43,15 +43,17 @@ const COLORS = {
 
 type MonthFilter = number | 'all';
 
-type BoardView = 'monthly' | 'daily' | 'dailySegment';
+type BoardView = 'summary' | 'fullYear' | 'monthly' | 'daily' | 'dailySegment';
 const BOARD_VIEWS: { key: BoardView; label: string }[] = [
+  { key: 'summary', label: 'Summary' },
+  { key: 'fullYear', label: 'Full Year' },
   { key: 'monthly', label: 'Monthly' },
   { key: 'daily', label: 'Daily' },
   { key: 'dailySegment', label: 'Daily Segment' },
 ];
 
 export default function OnTheBooksPage() {
-  const [boardView, setBoardView] = useState<BoardView>('monthly');
+  const [boardView, setBoardView] = useState<BoardView>('fullYear');
 
   const [propertyCode, setPropertyCode] = useState<string>('WACCR');
   const otb = useOtbData(propertyCode);
@@ -77,7 +79,7 @@ export default function OnTheBooksPage() {
       setExportingPdf(false);
     }
   };
-  const showTrend = boardView !== 'monthly'; // controls + KPIs + chart (Daily & Daily Segment; Monthly is blank)
+  const showTrend = boardView === 'daily' || boardView === 'dailySegment'; // controls + KPIs + chart only on Daily views
   // Daily is hotel-wide (Total); Daily Segment uses a multi-select over the segment
   // hierarchy. Indentation is carried in the option label (NBSP per depth) so the
   // checkbox list keeps the macro → micro shape; the Total node is dropped because
@@ -93,14 +95,16 @@ export default function OnTheBooksPage() {
   const segLabels = useMemo(() => segChoices.map((c) => c.key), [segChoices]);
 
   // Union of the selected groupings' segments (deduped). Empty selection = all.
+  const segFiltered = boardView === 'dailySegment' || boardView === 'fullYear' || boardView === 'summary';
   const selectedSegs = useMemo(() => {
-    if ((boardView !== 'dailySegment' && boardView !== 'monthly') || segSel.length === 0) return TC_SEGMENTS;
+    const filtered = boardView === 'dailySegment' || boardView === 'fullYear' || boardView === 'summary';
+    if (!filtered || segSel.length === 0) return TC_SEGMENTS;
     const set = new Set<string>();
     for (const key of segSel) segChoices.find((c) => c.key === key)?.segs.forEach((s) => set.add(s));
     return [...set] as TcSegment[];
   }, [boardView, segSel, segChoices]);
 
-  const selectedLabel = (boardView !== 'dailySegment' && boardView !== 'monthly') || segSel.length === 0 ? 'Total'
+  const selectedLabel = !segFiltered || segSel.length === 0 ? 'Total'
     : segSel.length === 1 ? (segChoices.find((c) => c.key === segSel[0])?.plain ?? 'Total')
     : `${segSel.length} segments`;
 
@@ -236,7 +240,7 @@ export default function OnTheBooksPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight m-0" style={{ color: 'var(--primary)' }}>
-            Daily On The Books — {selectedLabel}
+            {BOARD_VIEWS.find((v) => v.key === boardView)?.label ?? 'Daily'} On The Books — {selectedLabel}
           </h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
             {property.name} · Room Nights by TC segment · FY26 budget mapped onto actuals · pace as of {AS_OF}
@@ -264,8 +268,8 @@ export default function OnTheBooksPage() {
         ))}
       </div>
 
-      {/* Monthly controls — Property + Week (snapshot) */}
-      {boardView === 'monthly' && (
+      {/* Summary / Full Year controls — Property + Week (snapshot) + Segment */}
+      {(boardView === 'summary' || boardView === 'fullYear') && (
       <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
         <div className="flex flex-col gap-1.5">
           <label className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
@@ -309,6 +313,56 @@ export default function OnTheBooksPage() {
             noun="segments"
             placeholder="All segments"
           />
+        </div>
+      </div>
+      )}
+
+      {/* Monthly controls — Property + Week (snapshot) + Month */}
+      {boardView === 'monthly' && (
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+            Property
+          </label>
+          <select
+            value={propertyCode}
+            onChange={(e) => setPropertyCode(e.target.value)}
+            style={selectStyle}
+            className="h-9 w-52 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
+          >
+            {PROPERTIES.map((p) => (
+              <option key={p.code} value={p.code}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+            Week
+          </label>
+          <select
+            value={snapshot}
+            onChange={(e) => setSnapshot(e.target.value)}
+            style={selectStyle}
+            className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
+          >
+            {snapshots.map((s, i) => (
+              <option key={s} value={s}>{i === 0 ? `${s} (latest)` : s}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+            Month
+          </label>
+          <select
+            value={String(month)}
+            onChange={(e) => setMonth(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+            style={selectStyle}
+            className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
+          >
+            <option value="all">Full year</option>
+            {MONTH_ABBR.map((m, i) => <option key={m} value={i + 1}>{MONTH_FULL[i]}</option>)}
+          </select>
         </div>
       </div>
       )}
@@ -516,7 +570,9 @@ export default function OnTheBooksPage() {
       {/* lower section — Daily: pace board · Daily Segment: hierarchical drill-down · Monthly: TBD */}
       {boardView === 'daily' && <SegmentGrid segment={TOTAL_KEY} month={month} isOcc={isOcc} granularity="daily" />}
       {boardView === 'dailySegment' && <SegmentTree month={month} />}
-      {boardView === 'monthly' && <MonthlyBoard segments={selectedSegs} />}
+      {boardView === 'fullYear' && <MonthlyBoard segments={selectedSegs} />}
+      {boardView === 'summary' && <SummaryView segments={selectedSegs} />}
+      {boardView === 'monthly' && <MonthlyView month={month} />}
       </div>
     </div>
     </OtbCtx.Provider>
@@ -895,6 +951,166 @@ function fmtPaceCell(metric: PaceMetric, v: number | null): string {
 
 interface PaceCol { key: string; label: string; group: boolean; days: GridDay[] }
 
+// ---- Summary view: month-by-month board (Current Year / to STLY / to Budget / Risk / Comp Set / Pickup) ----
+// Reuses aggregatePace + paceCellValue (same logic as the Monthly pace board) so the metrics stay
+// consistent across views. Comp Set + 4-Week Pickup columns are placeholders ("—") until the comp
+// set on-the-books feed and comp set capacity are available in the dataset.
+interface SumCol { key: string; label: string; section?: PaceSection; metric?: PaceMetric; ph?: boolean }
+interface SumGroup { label: string; variance: boolean; cols: SumCol[] }
+const sumM5 = (s: PaceSection): SumCol[] => [
+  { key: `${s}-occ`, label: 'OCC%', section: s, metric: 'occ' },
+  { key: `${s}-adr`, label: 'ADR', section: s, metric: 'adr' },
+  { key: `${s}-revpar`, label: 'RevPAR', section: s, metric: 'revpar' },
+  { key: `${s}-rn`, label: 'Room Nights', section: s, metric: 'rn' },
+  { key: `${s}-rev`, label: "Rev$ ('000)", section: s, metric: 'rev' },
+];
+// Current Year is always shown; the header toggle picks one comparison family so the board fits
+// without horizontal scroll.
+type SumCompare = 'bud' | 'ly' | 'cs';
+const SUM_COMPARE: [SumCompare, string][] = [['bud', 'vs Budget'], ['ly', 'vs Last Year'], ['cs', 'Comp Set']];
+const SUMMARY_CY: SumGroup = { label: 'On the Books Current Year', variance: false, cols: sumM5('otb') };
+const SUMMARY_CMP: (SumGroup & { compare: SumCompare })[] = [
+  { compare: 'ly', label: 'On the Books to STLY', variance: true, cols: sumM5('stly') },
+  { compare: 'bud', label: 'On the Books to Budget', variance: true, cols: sumM5('budget') },
+  { compare: 'bud', label: 'Risk /Surplus to Budget', variance: true, cols: [
+    { key: 'risk-rn', label: 'Room Nights', section: 'risk', metric: 'rn' },
+    { key: 'risk-rev', label: "Rev$ ('000)", section: 'risk', metric: 'rev' },
+  ] },
+  { compare: 'cs', label: 'Comp Set On the Books', variance: true, cols: [
+    { key: 'cs-occ', label: 'OCC%', ph: true },
+    { key: 'cs-vsstly', label: 'CSvsSTLY', ph: true },
+    { key: 'cs-hvcs', label: 'HotelvsCS', ph: true },
+  ] },
+  { compare: 'cs', label: '4 Weeks PickUp OCC%', variance: true, cols: [
+    { key: 'pu-hotel', label: 'Hotel', ph: true },
+    { key: 'pu-cs', label: 'Comp Set', ph: true },
+    { key: 'pu-hvcs', label: 'HotelvsCS', ph: true },
+  ] },
+];
+
+function fmtSummary(metric: PaceMetric, v: number): string {
+  switch (metric) {
+    case 'occ': return `${v.toFixed(1)}%`;
+    case 'adr':
+    case 'revpar': return v.toFixed(1);
+    case 'rn': return Math.round(v).toLocaleString('en-US');
+    default: return Math.round(v / 1000).toLocaleString('en-US'); // rev → thousands
+  }
+}
+// Near-zero threshold per metric so a "+0.0" variance reads as neutral, not green/red.
+const sumNearZero = (metric: PaceMetric, v: number) =>
+  metric === 'rn' ? Math.abs(v) < 0.5 : metric === 'rev' ? Math.abs(v) < 500 : Math.abs(v) < 0.05;
+
+function SummaryView({ segments }: { segments: TcSegment[] }) {
+  const { getGridDaily, TC_SEGMENTS, CAPACITY_2025, CAPACITY_2026, PROPERTIES } = useOtb();
+  const propertyName = PROPERTIES[0]?.name ?? '';
+  const [compare, setCompare] = useState<SumCompare>('bud');
+  const groups: SumGroup[] = [SUMMARY_CY, ...SUMMARY_CMP.filter((g) => g.compare === compare)];
+  // Total when all (or no) segments are selected; otherwise sum the chosen segments per day.
+  const days = useMemo(() => {
+    if (segments.length === 0 || segments.length >= TC_SEGMENTS.length) return getGridDaily(TOTAL_KEY);
+    return combineGridDays(segments.map((s) => getGridDaily(s)));
+  }, [getGridDaily, segments, TC_SEGMENTS]);
+
+  // One aggregate per month (full month = act + pace), plus a Grand Total over the whole year.
+  const monthAggs = useMemo(
+    () => MONTH_ABBR.map((_, m) => aggregatePace(days.filter((d) => Number(d.date.slice(5, 7)) === m + 1), CAPACITY_2026, CAPACITY_2025)),
+    [days, CAPACITY_2026, CAPACITY_2025],
+  );
+  const grandAgg = useMemo(() => aggregatePace(days, CAPACITY_2026, CAPACITY_2025), [days, CAPACITY_2026, CAPACITY_2025]);
+
+  if (days.length === 0) {
+    return (
+      <div className="bg-white border rounded-lg shadow-sm flex items-center justify-center" style={{ borderColor: 'var(--border)', minHeight: 260 }}>
+        <span className="text-sm" style={{ color: 'var(--text-muted)' }}>No data</span>
+      </div>
+    );
+  }
+
+  const bodyRows = [
+    ...monthAggs.map((agg, m) => ({ label: MONTH_FULL[m], agg, bold: false })),
+    { label: 'Grand Total', agg: grandAgg, bold: true },
+  ];
+
+  const renderCell = (group: SumGroup, col: SumCol, ci: number, gi: number, agg: PaceAgg, bold: boolean) => {
+    const leftBorder = gi > 0 && ci === 0 ? '1px solid var(--border)' : undefined;
+    const v = col.ph || !col.section || !col.metric ? null : paceCellValue(col.section, col.metric, agg);
+    const color = v == null ? 'var(--text-muted)'
+      : !group.variance ? 'var(--text-primary)'
+      : sumNearZero(col.metric!, v) ? 'var(--text-muted)'
+      : v > 0 ? 'var(--success)' : 'var(--danger)';
+    return (
+      <td key={col.key} className="px-2 py-1 text-right tabular-nums"
+        style={{ color, fontWeight: bold ? 700 : 400, borderLeft: leftBorder }}>
+        {v == null ? '—' : fmtSummary(col.metric!, v)}
+      </td>
+    );
+  };
+
+  return (
+    <div className="bg-white border rounded-lg overflow-hidden shadow-sm" style={{ borderColor: 'var(--border)' }}>
+      <div className="px-3 py-2 border-b flex items-center justify-between gap-3" style={{ background: 'var(--muted)', borderColor: 'var(--border)' }}>
+        <span className="text-sm font-bold" style={{ color: 'var(--primary)' }}>Booking Pace Summary {propertyName}</span>
+        <div className="flex gap-1">
+          {SUM_COMPARE.map(([k, lbl]) => (
+            <button key={k} type="button" onClick={() => setCompare(k)}
+              className="px-2.5 py-0.5 rounded border text-[0.625rem] font-semibold cursor-pointer transition-colors"
+              style={{
+                background: compare === k ? 'var(--primary)' : 'white',
+                color: compare === k ? '#fff' : 'var(--text-secondary)',
+                borderColor: compare === k ? 'var(--primary)' : 'var(--border)',
+              }}>
+              {lbl}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full table-fixed border-collapse text-[0.75rem] whitespace-nowrap">
+          <colgroup>
+            <col style={{ width: 120 }} />
+            {groups.flatMap((g) => g.cols.map((c) => <col key={c.key} />))}
+          </colgroup>
+          <thead>
+            {/* group row */}
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              <th className="sticky left-0 z-10 bg-white px-3 py-1.5" style={{ minWidth: 96 }} />
+              {groups.map((g, gi) => (
+                <th key={g.label} colSpan={g.cols.length}
+                  className="px-2 py-1.5 text-center text-[0.6875rem] font-bold uppercase tracking-wider"
+                  style={{ color: 'var(--text-secondary)', borderLeft: gi > 0 ? '1px solid var(--border)' : undefined }}>
+                  {g.label}
+                </th>
+              ))}
+            </tr>
+            {/* sub-column row */}
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              <th className="sticky left-0 z-10 bg-white px-3 py-1.5" style={{ minWidth: 96 }} />
+              {groups.flatMap((g, gi) => g.cols.map((c, ci) => (
+                <th key={c.key} className="px-2 py-1.5 text-right text-[0.625rem] font-semibold tabular-nums"
+                  style={{ color: 'var(--text-secondary)', borderLeft: gi > 0 && ci === 0 ? '1px solid var(--border)' : undefined }}>
+                  {c.label}
+                </th>
+              )))}
+            </tr>
+          </thead>
+          <tbody>
+            {bodyRows.map((row) => (
+              <tr key={row.label} style={{ borderTop: row.bold ? '2px solid var(--border)' : '1px solid var(--border)' }}>
+                <td className="sticky left-0 z-10 bg-white px-3 py-1 text-left"
+                  style={{ color: row.bold ? 'var(--primary)' : 'var(--text-primary)', fontWeight: row.bold ? 700 : 400, minWidth: 96 }}>
+                  {row.label}
+                </td>
+                {groups.flatMap((g, gi) => g.cols.map((c, ci) => renderCell(g, c, ci, gi, row.agg, row.bold)))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // Sum a set of per-segment daily grids into one combined GridDay[] (additive fields; pickups
 // stay null unless at least one segment reported them).
 function combineGridDays(parts: GridDay[][]): GridDay[] {
@@ -946,9 +1162,9 @@ function MonthlyBoard({ segments }: { segments: TcSegment[] }) {
       q.forEach((m) => cols.push({ key: MONTH_ABBR[m], label: `${MONTH_ABBR[m]}-${yy}`, group: false, days: days.filter((d) => inMonth(d, m)) }));
       cols.push({ key: `Q${qi + 1}`, label: `Q${qi + 1}`, group: true, days: days.filter((d) => q.some((m) => inMonth(d, m))) });
     });
-    cols.push({ key: 'FY', label: 'FY', group: true, days });
     cols.push({ key: 'YTD', label: 'YTD', group: true, days: days.filter((d) => d.date <= AS_OF) });
     cols.push({ key: 'ROY', label: 'ROY', group: true, days: days.filter((d) => d.date > AS_OF) });
+    cols.push({ key: 'FY', label: 'FY', group: true, days });
     return cols;
   }, [days, AS_OF, yy]);
 
@@ -976,7 +1192,7 @@ function MonthlyBoard({ segments }: { segments: TcSegment[] }) {
             <tr style={{ borderBottom: '1px solid var(--border)' }}>
               <th className="sticky left-0 z-10 bg-white px-3 py-1.5 text-left" style={{ minWidth: 150, width: 150 }} />
               {columns.map((c, i) => (
-                <th key={i} className="px-2 py-1.5 text-center text-[0.6875rem] font-bold tabular-nums"
+                <th key={i} className="px-2 py-1.5 text-right text-[0.6875rem] font-bold tabular-nums"
                   style={{ color: 'var(--text-secondary)', minWidth: 58, width: 58, background: c.group ? 'var(--muted)' : undefined }}>
                   {c.label}
                 </th>
@@ -1008,7 +1224,7 @@ function MonthlyBoard({ segments }: { segments: TcSegment[] }) {
                         : v == null || Math.abs(v) < 0.05 ? 'var(--text-muted)'
                         : v > 0 ? 'var(--success)' : 'var(--danger)';
                       return (
-                        <td key={i} className="px-2 py-0.5 text-center tabular-nums"
+                        <td key={i} className="px-2 py-0.5 text-right tabular-nums"
                           style={{ color, fontWeight: section.key === 'otb' ? 600 : 400, background: columns[i].group ? 'var(--muted)' : undefined }}>
                           {fmtPaceCell(m.key, v)}
                         </td>
@@ -1016,8 +1232,265 @@ function MonthlyBoard({ segments }: { segments: TcSegment[] }) {
                     })}
                   </tr>
                 ))}
+                {section.key === 'risk' && (['lw', 'l4w'] as const).map((kind) => (
+                  <tr key={kind}>
+                    <td className="sticky left-0 z-10 bg-white px-3 py-0.5 text-left"
+                      style={{ color: 'var(--text-secondary)', minWidth: 150 }}>
+                      {kind === 'lw' ? 'vs LW' : 'vs L4W'}
+                    </td>
+                    {aggs.map((a, i) => {
+                      const v = kind === 'lw' ? a.puRev : a.pu4Rev;
+                      const color = v == null || Math.abs(v) < 0.5 ? 'var(--text-muted)' : v > 0 ? 'var(--success)' : 'var(--danger)';
+                      return (
+                        <td key={i} className="px-2 py-0.5 text-right tabular-nums"
+                          style={{ color, background: columns[i].group ? 'var(--muted)' : undefined }}>
+                          {v == null ? '—' : fmtPaceRev(v)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
               </Fragment>
             ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ---- Monthly view: segmentation report (segment rows × RN / Revenue / ADR / Mix%) ----
+// Rows map the report taxonomy onto the TC detail segments. "vs Plan" = budget, "vs LY" = 2025
+// actual. Variance is green/red TEXT only (no fill) per the user's preference. Grand Total excludes
+// Complimentary (comps) and Unsold Block.
+type MonthlyRowDef = { label: string; segs: string[]; bold?: boolean; topBorder?: boolean };
+const T_RETAIL = ['General Retail'];
+const T_DISC = ['Advance Purchase', 'General Discount', 'OTA Opaque', 'Package-Promotion'];
+const T_NEG = ['Consortia', 'Corporate'];
+const T_QUAL = ['AAA', 'AARP', 'Government', 'General Qualified'];
+const T_WHOLE = ['General Wholesale'];
+const TRANSIENT = [...T_RETAIL, ...T_DISC, ...T_NEG, ...T_QUAL, ...T_WHOLE];
+const GROUPS = ['General Group'];
+const CONTRACT = ['Crew-Contract'];
+const OTHER_TOTAL = [...CONTRACT]; // Contract + Other (Other has no TC segment → 0)
+const COMP = ['Comp-Permanent-Other'];
+const GRAND = [...TRANSIENT, ...GROUPS, ...OTHER_TOTAL]; // w/o Comps & Unsold Block
+
+const MONTHLY_ROWS: MonthlyRowDef[] = [
+  { label: 'Transient Retail', segs: T_RETAIL },
+  { label: 'Transient Discounted', segs: T_DISC },
+  { label: 'Transient Negotiated', segs: T_NEG },
+  { label: 'Transient Qualified', segs: T_QUAL },
+  { label: 'Transient Wholesale', segs: T_WHOLE },
+  { label: 'Transient Total', segs: TRANSIENT, bold: true, topBorder: true },
+  { label: 'Groups Corporate', segs: GROUPS, topBorder: true },
+  { label: 'Groups Association', segs: [] },
+  { label: 'Groups Other', segs: [] },
+  { label: 'Groups Total', segs: GROUPS, bold: true, topBorder: true },
+  { label: 'Contract', segs: CONTRACT, topBorder: true },
+  { label: 'Other', segs: [] },
+  { label: 'Other Total', segs: OTHER_TOTAL, bold: true, topBorder: true },
+  { label: 'Complimentary', segs: COMP, topBorder: true },
+  { label: 'Grand Total (w/o Comps)', segs: GRAND, bold: true, topBorder: true },
+];
+
+interface MonthlyAgg { rn: number; rev: number; budRn: number; budRev: number; rnLy: number; revLy: number; csRev: number }
+const EMPTY_MAGG: MonthlyAgg = { rn: 0, rev: 0, budRn: 0, budRev: 0, rnLy: 0, revLy: 0, csRev: 0 };
+
+// One variation at a time (vs Budget OR vs Last Year), chosen by the header toggle.
+type CompareKey = 'bud' | 'ly';
+const MONTHLY_FAMILIES = [
+  { key: 'rn', label: 'Room Nights', subs: ['actual', 'vsCmp', 'vsCmpPct'] },
+  { key: 'rev', label: "Revenue ('000)", subs: ['actual', 'vsCmp', 'vsCmpPct'] },
+  { key: 'adr', label: 'Average Daily Rate (ADR)', subs: ['actual', 'vsCmp', 'vsCmpPct'] },
+  { key: 'mix', label: 'Revenue Contribution Mix%', subs: ['actual', 'cmpShare', 'compset'] },
+] as const;
+const subLabel = (sub: string, cmp: CompareKey): string => {
+  const w = cmp === 'bud' ? 'Plan' : 'LY';
+  switch (sub) {
+    case 'actual': return 'Actual';
+    case 'vsCmp': return `vs ${w}`;
+    case 'vsCmpPct': return `vs ${w}%`;
+    case 'cmpShare': return w;
+    default: return 'Comp Set';
+  }
+};
+
+const mInt = (v: number) => Math.round(v).toLocaleString('en-US');
+const m1 = (v: number) => v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const mPct = (v: number) => `${v.toFixed(1)}%`;
+const pctChg = (a: number, b: number) => (b ? ((a - b) / b) * 100 : 0);
+
+// One cell: { v, kind } → kind drives color (var/pct colored by sign; plain/mix neutral).
+type CellKind = 'plain' | 'var' | 'pct' | 'mix';
+function monthlyCell(famKey: string, sub: string, a: MonthlyAgg, denom: MonthlyAgg, cmp: CompareKey): { v: number | null; kind: CellKind; fmt: (n: number) => string } {
+  if (famKey === 'rn') {
+    const b = cmp === 'bud' ? a.budRn : a.rnLy;
+    switch (sub) {
+      case 'actual': return { v: a.rn, kind: 'plain', fmt: mInt };
+      case 'vsCmp': return { v: a.rn - b, kind: 'var', fmt: mInt };
+      default: return { v: pctChg(a.rn, b), kind: 'pct', fmt: mPct };
+    }
+  }
+  if (famKey === 'rev') {
+    const b = cmp === 'bud' ? a.budRev : a.revLy;
+    switch (sub) {
+      case 'actual': return { v: a.rev / 1000, kind: 'plain', fmt: mInt };
+      case 'vsCmp': return { v: (a.rev - b) / 1000, kind: 'var', fmt: m1 };
+      default: return { v: pctChg(a.rev, b), kind: 'pct', fmt: mPct };
+    }
+  }
+  if (famKey === 'adr') {
+    const adr = a.rn && a.rev ? a.rev / a.rn : null;
+    const cmpAdr = cmp === 'bud'
+      ? (a.budRn && a.budRev ? a.budRev / a.budRn : null)
+      : (a.rnLy && a.revLy ? a.revLy / a.rnLy : null);
+    switch (sub) {
+      case 'actual': return { v: adr, kind: 'plain', fmt: mInt };
+      case 'vsCmp': return { v: adr != null && cmpAdr != null ? adr - cmpAdr : null, kind: 'var', fmt: mInt };
+      default: return { v: adr == null ? null : cmpAdr ? pctChg(adr, cmpAdr) : 0, kind: 'pct', fmt: mPct };
+    }
+  }
+  // mix — share of the Grand Total (w/o Comps)
+  switch (sub) {
+    case 'actual': return { v: denom.rev ? (a.rev / denom.rev) * 100 : 0, kind: 'mix', fmt: mPct };
+    case 'cmpShare': {
+      const num = cmp === 'bud' ? a.budRev : a.revLy;
+      const den = cmp === 'bud' ? denom.budRev : denom.revLy;
+      return { v: den ? (num / den) * 100 : 0, kind: 'mix', fmt: mPct };
+    }
+    default: return { v: denom.csRev ? (a.csRev / denom.csRev) * 100 : 0, kind: 'mix', fmt: mPct };
+  }
+}
+
+function MonthlyView({ month }: { month: MonthFilter }) {
+  const { getGridDaily, TC_SEGMENTS, PROPERTIES } = useOtb();
+  const propertyName = PROPERTIES[0]?.name ?? '';
+  const [compare, setCompare] = useState<CompareKey>('bud');
+
+  // Per-segment aggregate over the selected month (or full year). Built once, then summed per row.
+  const segAgg = useMemo(() => {
+    const map: Record<string, MonthlyAgg> = {};
+    for (const seg of TC_SEGMENTS) {
+      const days = getGridDaily(seg).filter((d) => month === 'all' || Number(d.date.slice(5, 7)) === month);
+      const acc = { ...EMPTY_MAGG };
+      for (const d of days) {
+        acc.rn += d.rn; acc.rev += d.rev; acc.budRn += d.budgetRn; acc.budRev += d.budgetRev;
+        acc.rnLy += d.rnLy; acc.revLy += d.revLy; acc.csRev += d.csStlyRev;
+      }
+      map[seg] = acc;
+    }
+    return map;
+  }, [getGridDaily, TC_SEGMENTS, month]);
+
+  const aggOf = (segs: string[]): MonthlyAgg => {
+    const acc = { ...EMPTY_MAGG };
+    for (const s of segs) {
+      const a = segAgg[s]; if (!a) continue;
+      acc.rn += a.rn; acc.rev += a.rev; acc.budRn += a.budRn; acc.budRev += a.budRev;
+      acc.rnLy += a.rnLy; acc.revLy += a.revLy; acc.csRev += a.csRev;
+    }
+    return acc;
+  };
+  const denom = useMemo(() => {
+    const acc = { ...EMPTY_MAGG };
+    for (const s of GRAND) {
+      const a = segAgg[s]; if (!a) continue;
+      acc.rn += a.rn; acc.rev += a.rev; acc.budRn += a.budRn; acc.budRev += a.budRev;
+      acc.rnLy += a.rnLy; acc.revLy += a.revLy; acc.csRev += a.csRev;
+    }
+    return acc;
+  }, [segAgg]);
+
+  if (TC_SEGMENTS.length === 0) {
+    return (
+      <div className="bg-white border rounded-lg shadow-sm flex items-center justify-center" style={{ borderColor: 'var(--border)', minHeight: 260 }}>
+        <span className="text-sm" style={{ color: 'var(--text-muted)' }}>No data</span>
+      </div>
+    );
+  }
+
+  const periodLabel = month === 'all' ? 'Full Year' : MONTH_FULL[month - 1];
+  // First sub-column of each family (after the first) gets a left divider.
+  const isFamStart = (fi: number, si: number) => fi > 0 && si === 0;
+
+  return (
+    <div className="bg-white border rounded-lg overflow-hidden shadow-sm" style={{ borderColor: 'var(--border)' }}>
+      <div className="px-3 py-2 border-b flex items-center justify-between gap-3" style={{ background: 'var(--muted)', borderColor: 'var(--border)' }}>
+        <span className="text-sm font-bold" style={{ color: 'var(--primary)' }}>Monthly Segmentation {propertyName} — {periodLabel}</span>
+        <div className="flex gap-1">
+          {([['bud', 'vs Budget'], ['ly', 'vs Last Year']] as [CompareKey, string][]).map(([k, lbl]) => (
+            <button key={k} type="button" onClick={() => setCompare(k)}
+              className="px-2.5 py-0.5 rounded border text-[0.625rem] font-semibold cursor-pointer transition-colors"
+              style={{
+                background: compare === k ? 'var(--primary)' : 'white',
+                color: compare === k ? '#fff' : 'var(--text-secondary)',
+                borderColor: compare === k ? 'var(--primary)' : 'var(--border)',
+              }}>
+              {lbl}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full table-fixed border-collapse text-[0.75rem] whitespace-nowrap">
+          {/* Fixed widths so columns don't resize with number length (e.g. when toggling Budget/LY). */}
+          <colgroup>
+            <col style={{ width: 180 }} />
+            {MONTHLY_FAMILIES.flatMap((fam) => fam.subs.map((sub) => (
+              <col key={`${fam.key}-${sub}`} style={{ width: 76 }} />
+            )))}
+          </colgroup>
+          <thead>
+            {/* family row */}
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              <th className="sticky left-0 z-10 bg-white px-3 py-1.5 text-center text-[0.6875rem] font-bold uppercase tracking-wider"
+                style={{ color: 'var(--text-secondary)', minWidth: 170 }}>Month</th>
+              {MONTHLY_FAMILIES.map((fam, fi) => (
+                <th key={fam.key} colSpan={fam.subs.length}
+                  className="px-2 py-1.5 text-center text-[0.6875rem] font-bold uppercase tracking-wider"
+                  style={{ color: 'var(--text-secondary)', borderLeft: fi > 0 ? '1px solid var(--border)' : undefined }}>
+                  {fam.label}
+                </th>
+              ))}
+            </tr>
+            {/* sub-column row */}
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              <th className="sticky left-0 z-10 bg-white px-3 py-1.5 text-left text-[0.625rem] font-semibold uppercase tracking-wider"
+                style={{ color: 'var(--text-secondary)', minWidth: 170 }}>Name</th>
+              {MONTHLY_FAMILIES.flatMap((fam, fi) => fam.subs.map((sub, si) => (
+                <th key={`${fam.key}-${sub}`} className="px-2 py-1.5 text-right text-[0.625rem] font-semibold tabular-nums"
+                  style={{ color: 'var(--text-secondary)', minWidth: 60, borderLeft: isFamStart(fi, si) ? '1px solid var(--border)' : undefined }}>
+                  {subLabel(sub, compare)}
+                </th>
+              )))}
+            </tr>
+          </thead>
+          <tbody>
+            {MONTHLY_ROWS.map((row) => {
+              const a = aggOf(row.segs);
+              return (
+                <tr key={row.label} style={{ borderTop: row.topBorder ? '2px solid var(--border)' : '1px solid var(--border)' }}>
+                  <td className="sticky left-0 z-10 bg-white px-3 py-1 text-left"
+                    style={{ color: row.bold ? 'var(--primary)' : 'var(--text-primary)', fontWeight: row.bold ? 700 : 400, minWidth: 170 }}>
+                    {row.label}
+                  </td>
+                  {MONTHLY_FAMILIES.flatMap((fam, fi) => fam.subs.map((sub, si) => {
+                    const { v, kind, fmt } = monthlyCell(fam.key, sub, a, denom, compare);
+                    const color = v == null ? 'var(--text-muted)'
+                      : kind === 'plain' || kind === 'mix' ? 'var(--text-primary)'
+                      : Math.abs(v) < (kind === 'pct' ? 0.05 : 0.5) ? 'var(--text-muted)'
+                      : v > 0 ? 'var(--success)' : 'var(--danger)';
+                    return (
+                      <td key={`${fam.key}-${sub}`} className="px-2 py-1 text-right tabular-nums"
+                        style={{ color, fontWeight: row.bold ? 700 : 400, borderLeft: isFamStart(fi, si) ? '1px solid var(--border)' : undefined }}>
+                        {v == null ? '—' : fmt(v)}
+                      </td>
+                    );
+                  }))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
