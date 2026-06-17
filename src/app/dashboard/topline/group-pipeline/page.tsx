@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useEffect, useCallback, useRef, Fragment } from 'react';
+import { useState, useMemo, useCallback, useRef, Fragment } from 'react';
 import { Star, RefreshCw, Maximize2, ChevronRight, ChevronDown, Download } from 'lucide-react';
 import {
   METRICS,
@@ -89,32 +89,53 @@ function weekMonthIndex(dates: Record<string, string>, s: Snapshot): number {
 
 export default function GroupPipelinePage() {
   const [propertyCode, setPropertyCode] = useState<string>(PROPERTIES[0].code);
-  const [year, setYear] = useState<number>(getYears(PROPERTIES[0].code)[0]);
+  const [yearRaw, setYear] = useState<number>(getYears(PROPERTIES[0].code)[0]);
   const [visual, setVisual] = useState<Visual>('V1');
   const [view, setView] = useState<'Summary' | 'Expanded'>('Summary');
   // Snapshot defaults seeded from the initial property: latest week / first week.
-  const [snapshot, setSnapshot] = useState<Snapshot>(() => {
+  const [snapshotRaw, setSnapshot] = useState<Snapshot>(() => {
     const s = getSnapshots(PROPERTIES[0].code);
     return s[s.length - 1];
   });
-  const [fromSnap, setFromSnap] = useState<Snapshot>(() => getSnapshots(PROPERTIES[0].code)[0]);
+  const [fromSnapRaw, setFromSnap] = useState<Snapshot>(() => getSnapshots(PROPERTIES[0].code)[0]);
   const [metric, setMetric] = useState<Metric>('RN');
   const [baseline, setBaseline] = useState<Baseline>('Budget');
   // Growth Analysis section (inside the matrix). Compact keeps it light (three
   // actionable deltas per status); Expanded adds vs Avg / vs Start + base rows.
   const [growthExpanded, setGrowthExpanded] = useState(false);
   const [weighted, setWeighted] = useState(true);
-  // Conversion "To" is always the Matrix snapshot — same point-in-time as what
-  // the rest of the page is showing — so it doesn't need its own control.
-  const toSnap = snapshot;
   const [isFavorite, setIsFavorite] = useState(false);
 
-  // Property-scoped lookups derived from the selected property/year.
+  // Property-scoped lookups derived from the selected property.
   const prop = useMemo(() => getProperty(propertyCode), [propertyCode]);
   const snapshots = useMemo(() => getSnapshots(propertyCode), [propertyCode]);
   const snapDates = useMemo(() => getSnapshotDates(propertyCode), [propertyCode]);
   const inventory = useMemo(() => getInventory(propertyCode), [propertyCode]);
   const years = useMemo(() => getYears(propertyCode), [propertyCode]);
+
+  // When the property changes, queue state resets so React picks them up on the
+  // next commit. We detect the change synchronously during render via a ref —
+  // an effect would leave one stale render where the old property's snapshot /
+  // year are still active, producing an empty table.
+  const prevPropertyRef = useRef(propertyCode);
+  if (prevPropertyRef.current !== propertyCode) {
+    prevPropertyRef.current = propertyCode;
+    const s = getSnapshots(propertyCode);
+    setSnapshot(s[s.length - 1]);
+    setFromSnap(s[0]);
+    setYear(getYears(propertyCode)[0]);
+  }
+
+  // Shadow the raw state with property-valid versions so every downstream hook
+  // sees values that exist for the current property — even during the render
+  // where propertyCode just changed and the setState calls above are still queued.
+  // We deliberately re-use the same names (snapshot, fromSnap, year) to avoid
+  // renaming dozens of downstream references; the raw state is only needed by the
+  // setters (setSnapshot, setFromSnap, setYear) which capture the state directly.
+  const snapshot = snapshots.includes(snapshotRaw) ? snapshotRaw : snapshots[snapshots.length - 1];
+  const fromSnap = snapshots.includes(fromSnapRaw) ? fromSnapRaw : snapshots[0];
+  const year = years.includes(yearRaw) ? yearRaw : years[0];
+
   const baselines = useMemo(() => getBaselines(propertyCode, year), [propertyCode, year]);
   const series = useCallback(
     (v: Visual, snap: Snapshot, status: Status, level: Level, m: Metric) =>
@@ -122,14 +143,8 @@ export default function GroupPipelinePage() {
     [propertyCode, year]
   );
 
-  // When the property changes, reset week/from-week to its snapshots and the year
-  // to its first available year (snapshot sets and years differ per property).
-  useEffect(() => {
-    const s = getSnapshots(propertyCode);
-    setSnapshot(s[s.length - 1]);
-    setFromSnap(s[0]);
-    setYear(getYears(propertyCode)[0]);
-  }, [propertyCode]);
+  // Conversion "To" is always the Matrix snapshot.
+  const toSnap = snapshot;
 
   // Available metrics depend on which sources are mixed in current visual.
   // To keep things consistent, always show all 6 metrics; cells without data show "—".
