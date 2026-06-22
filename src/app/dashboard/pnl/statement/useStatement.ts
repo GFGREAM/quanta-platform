@@ -20,7 +20,6 @@ import {
   type Month,
   type MetricDef,
   type MetricKey,
-  type Scenario,
   type Scope,
 } from './data';
 
@@ -44,6 +43,7 @@ export interface PortfolioData {
     budget: ForecastRow[];
     ly: ForecastRow[];
     currentNoXR: ForecastRow[];
+    budgetNoXR: ForecastRow[];
     lyNoXR: ForecastRow[];
   };
 }
@@ -52,7 +52,12 @@ export interface WeeklyOutlookPoint {
   week: string;
   outlook: number;
   budget: number;
+  // Week-over-week change in the Outlook vs the prior snapshot (metric units; null for the first week).
+  wow: number | null;
 }
+
+/** A weekly-snapshot forecast row from /api/aag/weekly-outlook (Outlook scenario only). */
+type WeeklyRow = ForecastRow & { week: string };
 
 export type ComparisonScenario = (typeof COMPARISON_SCENARIOS)[number];
 
@@ -81,23 +86,66 @@ function aggregateRowsMetric(rows: ForecastRow[], def: MetricDef): number | null
   return rows.reduce((s, r) => s + def.calc(r), 0);
 }
 
-export function useStatement() {
+// Apply a week's WoW drift multiplier to a comparison (Outlook) row: scale the demand-side
+// and financial lines, leaving physical capacity (rooms/availability) and the FX rate fixed —
+// those don't drift week to week. Placeholder until real snapshot-keyed weekly rows land.
+function scaleOutlook(r: ForecastRow, m: number): ForecastRow {
+  if (m === 1) return r;
+  return {
+    ...r,
+    roomsSold: r.roomsSold * m,
+    roomsComp: r.roomsComp * m,
+    roomsRevenue: r.roomsRevenue * m,
+    clubMaintFee: r.clubMaintFee * m,
+    timeshareMaintFee: r.timeshareMaintFee * m,
+    otherRevenue: r.otherRevenue * m,
+    departmentalExpenses: r.departmentalExpenses * m,
+    undistributedExpenses: r.undistributedExpenses * m,
+    otherExpenses: r.otherExpenses * m,
+    nonOperating: r.nonOperating * m,
+    guests: r.guests * m,
+    payingGuests: r.payingGuests * m,
+  };
+}
+
+export interface UseStatementOptions {
+  /** If provided, only these view modes are available. Omit for full access. */
+  allowedViewModes?: ViewMode[];
+  /** If provided, only these properties appear in the hotel dropdown. Omit for all. */
+  allowedProperties?: string[];
+}
+
+export function useStatement(opts?: UseStatementOptions) {
+  const allowedModes = opts?.allowedViewModes;
+  const allowedProps = opts?.allowedProperties;
+
+  const defaultView = allowedModes && allowedModes.length > 0 ? allowedModes[0] : 'summary';
   const [year, setYear] = useState<number>(YEARS[0]);
-  const [hotel, setHotel] = useState<string>(''); // '' = all hotels
+  // Weekly snapshot (ISO date) to view the Outlook as of. Defaults to the latest static snapshot;
+  // once the dynamic weeks arrive from the API the effect below syncs to the real latest week.
+  const [week, setWeek] = useState<string>(() => WEEKLY_OUTLOOK_DRIFTS[WEEKLY_OUTLOOK_DRIFTS.length - 1].snapshotDate);
   const [metric, setMetric] = useState<MetricKey>('totalRevenue');
   const [scenario, setScenario] = useState<ComparisonScenario>('Outlook');
   const [scope, setScope] = useState<Scope>('ytd');
   const [periodMonth, setPeriodMonth] = useState<Month>('Mar');
-  const [viewMode, setViewMode] = useState<ViewMode>('summary');
+  const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
   const [currency, setCurrency] = useState<Currency>('USD');
   const [basis, setBasis] = useState<Basis>('total');
   // Hotels selected for the portfolio table. Default = all available hotels,
   // displayed in the canonical PORTFOLIO_HOTELS order.
   const [portfolioHotels, setPortfolioHotels] = useState<string[]>(() => [...PORTFOLIO_HOTELS]);
+
+  // Guard: ignore attempts to set a view mode that's not allowed
+  const safeSetViewMode = useCallback((v: ViewMode) => {
+    if (allowedModes && !allowedModes.includes(v)) return;
+    setViewMode(v);
+  }, [allowedModes]);
   const [forecastRows, setForecastRows] = useState<ForecastRow[]>([]);
+  const [weeklyRows, setWeeklyRows] = useState<WeeklyRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [dynamicHotels, setDynamicHotels] = useState<string[]>([]);
   const [dynamicYears, setDynamicYears] = useState<number[]>([]);
+  const [dynamicWeeks, setDynamicWeeks] = useState<string[]>([]);
   // All-years dataset, fetched lazily when viewMode === 'yearly'. Cached by
   // currency so flipping USD/Local refetches; flipping `year` does not.
   const [allYearsRows, setAllYearsRows] = useState<ForecastRow[]>([]);
@@ -113,6 +161,7 @@ export function useStatement() {
         if (controller.signal.aborted) return;
         setDynamicHotels(data.hotels ?? []);
         setDynamicYears(data.years ?? []);
+        setDynamicWeeks(data.weeks ?? []);
       } catch {
         // dejamos vacios; el hook seguira con los defaults estaticos como fallback
       }
@@ -154,6 +203,29 @@ export function useStatement() {
     return () => controller.abort();
   }, [year, currency]);
 
+  // Weekly Outlook snapshots (last 3 months) for the WoW progression chart — real published
+  // totals per week, independent of the main table fetch.
+  useEffect(() => {
+    const controller = new AbortController();
+    (async () => {
+      try {
+        // Fetch up to a year of weekly snapshots; the chart slices a period-relative 3-month
+        // window client-side (a past month needs snapshots from before today's 3-month window).
+        const params = new URLSearchParams({ year: String(year), currency, months: '12' });
+        const res = await fetch(`/api/aag/weekly-outlook?${params}`, { signal: controller.signal });
+        if (!res.ok) {
+          if (!controller.signal.aborted) setWeeklyRows([]);
+          return;
+        }
+        const data: WeeklyRow[] = await res.json();
+        if (!controller.signal.aborted) setWeeklyRows(data);
+      } catch {
+        if (!controller.signal.aborted) setWeeklyRows([]);
+      }
+    })();
+    return () => controller.abort();
+  }, [year, currency]);
+
   // Lazy fetch of the all-years dataset for the Yearly view. Triggers when
   // viewMode flips to 'yearly' and the cached currency doesn't match.
   useEffect(() => {
@@ -178,24 +250,95 @@ export function useStatement() {
     return () => controller.abort();
   }, [viewMode, currency, allYearsLoaded]);
 
-  // The server already returns rows in the requested currency, so no
-  // client-side conversion is needed.
-  const convertedRows = useMemo(() => forecastRows, [forecastRows]);
+  // Build the weekly drift list from the DB weeks when available, otherwise fall
+  // back to the static WEEKLY_OUTLOOK_DRIFTS. Multipliers are auto-generated:
+  // they climb linearly from ~0.95 (oldest) to 1.000 (latest week).
+  const weeklyDrifts = useMemo(() => {
+    if (dynamicWeeks.length === 0) return WEEKLY_OUTLOOK_DRIFTS;
+    const sorted = [...dynamicWeeks].sort();
+    const n = sorted.length;
+    const BASE = 0.95; // oldest snapshot starts at 95% of latest Outlook
+    return sorted.map((w, i) => ({
+      snapshotDate: w,
+      multiplier: n === 1 ? 1 : BASE + (1 - BASE) * (i / (n - 1)),
+    }));
+  }, [dynamicWeeks]);
+
+  // When dynamic weeks arrive, ensure the selected week still exists. If the
+  // current selection is not in the new list, jump to the latest available week.
+  useEffect(() => {
+    if (weeklyDrifts.length === 0) return;
+    const latestSnap = weeklyDrifts[weeklyDrifts.length - 1].snapshotDate;
+    setWeek((prev) => {
+      if (weeklyDrifts.some((d) => d.snapshotDate === prev)) return prev;
+      return latestSnap;
+    });
+  }, [weeklyDrifts]);
+
+  const weekMultiplier = useMemo(
+    () => weeklyDrifts.find((d) => d.snapshotDate === week)?.multiplier ?? 1,
+    [week, weeklyDrifts],
+  );
+
+  // The server already returns rows in the requested currency, so no client-side conversion is
+  // needed. We do re-scale the active year's comparison (Outlook) rows by the selected week's WoW
+  // drift so every table/chart reflects how the Outlook stood that week; Budget and prior-year LY
+  // are left untouched. 'Current' (multiplier 1) is a no-op. The dedicated WoW progression chart
+  // (weeklyOutlookSeries) anchors on the raw rows so it stays independent of this selection.
+  const convertedRows = useMemo(() => {
+    if (weekMultiplier === 1) return forecastRows;
+    return forecastRows.map((r) =>
+      r.year === year && r.scenario === scenario ? scaleOutlook(r, weekMultiplier) : r,
+    );
+  }, [forecastRows, weekMultiplier, year, scenario]);
+
+  // ─── Hotel selection (unified across every view) ───────────────────
+  // All views filter by the same multi-hotel selection. Options come from the
+  // live dimensions feed when present, else the static portfolio list.
+  const baseHotels = dynamicHotels.length > 0 ? dynamicHotels : HOTELS;
+  const basePortfolioHotels = dynamicHotels.length > 0 ? dynamicHotels : PORTFOLIO_HOTELS;
+  const filteredHotels = allowedProps
+    ? baseHotels.filter((h) => allowedProps.includes(h))
+    : baseHotels;
+  const filteredPortfolioHotels = allowedProps
+    ? basePortfolioHotels.filter((h) => allowedProps.includes(h))
+    : basePortfolioHotels;
+
+  // Reconcile the selection when the available option set changes (live data
+  // loads / permissions narrow it): drop stale picks; if none remain, select all.
+  const optionsKey = filteredPortfolioHotels.join('|');
+  useEffect(() => {
+    setPortfolioHotels((prev) => {
+      const valid = prev.filter((h) => filteredPortfolioHotels.includes(h));
+      if (valid.length === 0) return [...filteredPortfolioHotels];
+      return valid.length === prev.length ? prev : valid;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [optionsKey]);
+
+  const selectedHotelSet = useMemo(() => new Set(portfolioHotels), [portfolioHotels]);
+  const allHotelsSelected = filteredPortfolioHotels.length > 0
+    && filteredPortfolioHotels.every((h) => selectedHotelSet.has(h));
+  // A row passes when the full set is selected (≡ "all hotels") or its hotel is picked.
+  const hotelInSelection = useCallback(
+    (h: string) => allHotelsSelected || selectedHotelSet.has(h),
+    [allHotelsSelected, selectedHotelSet],
+  );
 
   const currentYearRows = useMemo(
     () =>
       convertedRows.filter(
-        (r) => r.year === year && (hotel === '' || r.hotel === hotel),
+        (r) => r.year === year && hotelInSelection(r.hotel),
       ),
-    [convertedRows, year, hotel],
+    [convertedRows, year, hotelInSelection],
   );
 
   const lyYearRows = useMemo(
     () =>
       convertedRows.filter(
-        (r) => r.year === year - 1 && (hotel === '' || r.hotel === hotel),
+        (r) => r.year === year - 1 && hotelInSelection(r.hotel),
       ),
-    [convertedRows, year, hotel],
+    [convertedRows, year, hotelInSelection],
   );
 
   const metricDef = METRICS_BY_KEY[metric];
@@ -338,8 +481,8 @@ export function useStatement() {
   }, [allYearsBudgetFxByKey, currency]);
 
   const allYearsHotelRows = useMemo(
-    () => allYearsRows.filter((r) => hotel === '' || r.hotel === hotel),
-    [allYearsRows, hotel],
+    () => allYearsRows.filter((r) => hotelInSelection(r.hotel)),
+    [allYearsRows, hotelInSelection],
   );
 
   const allYearsHotelRowsNoXR = useMemo(
@@ -376,7 +519,7 @@ export function useStatement() {
   // is driven by `portfolioHotels`, ordered by PORTFOLIO_HOTELS so the column
   // order stays stable regardless of click sequence.
   const portfolio = useMemo<PortfolioData>(() => {
-    const orderedSelection = PORTFOLIO_HOTELS.filter((h) => portfolioHotels.includes(h));
+    const orderedSelection = filteredPortfolioHotels.filter((h) => portfolioHotels.includes(h));
     const allCurrentYear = convertedRows.filter((r) => r.year === year);
     const allLyYear = convertedRows.filter((r) => r.year === year - 1);
 
@@ -403,39 +546,95 @@ export function useStatement() {
       budget: totalBudget,
       ly: totalLy,
       currentNoXR: totalCurrent.map(restateAtBudgetFx),
+      // Budget at Budget FX = Budget unchanged (restatement factor = 1 by construction).
+      // Intentional alias — all consumers are read-only so a copy is unnecessary.
+      budgetNoXR: totalBudget,
       lyNoXR: totalLy.map(restateAtBudgetFx),
     };
 
     return { groups, total };
-  }, [convertedRows, year, scenario, scope, periodMonth, portfolioHotels, restateAtBudgetFx]);
+  }, [convertedRows, year, scenario, scope, periodMonth, portfolioHotels, filteredPortfolioHotels, restateAtBudgetFx]);
 
   // WoW progression of the Outlook for the selected period (month + scope) and
   // selected metric, aggregated across the chosen portfolio total. Each point
   // is an Outlook snapshot taken at a different week; Budget is shown as a
   // constant horizontal reference.
-  const weeklyOutlookSeries = useMemo<WeeklyOutlookPoint[]>(() => {
-    if (portfolio.groups.length === 0) return [];
-    const sumMetric = (rs: ForecastRow[]) => rs.reduce((s, r) => s + metricDef.calc(r), 0);
-    const baseOutlook = sumMetric(portfolio.total.current);
-    const baseBudget = sumMetric(portfolio.total.budget);
-    return WEEKLY_OUTLOOK_DRIFTS.map(({ weekLabel, multiplier }) => ({
-      week: weekLabel,
-      outlook: baseOutlook * multiplier,
-      budget: baseBudget,
-    }));
-  }, [portfolio, metricDef]);
+  const weeklyOutlookSeries = useMemo<{ points: Array<Record<string, number | string>>; hotels: string[] }>(() => {
+    const orderedSelection = filteredPortfolioHotels.filter((h) => portfolioHotels.includes(h));
+    if (orderedSelection.length === 0 || weeklyRows.length === 0) return { points: [], hotels: [] };
+    // Group the real weekly snapshots by week, then by hotel — one Outlook line per hotel so the
+    // chart compares how each hotel forecast moved week to week.
+    const selected = new Set(orderedSelection);
+    const byWeek = new Map<string, Map<string, WeeklyRow[]>>();
+    for (const r of weeklyRows) {
+      if (!selected.has(r.hotel)) continue;
+      let wh = byWeek.get(r.week);
+      if (!wh) { wh = new Map(); byWeek.set(r.week, wh); }
+      const arr = wh.get(r.hotel);
+      if (arr) arr.push(r); else wh.set(r.hotel, [r]);
+    }
+    const allWeeks = [...byWeek.keys()].sort();
+    if (allWeeks.length === 0) return { points: [], hotels: [] };
+
+    // Anchor the window on the selected period's close. A month's Outlook stops moving once its
+    // close lands (~day 10-12 of the following month); we keep showing that closed value for a
+    // short tail (FLAT_TAIL_WEEKS) and the trailing 3 months before it. So a past month reveals
+    // how its Outlook fell into the close instead of a long flat line, while the open period
+    // (close still in the future → anchor capped at the latest snapshot) shows up to today.
+    const FLAT_TAIL_WEEKS = 3;
+    const lastMonthIdx = scope === 'fy' ? 11 : MONTHS.indexOf(periodMonth);
+    const closeDate = new Date(year, lastMonthIdx + 1, 12);
+    const latest = new Date(`${allWeeks[allWeeks.length - 1]}T00:00:00`);
+    let anchorEnd = new Date(closeDate.getTime() + FLAT_TAIL_WEEKS * 7 * 86_400_000);
+    if (anchorEnd > latest) anchorEnd = latest;
+    const windowStart = new Date(anchorEnd);
+    windowStart.setMonth(windowStart.getMonth() - 3);
+    const weeks = allWeeks.filter((wk) => {
+      const d = new Date(`${wk}T00:00:00`);
+      return d >= windowStart && d <= anchorEnd;
+    });
+
+    const points = weeks.map((wk) => {
+      const wh = byWeek.get(wk)!;
+      const point: Record<string, number | string> = { week: wk };
+      for (const hotel of orderedSelection) {
+        const rows = wh.get(hotel);
+        point[hotel] = rows ? (aggregateRowsMetric(filterByPeriod(rows, scope, periodMonth), metricDef) ?? 0) : 0;
+      }
+      return point;
+    });
+    // Per-hotel period Budget (constant across weeks) → flat dashed reference line per hotel,
+    // so you can see each hotel's Outlook fall relative to its budget. Keyed `${hotel}__budget`.
+    const budgetByHotel: Record<string, number> = {};
+    for (const hotel of orderedSelection) {
+      const bRows = filterByPeriod(
+        forecastRows.filter((r) => r.scenario === 'Budget' && r.hotel === hotel && r.year === year),
+        scope, periodMonth,
+      );
+      budgetByHotel[hotel] = aggregateRowsMetric(bRows, metricDef) ?? 0;
+    }
+    for (const point of points) {
+      for (const hotel of orderedSelection) point[`${hotel}__budget`] = budgetByHotel[hotel];
+    }
+    return { points, hotels: orderedSelection };
+  }, [weeklyRows, forecastRows, portfolioHotels, filteredPortfolioHotels, scope, periodMonth, year, metricDef]);
+
+  const hotelSelectionLabel = allHotelsSelected
+    ? 'All hotels'
+    : `${portfolioHotels.length} hotel${portfolioHotels.length === 1 ? '' : 's'}`;
 
   return {
     year, setYear,
-    hotel, setHotel,
+    week, setWeek,
     metric, setMetric,
     scenario, setScenario,
     scope, setScope,
     periodMonth, setPeriodMonth,
-    viewMode, setViewMode,
+    viewMode, setViewMode: safeSetViewMode,
     currency, setCurrency,
     basis, setBasis,
     portfolioHotels, setPortfolioHotels,
+    hotelSelectionLabel,
     metricDef,
     chartSeries,
     periodCurrent,
@@ -456,12 +655,17 @@ export function useStatement() {
     portfolio,
     weeklyOutlookSeries,
     loading,
-    hotelOptions: dynamicHotels.length > 0 ? dynamicHotels : HOTELS,
-    portfolioHotelOptions: dynamicHotels.length > 0 ? dynamicHotels : PORTFOLIO_HOTELS,
+    // Newest snapshot first for the dropdown; latestWeek lets the UI mark the current one.
+    weekOptions: [...weeklyDrifts].reverse().map((d) => d.snapshotDate),
+    latestWeek: weeklyDrifts[weeklyDrifts.length - 1]?.snapshotDate ?? '',
+    hotelOptions: filteredHotels,
+    portfolioHotelOptions: filteredPortfolioHotels,
     yearOptions: dynamicYears.length > 0 ? dynamicYears : YEARS,
     scenarioOptions: COMPARISON_SCENARIOS,
     monthOptions: MONTHS,
     currencyOptions: CURRENCIES,
     basisOptions: BASES,
+    allowedViewModes: allowedModes,
+    singlePropertyLock: allowedProps && allowedProps.length === 1,
   };
 }

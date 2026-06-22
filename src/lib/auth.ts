@@ -1,12 +1,8 @@
-import type { NextAuthOptions } from "next-auth";
+import type { NextAuthOptions, Session } from "next-auth";
+import { getServerSession } from "next-auth";
 import AzureADProvider from "next-auth/providers/azure-ad";
-import CredentialsProvider from "next-auth/providers/credentials";
 
 const useSecureCookies = (process.env.NEXTAUTH_URL ?? "").startsWith("https://");
-
-const BYPASS_ENABLED =
-  process.env.NODE_ENV !== "production" &&
-  process.env.AUTH_BYPASS_LOCAL === "true";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -15,22 +11,6 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.AUTH_AZURE_AD_CLIENT_SECRET!,
       tenantId: process.env.AUTH_AZURE_AD_TENANT_ID!,
     }),
-    ...(BYPASS_ENABLED
-      ? [
-          CredentialsProvider({
-            id: "dev-bypass",
-            name: "Dev Login",
-            credentials: {},
-            async authorize() {
-              return {
-                id: "dev-local",
-                email: "dev@local.test",
-                name: "Dev User",
-              };
-            },
-          }),
-        ]
-      : []),
   ],
   callbacks: {
     async jwt({ token, profile }) {
@@ -97,3 +77,25 @@ export const authOptions: NextAuthOptions = {
     },
   },
 };
+
+/**
+ * True only in local development with AUTH_BYPASS=1. Never true in production
+ * (guarded by NODE_ENV), so it cannot weaken auth on a deployed environment.
+ */
+export function isDevAuthBypass(): boolean {
+  return process.env.NODE_ENV === "development" && process.env.AUTH_BYPASS === "1";
+}
+
+/**
+ * Returns the authenticated session, or — only under isDevAuthBypass() — a
+ * synthetic session so API routes work without an Azure AD login (mirrors the
+ * middleware/page bypass). The synthetic email comes from AUTH_BYPASS_EMAIL,
+ * falling back to a dummy local address. Production behaviour is unchanged.
+ */
+export async function getSessionOrBypass(): Promise<Session | null> {
+  if (isDevAuthBypass()) {
+    const email = process.env.AUTH_BYPASS_EMAIL || "dev@localhost";
+    return { user: { email }, expires: "" } as Session;
+  }
+  return getServerSession(authOptions);
+}

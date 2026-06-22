@@ -1,0 +1,67 @@
+import { pool } from './db';
+import { SECTION_LABELS } from './section-keys';
+import { isDevAuthBypass } from './auth';
+
+export interface UserPermissions {
+  hasFullAccess: boolean;
+  sections: Record<string, string[]>; // section_key → allowed_properties
+}
+
+/**
+ * Fetch all permission rows for an email.
+ * - `_admin_all` row present → hasFullAccess: true (admin).
+ * - Other rows present       → restricted to those section_keys.
+ * - No rows at all           → hasFullAccess: false, no sections (denied).
+ */
+export async function getUserPermissions(email: string): Promise<UserPermissions> {
+  // Local-dev bypass: grant full access so the whole app is visible without a
+  // real login. Guarded by NODE_ENV — never active in production.
+  if (isDevAuthBypass()) {
+    return { hasFullAccess: true, sections: {} };
+  }
+  const { rows } = await pool.query<{ section_key: string; allowed_properties: string[] }>(
+    'SELECT section_key, allowed_properties FROM auth_quanta.user_permissions WHERE LOWER(email) = LOWER($1)',
+    [email],
+  );
+  if (rows.length === 0) {
+    return { hasFullAccess: false, sections: {} };
+  }
+  if (rows.some((r) => r.section_key.trim().toLowerCase() === '_admin_all')) {
+    return { hasFullAccess: true, sections: {} };
+  }
+  const sections: Record<string, string[]> = {};
+  for (const row of rows) {
+    sections[row.section_key] = row.allowed_properties ?? [];
+  }
+  return { hasFullAccess: false, sections };
+}
+
+export async function hasAccessToSection(email: string, sectionKey: string): Promise<boolean> {
+  const perms = await getUserPermissions(email);
+  if (perms.hasFullAccess) return true;
+  return sectionKey in perms.sections;
+}
+
+/**
+ * Returns the allowed properties for a section, or null if all are allowed.
+ */
+export async function getAllowedProperties(email: string, sectionKey: string): Promise<string[] | null> {
+  const perms = await getUserPermissions(email);
+  if (perms.hasFullAccess) return null;
+  const props = perms.sections[sectionKey];
+  if (!props || props.length === 0) return null;
+  return props;
+}
+
+/**
+ * Returns the list of section_keys the user can access, with visible labels.
+ */
+export async function getAllowedSectionsList(email: string): Promise<{ key: string; label: string }[]> {
+  const perms = await getUserPermissions(email);
+  if (perms.hasFullAccess) {
+    return Object.entries(SECTION_LABELS).map(([key, label]) => ({ key, label }));
+  }
+  return Object.keys(perms.sections)
+    .filter((key) => key in SECTION_LABELS)
+    .map((key) => ({ key, label: SECTION_LABELS[key] }));
+}

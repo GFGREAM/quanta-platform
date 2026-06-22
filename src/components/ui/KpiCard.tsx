@@ -7,11 +7,15 @@ type Props = {
   /** Overrides the muted gray default for the `sub` line (e.g. success/danger
    *  when the sub conveys a positive/negative delta). */
   subColor?: string;
+  /** Optional second sub shown right-aligned on the same line as `sub`
+   *  (e.g. a "vs LY" delta beside a "vs budget" one). */
+  subRight?: string;
+  subRightColor?: string;
   /** Compact mode for mobile views — smaller text and padding. */
   compact?: boolean;
 };
 
-export default function KpiCard({ label, value, sub, color, accent, subColor, compact }: Props) {
+export default function KpiCard({ label, value, sub, color, accent, subColor, subRight, subRightColor, compact }: Props) {
   return (
     <div
       className={`relative overflow-hidden rounded-lg border bg-white flex flex-col transition-shadow ${compact ? 'p-3 gap-1' : 'p-4 gap-1.5 hover:shadow-md'}`}
@@ -29,11 +33,16 @@ export default function KpiCard({ label, value, sub, color, accent, subColor, co
       >
         {value}
       </div>
-      {sub && (
+      {subRight ? (
+        <div className={`flex items-center justify-between gap-2 ${compact ? 'text-[0.625rem]' : 'text-xs'}`}>
+          <span style={{ color: subColor ?? 'var(--text-secondary)' }}>{sub}</span>
+          <span style={{ color: subRightColor ?? 'var(--text-secondary)' }}>{subRight}</span>
+        </div>
+      ) : sub ? (
         <div className={compact ? 'text-[0.625rem]' : 'text-xs'} style={{ color: subColor ?? 'var(--text-secondary)' }}>
           {sub}
         </div>
-      )}
+      ) : null}
       {accent && (
         <div
           className="absolute bottom-0 left-0 right-0 h-[3px]"

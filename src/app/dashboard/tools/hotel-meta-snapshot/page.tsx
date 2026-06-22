@@ -32,6 +32,14 @@ const INITIAL_FORM: FormState = {
   email: '',
 };
 
+const PERIOD_OPTIONS = [
+  { days: 7, label: '1 week' },
+  { days: 14, label: '2 weeks' },
+  { days: 30, label: '1 month' },
+  { days: 90, label: '3 months' },
+  { days: 180, label: '6 months' },
+];
+
 type Status = 'idle' | 'submitting' | 'success' | 'error';
 
 function validUrl(value: string, mustInclude: string): boolean {
@@ -62,6 +70,9 @@ export default function HotelMetaSnapshotPage() {
   const [progressPct, setProgressPct] = useState(2);
   const [activeStep, setActiveStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
+  const [periodDays, setPeriodDays] = useState(180);
+  const [warnOpen, setWarnOpen] = useState(false);
+  const [missingPlatforms, setMissingPlatforms] = useState<string[]>([]);
 
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -123,60 +134,63 @@ export default function HotelMetaSnapshotPage() {
     const errs: string[] = [];
     const newErrors: Record<string, boolean> = {};
 
-    if (!form.hotelName.trim()) {
-      errs.push('Hotel name');
-      newErrors.hotelName = true;
-    }
-    if (!form.city.trim()) {
-      errs.push('City');
-      newErrors.city = true;
-    }
-    if (!validGoogleMapsUrl(form.googleUrl.trim())) {
+    if (!form.hotelName.trim()) { errs.push('Hotel name'); newErrors.hotelName = true; }
+    if (!form.city.trim()) { errs.push('City'); newErrors.city = true; }
+
+    const g = form.googleUrl.trim();
+    if (g && !validGoogleMapsUrl(g)) {
       errs.push('Google URL must be from google.com/maps/ (not Travel or Search)');
       newErrors.googleUrl = true;
     }
-    if (!validUrl(form.tripadvisorUrl.trim(), 'tripadvisor.')) {
-      errs.push('valid TripAdvisor URL');
-      newErrors.tripadvisorUrl = true;
+    const t = form.tripadvisorUrl.trim();
+    if (t && !validUrl(t, 'tripadvisor.')) { errs.push('valid TripAdvisor URL'); newErrors.tripadvisorUrl = true; }
+    const b = form.bookingUrl.trim();
+    if (b && !validUrl(b, 'booking.')) { errs.push('valid Booking URL'); newErrors.bookingUrl = true; }
+    const ex = form.expediaUrl.trim();
+    if (ex && !validUrl(ex, 'expedia.')) { errs.push('valid Expedia URL'); newErrors.expediaUrl = true; }
+
+    if (!g && !t && !b && !ex) {
+      errs.push('at least one review platform URL (Google, TripAdvisor, Booking, or Expedia)');
     }
-    if (!validUrl(form.bookingUrl.trim(), 'booking.')) {
-      errs.push('valid Booking URL');
-      newErrors.bookingUrl = true;
-    }
-    if (!validUrl(form.expediaUrl.trim(), 'expedia.')) {
-      errs.push('valid Expedia URL');
-      newErrors.expediaUrl = true;
-    }
-    if (!form.email.trim()) {
-      errs.push('Email is required to receive the report');
-      newErrors.email = true;
-    } else if (!validEmail(form.email.trim())) {
-      errs.push('valid email format');
-      newErrors.email = true;
-    }
+
+    if (!form.email.trim()) { errs.push('Email is required to receive the report'); newErrors.email = true; }
+    else if (!validEmail(form.email.trim())) { errs.push('valid email format'); newErrors.email = true; }
 
     setErrors(newErrors);
     return errs;
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     const errs = validateAll();
-    if (errs.length) {
-      alert('Please fix: ' + errs.join(', '));
+    if (errs.length) { alert('Please fix: ' + errs.join(', ')); return; }
+
+    const missing: string[] = [];
+    if (!form.googleUrl.trim()) missing.push('Google');
+    if (!form.tripadvisorUrl.trim()) missing.push('TripAdvisor');
+    if (!form.bookingUrl.trim()) missing.push('Booking');
+    if (!form.expediaUrl.trim()) missing.push('Expedia');
+
+    if (missing.length > 0) {
+      setMissingPlatforms(missing);
+      setWarnOpen(true);
       return;
     }
+    launchSnapshot();
+  };
+
+  const launchSnapshot = async () => {
+    setWarnOpen(false);
     setStatus('submitting');
     setErrorMessage('');
     startProgress();
 
-    // Generar job_id único en el cliente
     const jobId = crypto.randomUUID();
 
     const payload = {
       job_id: jobId,
       hotel_name: form.hotelName.trim(),
       city: form.city.trim(),
-      period_days: 180,
+      period_days: periodDays,
       google_url: form.googleUrl.trim(),
       tripadvisor_url: form.tripadvisorUrl.trim(),
       booking_url: form.bookingUrl.trim(),
@@ -246,6 +260,8 @@ export default function HotelMetaSnapshotPage() {
       setStatus('error');
     }
   };
+
+  const periodLabel = PERIOD_OPTIONS.find((o) => o.days === periodDays)?.label ?? '6 months';
 
   const inputStyle = (hasError: boolean): React.CSSProperties => ({
     width: '100%',
@@ -347,15 +363,42 @@ export default function HotelMetaSnapshotPage() {
                 lineHeight: 1.5,
               }}
             >
-              📅 The analysis covers the most recent 6 months of reviews across all platforms.
+              📅 The analysis covers the most recent {periodLabel} of reviews across all platforms.
             </p>
+
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#1E2756', marginBottom: '6px' }}>
+                Analysis time range
+              </label>
+              <select
+                value={periodDays}
+                onChange={(e) => setPeriodDays(Number(e.target.value))}
+                style={{
+                  width: '100%',
+                  padding: '10px 13px',
+                  border: '1.5px solid #D5DDE5',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  color: '#1E2756',
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                  background: '#fff',
+                  transition: 'border-color 0.2s',
+                  cursor: 'pointer',
+                }}
+              >
+                {PERIOD_OPTIONS.map((o) => (
+                  <option key={o.days} value={o.days}>{o.label}</option>
+                ))}
+              </select>
+            </div>
 
             <div style={sectionLabelStyle}>
               <span>Platform URLs *</span>
               <div style={{ flex: 1, height: '1px', background: '#EEF2F5', marginLeft: '8px' }} />
             </div>
             <p style={{ fontSize: '11px', color: '#aab0bb', marginBottom: '12px' }}>
-              All 4 URLs are required to ensure exact hotel matching.
+              At least one URL is required. Provide all 4 for best results.
             </p>
 
             <div style={urlRowStyle}>
@@ -597,6 +640,41 @@ export default function HotelMetaSnapshotPage() {
           </div>
         )}
       </div>
+
+      {warnOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setWarnOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(30,39,86,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: '12px', padding: '24px', maxWidth: '420px', width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}
+          >
+            <h3 style={{ margin: 0, marginBottom: '10px', fontSize: '17px', fontWeight: 700, color: '#1E2756' }}>
+              Missing review platforms
+            </h3>
+            <p style={{ margin: 0, marginBottom: '18px', fontSize: '14px', color: '#444', lineHeight: 1.5 }}>
+              No URL provided for: <strong>{missingPlatforms.join(', ')}</strong>. Do you want to continue anyway?
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setWarnOpen(false)}
+                style={{ background: '#fff', color: '#1E2756', border: '1px solid #C9D2D6', padding: '10px 18px', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={launchSnapshot}
+                style={{ background: '#5BAAB3', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx>{`
         @keyframes snapshot-spin {

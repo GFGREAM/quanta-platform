@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getSessionOrBypass } from "@/lib/auth";
 import { WORKSPACE_ROLE_MAP } from "@/lib/powerbi-config";
 import { ConfidentialClientApplication } from "@azure/msal-node";
 
@@ -150,7 +149,7 @@ async function generateEmbedToken(
 
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSessionOrBypass();
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

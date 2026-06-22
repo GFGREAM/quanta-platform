@@ -1,12 +1,8 @@
 import { getToken } from "next-auth/jwt";
 import { NextRequest, NextResponse } from "next/server";
 
-const BYPASS_ENABLED =
-  process.env.NODE_ENV !== "production" &&
-  process.env.AUTH_BYPASS_LOCAL === "true";
-
 export async function middleware(request: NextRequest) {
-  if (BYPASS_ENABLED) {
+  if (process.env.NODE_ENV === "development" && process.env.AUTH_BYPASS === "1") {
     return NextResponse.next();
   }
 

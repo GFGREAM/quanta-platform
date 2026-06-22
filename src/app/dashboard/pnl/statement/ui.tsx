@@ -7,14 +7,21 @@ import { fmtMoney, type Basis, type Currency, type MetricFormat, type Scope } fr
 import { varianceStyle } from './tableConfig';
 import type { ViewMode } from './useStatement';
 
-// Re-export MultiSelect from its promoted location so existing imports still work.
+// Re-export MultiSelect / SingleSelect from their promoted location so existing imports still work.
 export { MultiSelect } from '@/components/ui/MultiSelect';
+export { SingleSelect } from '@/components/ui/SingleSelect';
 
 // ─── Chart color constants ──────────────────────────────────────
 // Recharts strokes need literal hex (no CSS-var resolution inside SVG attributes).
 export const COLOR_COMPARISON = '#00AFAD'; // var(--accent) — Actual/Outlook/Forecast line
 export const COLOR_BUDGET = '#172951';     // var(--primary) — Budget reference line
 export const COLOR_LY = '#9CA3AF';         // var(--text-muted) — Last Year reference line
+
+// Distinct strokes for the per-hotel WoW lines (cycled when more hotels than colors).
+export const HOTEL_PALETTE = [
+  '#00AFAD', '#172951', '#E8743B', '#1AA260', '#9B59B6', '#E74C3C',
+  '#3498DB', '#F1C40F', '#16A085', '#D35400', '#7F8C8D', '#C0392B',
+];
 
 // ─── Label maps ─────────────────────────────────────────────────
 

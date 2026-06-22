@@ -1,17 +1,11 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getSessionOrBypass } from "@/lib/auth";
 import { pool } from "@/lib/db";
+import { getPnlAllowedHotels } from "../permissions";
 
-// Parser local de NUMERIC. pg devuelve NUMERIC como string para preservar
-// precision; convertimos a number porque los montos caben sin perdida en
-// el rango de Number de JS.
 const asNum = (v: unknown): number =>
   v === null || v === undefined ? 0 : Number(v);
 
-// ForecastRow shape — debe coincidir EXACTAMENTE con la interface en
-// src/app/dashboard/pnl/statement/data.ts. Si esa interface cambia, hay
-// que actualizar este endpoint tambien.
 interface ForecastRow {
   hotel: string;
   year: number;
@@ -38,14 +32,12 @@ interface ForecastRow {
   payingGuests: number;
 }
 
-// Query: trae year y year-1 de at_a_glance.aag, tomando solo el ultimo
-// snapshot por (hotel, data_type, year). Currency aplicada server-side:
-// si USD, usa columnas sin sufijo; si Local, usa *_local.
-//
-// IMPORTANTE: tratamos todas las filas como MTD (cada fila representa un mes
-// individual, no acumulado). El ytd_flag de la tabla es etiqueta del Excel
-// original, no afecta la magnitud del numero. Lo seteamos a 'MTD' siempre
-// en el output para que el cliente sume libremente segun el scope.
+// ─── SQL templates ─────────────────────────────────────────────
+// Each has an unfiltered and a hotel-filtered variant.
+// The filtered variant appends a hotel = ANY($N) clause to both
+// the CTE and the main query.
+
+// Specific year: $1=year, $2=currency
 const SQL_YEAR = `
 WITH ultimos_snapshots AS (
   SELECT hotel, data_type, year, MAX(week) AS max_week
@@ -84,8 +76,47 @@ JOIN ultimos_snapshots us
 ORDER BY a.hotel, a.year, a.month_name, a.data_type;
 `;
 
-// "All years" variant — same shape, no year filter. Used by the Yearly view
-// which renders one column per year. The currency placeholder is $1 here.
+// Specific year + hotel filter: $1=year, $2=currency, $3=hotels[]
+const SQL_YEAR_FILTERED = `
+WITH ultimos_snapshots AS (
+  SELECT hotel, data_type, year, MAX(week) AS max_week
+  FROM at_a_glance.aag
+  WHERE year IN ($1::int, $1::int - 1)
+    AND hotel = ANY($3::text[])
+  GROUP BY hotel, data_type, year
+)
+SELECT
+  a.hotel,
+  a.year                          AS year,
+  a.month_name                        AS month,
+  a.data_type                         AS scenario,
+  a.company,
+  a.complex_name                      AS complex,
+  a.exchange_rate                     AS fx_rate,
+  COALESCE(a.rooms, 0)                AS rooms,
+  COALESCE(a.availability, 0)         AS availability,
+  a.rooms_sold,
+  a.rooms_comp,
+  CASE WHEN $2 = 'Local' THEN a.rooms_revenue_local                ELSE a.rooms_revenue                END AS rooms_revenue,
+  CASE WHEN $2 = 'Local' THEN a.club_maintenance_fee_local         ELSE a.club_maintenance_fee         END AS club_maint_fee,
+  CASE WHEN $2 = 'Local' THEN a.timeshare_maintenance_fee_local    ELSE a.timeshare_maintenance_fee    END AS timeshare_maint_fee,
+  CASE WHEN $2 = 'Local' THEN a.other_revenue_local                ELSE a.other_revenue                END AS other_revenue,
+  CASE WHEN $2 = 'Local' THEN a.departmental_expenses_local        ELSE a.departmental_expenses        END AS departmental_expenses,
+  CASE WHEN $2 = 'Local' THEN a.undistributed_expenses_local       ELSE a.undistributed_expenses       END AS undistributed_expenses,
+  CASE WHEN $2 = 'Local' THEN a.other_expenses_local               ELSE a.other_expenses               END AS other_expenses,
+  CASE WHEN $2 = 'Local' THEN a.non_operating_local                ELSE a.non_operating                END AS non_operating,
+  a.number_of_guests                  AS guests,
+  a.number_of_paying_guests           AS paying_guests
+FROM at_a_glance.aag a
+JOIN ultimos_snapshots us
+  ON us.hotel = a.hotel
+  AND us.data_type = a.data_type
+  AND us.year = a.year
+  AND us.max_week = a.week
+ORDER BY a.hotel, a.year, a.month_name, a.data_type;
+`;
+
+// All years: $1=currency
 const SQL_ALL = `
 WITH ultimos_snapshots AS (
   SELECT hotel, data_type, year, MAX(week) AS max_week
@@ -123,9 +154,48 @@ JOIN ultimos_snapshots us
 ORDER BY a.hotel, a.year, a.month_name, a.data_type;
 `;
 
+// All years + hotel filter: $1=currency, $2=hotels[]
+const SQL_ALL_FILTERED = `
+WITH ultimos_snapshots AS (
+  SELECT hotel, data_type, year, MAX(week) AS max_week
+  FROM at_a_glance.aag
+  WHERE hotel = ANY($2::text[])
+  GROUP BY hotel, data_type, year
+)
+SELECT
+  a.hotel,
+  a.year                          AS year,
+  a.month_name                        AS month,
+  a.data_type                         AS scenario,
+  a.company,
+  a.complex_name                      AS complex,
+  a.exchange_rate                     AS fx_rate,
+  COALESCE(a.rooms, 0)                AS rooms,
+  COALESCE(a.availability, 0)         AS availability,
+  a.rooms_sold,
+  a.rooms_comp,
+  CASE WHEN $1 = 'Local' THEN a.rooms_revenue_local                ELSE a.rooms_revenue                END AS rooms_revenue,
+  CASE WHEN $1 = 'Local' THEN a.club_maintenance_fee_local         ELSE a.club_maintenance_fee         END AS club_maint_fee,
+  CASE WHEN $1 = 'Local' THEN a.timeshare_maintenance_fee_local    ELSE a.timeshare_maintenance_fee    END AS timeshare_maint_fee,
+  CASE WHEN $1 = 'Local' THEN a.other_revenue_local                ELSE a.other_revenue                END AS other_revenue,
+  CASE WHEN $1 = 'Local' THEN a.departmental_expenses_local        ELSE a.departmental_expenses        END AS departmental_expenses,
+  CASE WHEN $1 = 'Local' THEN a.undistributed_expenses_local       ELSE a.undistributed_expenses       END AS undistributed_expenses,
+  CASE WHEN $1 = 'Local' THEN a.other_expenses_local               ELSE a.other_expenses               END AS other_expenses,
+  CASE WHEN $1 = 'Local' THEN a.non_operating_local                ELSE a.non_operating                END AS non_operating,
+  a.number_of_guests                  AS guests,
+  a.number_of_paying_guests           AS paying_guests
+FROM at_a_glance.aag a
+JOIN ultimos_snapshots us
+  ON us.hotel = a.hotel
+  AND us.data_type = a.data_type
+  AND us.year = a.year
+  AND us.max_week = a.week
+ORDER BY a.hotel, a.year, a.month_name, a.data_type;
+`;
+
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getSessionOrBypass();
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
@@ -141,16 +211,28 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "currency must be USD or Local" }, { status: 400 });
     }
 
+    const allowedHotels = await getPnlAllowedHotels(session.user.email);
+
+    // User has no pnl access at all → empty result
+    if (allowedHotels !== null && allowedHotels.length === 0) {
+      return NextResponse.json([]);
+    }
+
     const isAll = yearParam === "all";
     let result;
+
     if (isAll) {
-      result = await pool.query(SQL_ALL, [currencyParam]);
+      result = allowedHotels
+        ? await pool.query(SQL_ALL_FILTERED, [currencyParam, allowedHotels])
+        : await pool.query(SQL_ALL, [currencyParam]);
     } else {
       const year = Number(yearParam);
       if (!Number.isInteger(year)) {
         return NextResponse.json({ error: "year must be 'all' or an integer" }, { status: 400 });
       }
-      result = await pool.query(SQL_YEAR, [year, currencyParam]);
+      result = allowedHotels
+        ? await pool.query(SQL_YEAR_FILTERED, [year, currencyParam, allowedHotels])
+        : await pool.query(SQL_YEAR, [year, currencyParam]);
     }
 
     const rows: ForecastRow[] = result.rows.map((r) => ({

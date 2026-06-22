@@ -392,15 +392,17 @@ export function flowThruPct(current: ForecastRow[], reference: ForecastRow[]): n
 export const BG_GOOD = 'rgba(16, 185, 129, 0.10)';  // success @ 10%
 export const BG_BAD = 'rgba(239, 68, 68, 0.10)';    // danger @ 10%
 
-/** Green/red tinted style for variance cells.
- *  Accepts `number | null` so callers don't need to guard. */
+/** Variance cell styling — colors the TEXT green/red only (no background fill).
+ *  The translucent green/red chip background was removed across the P&L statement because the
+ *  large blocks of tinted color blurred the eye over the dense tables. `VariancePill` falls back
+ *  to plain colored text whenever the style has no `background`, so dropping it here is enough.
+ *  Accepts `number | null` so callers don't need to guard.
+ *  (BG_GOOD/BG_BAD remain exported — group-pipeline and market-share still use them.) */
 export function varianceStyle(varValue: number | null, higherIsBetter?: boolean): React.CSSProperties {
   if (higherIsBetter === undefined) return { color: 'var(--text-primary)' };
   if (varValue === null || varValue === 0 || !Number.isFinite(varValue)) {
     return { color: 'var(--text-secondary)' };
   }
   const isGood = higherIsBetter ? varValue > 0 : varValue < 0;
-  return isGood
-    ? { color: 'var(--success)', background: BG_GOOD }
-    : { color: 'var(--danger)', background: BG_BAD };
+  return { color: isGood ? 'var(--success)' : 'var(--danger)' };
 }

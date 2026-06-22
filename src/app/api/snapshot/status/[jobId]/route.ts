@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getSessionOrBypass } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -9,7 +8,7 @@ export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ jobId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
+  const session = await getSessionOrBypass();
   if (!session) {
     return NextResponse.json(
       { error: 'Unauthorized: no active session' },
