@@ -383,7 +383,7 @@ export default function UtilitiesPage() {
           })}
         </div>
 
-        {/* Row 2 — Costo por habitación ocupada (POR), disponible (PAR), o huésped (GUEST) */}
+        {/* Row 2 — Cost per occupied room (POR), available room (PAR), or guest (GUEST) */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
           {totals.map((t) => {
             const meta = UTILITY_META[t.utility];
@@ -398,14 +398,14 @@ export default function UtilitiesPage() {
             const valLy = div > 0 ? t.ly / div : NaN;
             const denomLabel =
               roomMetric === 'POR'
-                ? 'hab. ocupada'
+                ? 'occupied room'
                 : roomMetric === 'PAR'
-                  ? 'hab. disponible'
-                  : 'huésped';
+                  ? 'available room'
+                  : 'guest';
             return (
               <KpiCard
                 key={t.utility}
-                label={`Costo por ${denomLabel} · ${meta.label}`}
+                label={`Cost per ${denomLabel} · ${meta.label}`}
                 value={fmtUsd(valCY, { digits: 2 })}
                 accent={meta.color}
                 sub={variancesSub(valCY, valBud, valLy, 2)}
@@ -421,7 +421,7 @@ export default function UtilitiesPage() {
         >
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold" style={{ color: 'var(--primary)' }}>
-              Costo mensual por utility (USD)
+              Monthly utility cost (USD)
             </h3>
             <div
               className="inline-flex rounded-md border overflow-hidden shrink-0"
@@ -474,8 +474,8 @@ export default function UtilitiesPage() {
                   formatter={
                     ((value: unknown, name: unknown) => {
                       const n = typeof value === 'number' ? value : Number(value);
-                      if (name === 'Ocupación') return `${(n * 100).toFixed(1)}%`;
-                      if (name === 'Huéspedes') return `${n.toLocaleString('en-US')} guest-nights`;
+                      if (name === 'Occupancy') return `${(n * 100).toFixed(1)}%`;
+                      if (name === 'Guests') return `${n.toLocaleString('en-US')} guest-nights`;
                       return fmtUsd(n);
                     }) as (value: unknown, name: unknown) => string
                   }
@@ -514,7 +514,7 @@ export default function UtilitiesPage() {
                   yAxisId="right"
                   type="monotone"
                   dataKey="occupancy"
-                  name="Ocupación"
+                  name="Occupancy"
                   stroke="#6b7280"
                   strokeWidth={2}
                   strokeDasharray="2 3"
@@ -524,7 +524,7 @@ export default function UtilitiesPage() {
                   yAxisId="guests"
                   type="monotone"
                   dataKey="guests"
-                  name="Huéspedes"
+                  name="Guests"
                   stroke="#94a3b8"
                   strokeWidth={2}
                   strokeDasharray="5 3"

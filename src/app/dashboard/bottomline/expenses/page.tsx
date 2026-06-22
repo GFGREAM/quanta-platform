@@ -102,7 +102,7 @@ const DEPT_COSTS: MonthlyLineItem[] = [
             subLines: [
               { name: 'Commissions',           cy: expandMonthly(6000), bud: expandMonthly(5000), ly: expandMonthly(5500) },
               { name: 'Incentive Bonus',       cy: expandMonthly(7000), bud: expandMonthly(6000), ly: expandMonthly(6500) },
-              { name: 'Local Bonus / Bono Local', cy: expandMonthly(3000), bud: expandMonthly(2500), ly: expandMonthly(2800) },
+              { name: 'Local Bonus',           cy: expandMonthly(3000), bud: expandMonthly(2500), ly: expandMonthly(2800) },
               { name: 'Other Incentive Awards', cy: expandMonthly(2000), bud: expandMonthly(1500), ly: expandMonthly(1700) },
             ],
           },
@@ -122,7 +122,7 @@ const DEPT_COSTS: MonthlyLineItem[] = [
             cy: expandMonthly(8000), bud: expandMonthly(7500), ly: expandMonthly(7700),
             subLines: [
               { name: '13th Month Pay',                  cy: expandMonthly(2000), bud: expandMonthly(1900), ly: expandMonthly(1950) },
-              { name: 'Holiday Pay / Pago de Días Festivos', cy: expandMonthly(1500), bud: expandMonthly(1400), ly: expandMonthly(1450) },
+              { name: 'Holiday Pay',                     cy: expandMonthly(1500), bud: expandMonthly(1400), ly: expandMonthly(1450) },
               { name: 'Paid Time Off',                   cy: expandMonthly(1500), bud: expandMonthly(1400), ly: expandMonthly(1450) },
               { name: 'Severance Pay',                   cy: expandMonthly(1000), bud: expandMonthly(950),  ly: expandMonthly(975) },
               { name: 'Vacation Accrual',                cy: expandMonthly(1500), bud: expandMonthly(1400), ly: expandMonthly(1425) },
@@ -171,7 +171,7 @@ const DEPT_COSTS: MonthlyLineItem[] = [
           { name: 'Operating Equipment (OS)',         cy: expandMonthly(4000),  bud: expandMonthly(3800),  ly: expandMonthly(3900) },
           { name: 'Operating Supplies (OS)',          cy: expandMonthly(8000),  bud: expandMonthly(7600),  ly: expandMonthly(7800) },
           { name: 'Printing & Stationery',            cy: expandMonthly(2000),  bud: expandMonthly(2000),  ly: expandMonthly(1900) },
-          { name: 'Reservations - Hotel Expense / Gastos de Reservaciones - Hotel', cy: expandMonthly(6000), bud: expandMonthly(5700), ly: expandMonthly(5850) },
+          { name: 'Reservations - Hotel Expense', cy: expandMonthly(6000), bud: expandMonthly(5700), ly: expandMonthly(5850) },
           { name: 'Travel Agent Commissions',         cy: expandMonthly(5000),  bud: expandMonthly(4750),  ly: expandMonthly(4850) },
           { name: 'Travel Expense - Auto',            cy: expandMonthly(1500),  bud: expandMonthly(1400),  ly: expandMonthly(1450) },
           { name: 'Travel Expense - Other',           cy: expandMonthly(1500),  bud: expandMonthly(1400),  ly: expandMonthly(1450) },

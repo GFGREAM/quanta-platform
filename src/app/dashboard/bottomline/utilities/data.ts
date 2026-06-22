@@ -89,7 +89,7 @@ export const UTILITIES: Record<Utility, UtilitySeries> = {
 // --accent-light. Same three values feed UTILITY_META and CHART_SERIES,
 // so KPI accents and chart bars share one corporate palette.
 export const UTILITY_META = {
-  water:       { label: 'Agua',        unit: 'm³',  color: '#172951' }, // --primary (navy)
-  electricity: { label: 'Electricidad', unit: 'kWh', color: '#00AFAD' }, // --accent (teal)
+  water:       { label: 'Water',       unit: 'm³',  color: '#172951' }, // --primary (navy)
+  electricity: { label: 'Electricity', unit: 'kWh', color: '#00AFAD' }, // --accent (teal)
   gas:         { label: 'Gas',         unit: 'L',   color: '#69D9D0' }, // --accent-light
 } as const satisfies Record<Utility, { label: string; unit: string; color: string }>;
