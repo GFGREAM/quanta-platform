@@ -113,21 +113,17 @@ export default function UtilitiesPage() {
     return { cost, budget, ly };
   }, [totals]);
 
-  // Months before "today" in the selected year are closed (actuals);
-  // current month and beyond are forecast. Forecast data isn't loaded
-  // yet, so the chart filters those months out entirely.
-  const now = new Date();
-  const isClosedMonth = (i: number): boolean => {
-    const selectedYear = Number(year);
-    if (selectedYear < now.getFullYear()) return true;
-    if (selectedYear > now.getFullYear()) return false;
-    return i < now.getMonth();
-  };
-
   // Chart data — per-utility series + summed series across the active
   // utilities. Only closed months are kept; forecast months are dropped
   // from the X axis until real forecast data wires in.
   const chartData = useMemo(() => {
+    const now = new Date();
+    const isClosedMonth = (i: number): boolean => {
+      const selectedYear = Number(year);
+      if (selectedYear < now.getFullYear()) return true;
+      if (selectedYear > now.getFullYear()) return false;
+      return i < now.getMonth();
+    };
     const selected = UTILITIES_ORDER.filter((u) => utilitiesOn[u]);
     return MONTHS_SHORT
       .map((m, i) => ({ m, i }))
@@ -154,8 +150,6 @@ export default function UtilitiesPage() {
         row.guests = GUESTS[i];
         return row;
       });
-    // year is read via isClosedMonth — kept in deps so the chart
-    // re-derives when the Year selector changes.
   }, [utilitiesOn, year]);
 
   // Guest scale max — used to fit the guests line on its own hidden axis

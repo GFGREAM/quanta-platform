@@ -16,7 +16,7 @@ export const YEARS = ['2026', '2025', '2024'] as const;
 
 export const HOTELS = ['Fort'] as const;
 
-export const PROPERTY = { name: 'Fort', id: '12345', rooms: 200 } as const;
+const PROPERTY = { name: 'Fort', id: '12345', rooms: 200 } as const;
 
 // Days per month (non-leap; calendar drift doesn't matter for a mock).
 const DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
