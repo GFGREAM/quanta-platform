@@ -5,6 +5,11 @@ import dynamic from "next/dynamic";
 import { DollarSign, Info } from "lucide-react";
 import type { PowerBIFilter } from "@/components/powerbi/PowerBIEmbed";
 import { POWERBI_REPORTS } from "@/lib/powerbi-config";
+import { selectStyle } from "@/lib/selectStyle";
+import { MultiSelect } from "@/components/ui/MultiSelect";
+import EbitdaBridge from "./EbitdaBridge";
+import CompositeCharts from "./CompositeCharts";
+import OperatingKpisTable from "./OperatingKpisTable";
 
 const PowerBIEmbed = dynamic(
   () => import("@/components/powerbi/PowerBIEmbed"),
@@ -33,7 +38,7 @@ const HOTELS = [
   "Zoetry Marigot Bay",
 ];
 
-const YEARS = [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026, 2027] as const;
+const YEARS = [2027, 2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018] as const;
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -146,146 +151,25 @@ function HomeKpiCard({
   );
 }
 
-function FilterSelect({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: readonly (string | number)[];
-  onChange: (val: string) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium" style={{ color: "#475569" }}>
-        {label}
-      </label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-9 px-3 pr-8 rounded-md border text-sm bg-white appearance-none cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
-        style={{
-          borderColor: "var(--border)",
-          color: "var(--primary)",
-          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23172951' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
-          backgroundRepeat: "no-repeat",
-          backgroundPosition: "right 8px center",
-        }}
-      >
-        {options.map((opt) => (
-          <option key={String(opt)} value={String(opt)}>
-            {String(opt)}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-function MultiSelect({
-  label,
-  options,
-  selected,
-  onChange,
-}: {
-  label: string;
-  options: readonly string[];
-  selected: string[];
-  onChange: (val: string[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const allSelected = selected.length === options.length;
-
-  function toggleAll() {
-    onChange(allSelected ? [] : [...options]);
-  }
-
-  function toggleItem(item: string) {
-    if (selected.includes(item)) {
-      onChange(selected.filter((s) => s !== item));
-    } else {
-      onChange([...selected, item]);
-    }
-  }
-
-  const displayText = selected.length === 0 ? "All" : `${selected.length} selected`;
-
-  return (
-    <div className="flex flex-col gap-1 relative" ref={ref}>
-      <label className="text-xs font-medium" style={{ color: "#475569" }}>
-        {label}
-      </label>
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="h-9 px-3 pr-8 rounded-md border text-sm bg-white text-left cursor-pointer transition-colors outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
-        style={{
-          borderColor: "var(--border)",
-          color: "var(--primary)",
-          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23172951' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
-          backgroundRepeat: "no-repeat",
-          backgroundPosition: "right 8px center",
-        }}
-      >
-        {displayText}
-      </button>
-      {open && (
-        <div
-          className="absolute top-full left-0 mt-1 bg-white border rounded-md shadow-lg z-50 min-w-[180px] max-h-60 overflow-y-auto"
-          style={{ borderColor: "var(--border)" }}
-        >
-          <label className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 border-b" style={{ borderColor: "var(--border)", color: "var(--primary)" }}>
-            <input
-              type="checkbox"
-              checked={allSelected}
-              onChange={toggleAll}
-              className="accent-[var(--accent)]"
-            />
-            {allSelected ? "Clear" : "Select all"}
-          </label>
-          {options.map((opt) => (
-            <label
-              key={opt}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-gray-50"
-              style={{ color: "var(--primary)" }}
-            >
-              <input
-                type="checkbox"
-                checked={selected.includes(opt)}
-                onChange={() => toggleItem(opt)}
-                className="accent-[var(--accent)]"
-              />
-              {opt}
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function DashboardHome() {
   const [selectedHotels, setSelectedHotels] = useState<string[]>([]);
   const [compSet, setCompSet] = useState("CS1");
-  const [year, setYear] = useState("2026");
+  const [selectedYears, setSelectedYears] = useState<string[]>(["2026"]);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [metric, setMetric] = useState("USD");
   const [kpis, setKpis] = useState<KpiData>(EMPTY_KPIS);
   const [kpisLoading, setKpisLoading] = useState(false);
+  const oktRef = useRef<HTMLDivElement>(null);
+  const [rowHeight, setRowHeight] = useState<number | undefined>();
+
+  useEffect(() => {
+    const el = oktRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setRowHeight(el.offsetHeight));
+    ro.observe(el);
+    setRowHeight(el.offsetHeight);
+    return () => ro.disconnect();
+  }, []);
 
   const showLocalNote = metric === "Local" && selectedHotels.length === 0;
   const effectiveMetric = metric === "Local" && selectedHotels.length > 0 ? "Local" : "USD";
@@ -294,7 +178,7 @@ export default function DashboardHome() {
     setKpisLoading(true);
     const params = new URLSearchParams();
     if (selectedHotels.length > 0) params.set("hotel", selectedHotels.join(","));
-    params.set("year", year);
+    if (selectedYears.length > 0) params.set("year", selectedYears.join(","));
     if (selectedMonths.length > 0) params.set("month", selectedMonths.join(","));
     params.set("metric", effectiveMetric);
 
@@ -307,7 +191,7 @@ export default function DashboardHome() {
     } finally {
       if (!signal.aborted) setKpisLoading(false);
     }
-  }, [selectedHotels, year, selectedMonths, effectiveMetric]);
+  }, [selectedHotels, selectedYears, selectedMonths, effectiveMetric]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -338,7 +222,7 @@ export default function DashboardHome() {
       $schema: BASIC_SCHEMA,
       target: { table: "Date Table", column: "Year" },
       operator: "In",
-      values: [Number(year)],
+      values: selectedYears.map(Number),
     });
 
     if (selectedMonths.length > 0) {
@@ -358,26 +242,63 @@ export default function DashboardHome() {
     });
 
     return f;
-  }, [selectedHotels, compSet, year, selectedMonths, metric]);
+  }, [selectedHotels, compSet, selectedYears, selectedMonths, metric]);
 
   return (
-    <div className="p-6">
-      {/* Header + Filters row */}
-      <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold mb-1" style={{ color: "var(--primary)" }}>
-            At a Glance
-          </h1>
-          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-            Performance Dashboard Summary
-          </p>
-        </div>
-        <div className="grid grid-cols-2 md:flex md:flex-wrap items-end gap-3">
-          <MultiSelect label="Hotel" options={HOTELS} selected={selectedHotels} onChange={setSelectedHotels} />
-          <FilterSelect label="Comp Set" value={compSet} options={COMP_SETS} onChange={setCompSet} />
-          <FilterSelect label="Year" value={year} options={YEARS} onChange={setYear} />
-          <MultiSelect label="Month" options={MONTHS} selected={selectedMonths} onChange={setSelectedMonths} />
-          <FilterSelect label="Metric" value={metric} options={METRICS} onChange={setMetric} />
+    <div className="p-6 pb-0">
+      {/* Header + Filters row — patrón StatementDesktop */}
+      <div className="mb-3">
+        <h1 className="text-2xl font-bold tracking-tight m-0" style={{ color: 'var(--primary)' }}>
+          At a Glance
+        </h1>
+        <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+          Performance Dashboard Summary
+        </p>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap mb-3">
+        <MultiSelect
+          options={HOTELS}
+          selected={selectedHotels}
+          onChange={setSelectedHotels}
+          width="14rem"
+          placeholder="All hotels"
+          noun="hotels"
+        />
+        <MultiSelect
+          options={YEARS.map(String)}
+          selected={selectedYears}
+          onChange={setSelectedYears}
+          width="7.5rem"
+          placeholder="All years"
+          noun="years"
+        />
+        <MultiSelect
+          options={MONTHS}
+          selected={selectedMonths}
+          onChange={setSelectedMonths}
+          width="7.5rem"
+          placeholder="All months"
+          noun="months"
+        />
+        <select
+          className="h-9 w-24 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
+          style={selectStyle}
+          value={compSet}
+          onChange={(e) => setCompSet(e.target.value)}
+        >
+          {COMP_SETS.map((cs) => <option key={cs} value={cs}>{cs}</option>)}
+        </select>
+        <div className="flex rounded-lg p-[3px] gap-0.5" style={{ background: 'var(--muted)' }}>
+          {METRICS.map((m) => (
+            <button
+              key={m}
+              onClick={() => setMetric(m)}
+              className={`px-3 py-1.5 rounded-md text-[0.75rem] font-medium border-none cursor-pointer transition-all ${metric === m ? 'bg-white shadow-sm' : 'bg-transparent'}`}
+              style={{ color: metric === m ? 'var(--primary)' : 'var(--text-secondary)' }}
+            >
+              {m}
+            </button>
+          ))}
         </div>
       </div>
       {showLocalNote && (
@@ -388,7 +309,7 @@ export default function DashboardHome() {
           </p>
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-2">
         {KPI_CONFIG.map(({ key, label, color, invertColor }) => (
           <HomeKpiCard
             key={key}
@@ -402,16 +323,42 @@ export default function DashboardHome() {
           />
         ))}
       </div>
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      <div className="grid grid-cols-2 gap-4 mb-2 items-start">
+        <div className="flex flex-col gap-4" style={rowHeight ? { height: rowHeight } : {}}>
+          <div className="flex-1 min-h-0">
+            <EbitdaBridge
+              selectedHotels={selectedHotels}
+              selectedMonths={selectedMonths}
+              year={selectedYears[0] ?? "2026"}
+              metric={metric as "USD" | "Local"}
+            />
+          </div>
+          <div style={{ height: 196, flexShrink: 0 }}>
+            <CompositeCharts
+              selectedHotels={selectedHotels}
+              selectedMonths={selectedMonths}
+              year={selectedYears[0] ?? "2026"}
+              metric={metric as "USD" | "Local"}
+            />
+          </div>
+        </div>
+        <div ref={oktRef}>
+          <OperatingKpisTable
+            selectedHotels={selectedHotels}
+            selectedMonths={selectedMonths}
+            year={selectedYears[0] ?? "2026"}
+            compSet={compSet}
+            metric={metric as "USD" | "Local"}
+          />
+        </div>
+      </div>
+      {/* <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <PowerBIEmbed
           workspaceId={POWERBI_REPORTS.home.workspaceId}
           reportId={POWERBI_REPORTS.home.reportId}
           filters={filters}
         />
-      </div>
-      <p className="text-xs text-center mt-2" style={{ color: "var(--text-secondary)" }}>
-        {new Date().getFullYear()} GFG Asset Management. All Rights Reserved. CONFIDENTIAL &amp; PROPRIETARY. May not be reproduced or distributed without written permission.
-      </p>
+      </div> */}
     </div>
   );
 }
