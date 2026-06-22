@@ -22,10 +22,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           onMenuSelect={() => { setPinned(false); setHovered(false); }}
           onHoverChange={setHovered}
         />
-        <main className={`${pinned ? 'md:ml-60' : 'md:ml-16'} mt-32 p-6 transition-all duration-300`}>
-          <PermissionGate>
-            {children}
-          </PermissionGate>
+        <main className={`${pinned ? 'md:ml-60' : 'md:ml-16'} mt-32 transition-all duration-300`}>
+          <div className="p-6 pb-2">
+            <PermissionGate>
+              {children}
+            </PermissionGate>
+          </div>
+          <p className="text-xs text-center py-3" style={{ color: "var(--text-secondary)" }}>
+            &copy; 2026 GFG Asset Management. All Rights Reserved. CONFIDENTIAL &amp; PROPRIETARY. May not be reproduced or distributed without written permission.
+          </p>
         </main>
       </div>
     </PermissionsProvider>
