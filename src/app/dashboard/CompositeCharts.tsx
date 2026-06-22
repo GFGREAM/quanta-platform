@@ -32,14 +32,11 @@ function DonutChart({ title, segments }: { title: string; segments: Segment[] })
   const CX = 100, CY = 100, R = 90, RI = 42;
   const total = segments.reduce((s, seg) => s + seg.value, 0);
 
-  let cursor = 0;
-  const slices = segments.map((seg) => {
+  const slices = segments.reduce<Array<Segment & { start: number; end: number; sweep: number }>>((acc, seg) => {
+    const start = acc.length > 0 ? acc[acc.length - 1].end : 0;
     const sweep = (seg.value / total) * 360;
-    const start = cursor;
-    const end   = cursor + sweep;
-    cursor = end;
-    return { ...seg, start, end, sweep };
-  });
+    return [...acc, { ...seg, start, end: start + sweep, sweep }];
+  }, []);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 px-2 pt-1">
