@@ -13,26 +13,18 @@ import {
   type Utility,
 } from './data';
 
-type Timeframe = 'MTD' | 'YTD';
+type Timeframe = 'MTD' | 'YTD' | 'FY';
 type RoomMetric = 'POR' | 'PAR' | 'GUEST';
 
-const UTILITIES_ORDER: Utility[] = ['water', 'electricity', 'gas'];
-
-// Chart series palette — Quanta brand colors (matches globals.css and
-// UTILITY_META). Each series (Actual / Budget / LY) carries its own
-// color regardless of which utility or sum is being plotted, so the
-// chart always reads with the same three-color key.
-const CHART_SERIES = [
-  { key: 'actual', label: 'Actual', color: '#172951' }, // --primary (navy)
-  { key: 'budget', label: 'Budget', color: '#00AFAD' }, // --accent (teal)
-  { key: 'ly',     label: 'LY',     color: '#69D9D0' }, // --accent-light
-] as const;
+const UTILITIES_ORDER: Utility[] = ['water', 'electricity', 'gas', 'others'];
 
 // Range driven by the View toggle:
 //   MTD → just the selected month
 //   YTD → January through the selected month, inclusive
+//   FY  → all twelve months (Jan – Dec)
 function rangeIndices(timeframe: Timeframe, monthIdx: number): number[] {
   if (timeframe === 'MTD') return [monthIdx];
+  if (timeframe === 'FY') return Array.from({ length: 12 }, (_, i) => i);
   return Array.from({ length: monthIdx + 1 }, (_, i) => i);
 }
 
@@ -78,6 +70,7 @@ export default function UtilitiesPage() {
     water: true,
     electricity: true,
     gas: true,
+    others: true,
   });
 
   // Multi-select utility toggle for the chart — at least one must stay on
@@ -252,9 +245,11 @@ export default function UtilitiesPage() {
   };
 
   const rangeCaption =
-    timeframe === 'YTD'
-      ? `YTD · Jan – ${MONTHS_LONG[monthIdx]} ${year}`
-      : `MTD · ${MONTHS_LONG[monthIdx]} ${year}`;
+    timeframe === 'FY'
+      ? `FY · Jan – Dec ${year}`
+      : timeframe === 'YTD'
+        ? `YTD · Jan – ${MONTHS_LONG[monthIdx]} ${year}`
+        : `MTD · ${MONTHS_LONG[monthIdx]} ${year}`;
 
   return (
     <div>
@@ -335,7 +330,7 @@ export default function UtilitiesPage() {
         <SegToggle
           value={timeframe}
           onChange={(v) => setTimeframe(v as Timeframe)}
-          options={['MTD', 'YTD']}
+          options={['MTD', 'YTD', 'FY']}
         />
         <div className="h-6 border-l mx-1" style={{ borderColor: 'var(--border)' }} />
         <SegToggle
@@ -362,7 +357,7 @@ export default function UtilitiesPage() {
         </div>
 
         {/* Row 1 — $ totals, always with variance vs BUD / LY in the sub */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
           <KpiCard
             label={`Total Utilities · ${timeframe}`}
             value={fmtUsd(grandTotal.cost)}
@@ -384,7 +379,7 @@ export default function UtilitiesPage() {
         </div>
 
         {/* Row 2 — Cost per occupied room (POR), available room (PAR), or guest (GUEST) */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
           {totals.map((t) => {
             const meta = UTILITY_META[t.utility];
             const div =
@@ -433,8 +428,9 @@ export default function UtilitiesPage() {
                   onClick={() => toggleUtility(u)}
                   className={`px-3 py-1.5 text-xs transition-colors ${idx > 0 ? 'border-l' : ''}`}
                   style={{
-                    backgroundColor: utilitiesOn[u] ? 'var(--primary)' : 'white',
-                    color: utilitiesOn[u] ? 'white' : 'var(--text-secondary)',
+                    backgroundColor: utilitiesOn[u] ? 'var(--muted)' : 'white',
+                    color: utilitiesOn[u] ? 'var(--primary)' : 'var(--text-secondary)',
+                    fontWeight: utilitiesOn[u] ? 600 : 500,
                     borderColor: 'var(--border)',
                   }}
                 >
@@ -485,31 +481,41 @@ export default function UtilitiesPage() {
                 <RLegend wrapperStyle={{ fontSize: 12 }} />
                 {(() => {
                   const selected = UTILITIES_ORDER.filter((u) => utilitiesOn[u]);
-                  // 1 active → per-utility bars; 2+ → summed bars.
-                  if (selected.length === 1) {
-                    const u = selected[0];
-                    return CHART_SERIES.map((s) => (
-                      <Bar
-                        key={`${u}_${s.key}`}
-                        yAxisId="left"
-                        dataKey={`${u}_${s.key}`}
-                        name={`${UTILITY_META[u].label}${s.key === 'actual' ? '' : ` · ${s.label}`}`}
-                        fill={s.color}
-                        radius={[3, 3, 0, 0]}
-                      />
-                    ));
-                  }
-                  return CHART_SERIES.map((s) => (
+                  // Grouped actual cost by utility — each active utility is its
+                  // own side-by-side bar, so all of them (incl. Others) appear.
+                  return selected.map((u) => (
                     <Bar
-                      key={`sum_${s.key}`}
+                      key={`${u}_actual`}
                       yAxisId="left"
-                      dataKey={`sum_${s.key}`}
-                      name={`Total${s.key === 'actual' ? '' : ` · ${s.label}`}`}
-                      fill={s.color}
+                      dataKey={`${u}_actual`}
+                      name={UTILITY_META[u].label}
+                      fill={UTILITY_META[u].color}
                       radius={[3, 3, 0, 0]}
                     />
                   ));
                 })()}
+                {/* Budget & LY totals (of the active utilities) as reference
+                    lines over the stacked bars. */}
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="sum_budget"
+                  name="Budget"
+                  stroke="#d97706"
+                  strokeWidth={2}
+                  strokeDasharray="5 3"
+                  dot={false}
+                />
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="sum_ly"
+                  name="LY"
+                  stroke="#9ca3af"
+                  strokeWidth={2}
+                  strokeDasharray="2 3"
+                  dot={false}
+                />
                 <Line
                   yAxisId="right"
                   type="monotone"
@@ -577,8 +583,9 @@ function SegToggle<T extends string>({
               onClick={() => onChange(opt)}
               className={`px-3 py-1.5 text-xs transition-colors ${idx > 0 ? 'border-l' : ''}`}
               style={{
-                backgroundColor: active ? 'var(--primary)' : 'white',
-                color: active ? 'white' : 'var(--text-secondary)',
+                backgroundColor: active ? 'var(--muted)' : 'white',
+                color: active ? 'var(--primary)' : 'var(--text-secondary)',
+                fontWeight: active ? 600 : 500,
                 borderColor: 'var(--border)',
               }}
             >

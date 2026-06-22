@@ -8,8 +8,13 @@ import {
 } from 'recharts';
 import KpiCard from '@/components/ui/KpiCard';
 import { selectStyle } from '@/lib/selectStyle';
+import { ROOMS_AVAILABLE, ROOMS_OCCUPIED } from '../utilities/data';
 
-type Timeframe = 'MTD' | 'YTD';
+type Timeframe = 'MTD' | 'YTD' | 'FY';
+// Display basis for money figures: absolute total, per occupied room (POR),
+// or per available room (PAR). POR/PAR divide every figure by the matching
+// room-night denominator for the active timeframe.
+type Basis = 'Total' | 'POR' | 'PAR';
 type TrendScope = 'dept' | 'nondist' | 'total';
 
 // ── Data shapes ──────────────────────────────────────────────
@@ -30,6 +35,9 @@ type MonthlyLineItem = {
   cy: MonthlySeries | null;
   bud: MonthlySeries | null;
   ly: MonthlySeries | null;
+  // Forecast series — will arrive labeled from the database. Until then it is
+  // absent on the mock and Full Year falls back to budget for future months.
+  fc?: MonthlySeries | null;
   subLines?: MonthlyLineItem[];
 };
 
@@ -437,7 +445,7 @@ const DEPT_COSTS: MonthlyLineItem[] = [
   },
 ];
 
-// Non-Distributed categories. Top-level names only for now — each one is a
+// Undistributed Expenses categories. Top-level names only for now — each one is a
 // single reported line until its real subcategory/sub-sub breakdown lands
 // (then add a `subLines` array, exactly like the departments above).
 const NON_DISTRIBUTED: MonthlyLineItem[] = [
@@ -979,12 +987,52 @@ const ROW_TEXT_BY_DEPTH: { color: string; weight: number }[] = [
 ];
 
 // Pick a scalar from a 12-month series for the active timeframe. MTD returns
-// the selected month; YTD sums Jan..selectedMonth inclusive.
+// the selected month; YTD sums Jan..selectedMonth inclusive; FY sums all 12.
 function pickMonthly(series: MonthlySeries | null, monthIdx: number, tf: Timeframe): number {
   if (!series) return 0;
   const idx = monthIdx >= 0 ? monthIdx : 11;
   if (tf === 'MTD') return series[idx] ?? 0;
+  if (tf === 'FY') return series.reduce((a, b) => a + b, 0);
   return series.slice(0, idx + 1).reduce((a, b) => a + b, 0);
+}
+
+// Actuals scalar for the active timeframe. MTD/YTD read the CY series via
+// pickMonthly. FY is a full-year PROJECTION: realized actuals (CY) up to and
+// including the selected month, then forecast (fc) for the months still to
+// come — falling back to budget where the DB has not yet supplied a labeled
+// forecast series.
+function pickActual(it: MonthlyLineItem, monthIdx: number, tf: Timeframe): number {
+  if (tf !== 'FY') return pickMonthly(it.cy, monthIdx, tf);
+  const idx = monthIdx >= 0 ? monthIdx : 11;
+  const forecast = it.fc ?? it.bud;
+  let total = 0;
+  for (let i = 0; i < 12; i++) {
+    total += (i <= idx ? it.cy?.[i] : forecast?.[i]) ?? 0;
+  }
+  return total;
+}
+
+// Payroll = every "Labor Cost and Related Expenses" node across all
+// departments and undistributed categories. Each such node carries its own
+// rolled-up series, so we sum the node and do not descend into it (its
+// children are already part of that total). Returns act/bud/ly for the active
+// timeframe (act follows the FY actuals+forecast blend).
+const PAYROLL_NODE = 'Labor Cost and Related Expenses';
+function collectPayroll(
+  items: MonthlyLineItem[], monthIdx: number, tf: Timeframe,
+): { act: number; bud: number; ly: number } {
+  let act = 0, bud = 0, ly = 0;
+  for (const it of items) {
+    if (it.name === PAYROLL_NODE) {
+      act += pickActual(it, monthIdx, tf);
+      bud += pickMonthly(it.bud, monthIdx, tf);
+      ly += pickMonthly(it.ly, monthIdx, tf);
+    } else if (it.subLines) {
+      const r = collectPayroll(it.subLines, monthIdx, tf);
+      act += r.act; bud += r.bud; ly += r.ly;
+    }
+  }
+  return { act, bud, ly };
 }
 
 // Collapse a MonthlyLineItem (raw) into a LineItem (scalar) for the current view.
@@ -994,7 +1042,7 @@ function pickMonthly(series: MonthlySeries | null, monthIdx: number, tf: Timefra
 function viewItem(it: MonthlyLineItem, monthIdx: number, tf: Timeframe): LineItem {
   return {
     name: it.name,
-    act: pickMonthly(it.cy, monthIdx, tf),
+    act: pickActual(it, monthIdx, tf),
     bud: pickMonthly(it.bud, monthIdx, tf),
     actLy: pickMonthly(it.ly, monthIdx, tf),
     reported: it.subLines?.length ? true : it.cy != null,
@@ -1040,6 +1088,70 @@ function fmtVarDollar(v: number) {
   return `${sign}${Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 }
 
+// Full integer with thousands separators — used by the KPI cards on the
+// Total basis (whole numbers, no abbreviation, no decimals).
+const fmtInt = (v: number) =>
+  Math.round(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
+
+// Per-room money (POR/PAR) keeps 2 decimals — cost per room is small enough
+// that cents matter.
+const fmtPerRoom = (v: number) =>
+  v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function fmtVarPerRoom(v: number) {
+  const sign = v > 0 ? '+' : v < 0 ? '-' : '';
+  return `${sign}${Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// Share of a grand total, as a percentage — used by the breakdown's "%" mode.
+const fmtShare = (v: number, total: number) =>
+  total !== 0 ? `${((v / total) * 100).toFixed(1)}%` : '—';
+
+// Room-night denominator for the active basis + timeframe. Total has no
+// denominator (factor 1). Reuses pickMonthly so POR/PAR follow MTD/YTD/FY.
+function basisDenominator(basis: Basis, monthIdx: number, tf: Timeframe): number {
+  if (basis === 'Total') return 1;
+  const series = basis === 'POR' ? ROOMS_OCCUPIED : ROOMS_AVAILABLE;
+  return pickMonthly(series, monthIdx, tf);
+}
+
+// Recursively scale a LineItem tree (act/bud/actLy) by a factor — used to
+// convert the breakdown to per-room amounts without touching the source data.
+function scaleItems(items: LineItem[], f: number): LineItem[] {
+  return items.map((it) => ({
+    ...it,
+    act: it.act * f,
+    bud: it.bud * f,
+    actLy: it.actLy * f,
+    subLines: it.subLines ? scaleItems(it.subLines, f) : undefined,
+  }));
+}
+
+// Find a department's payroll node anywhere in its subtree (there is exactly
+// one per top-level department in the data).
+function findLaborLineItem(it: LineItem): LineItem | null {
+  if (it.name === PAYROLL_NODE) return it;
+  for (const sl of it.subLines ?? []) {
+    const found = findLaborLineItem(sl);
+    if (found) return found;
+  }
+  return null;
+}
+
+// "Payroll" breakdown filter: replace each department with its payroll subtree
+// (keeping the department name and the labor node's values/children).
+// Departments with no payroll node drop out.
+function payrollOnlyItems(items: LineItem[]): LineItem[] {
+  const out: LineItem[] = [];
+  for (const dept of items) {
+    const labor = findLaborLineItem(dept);
+    if (labor) {
+      out.push({ ...dept, act: labor.act, bud: labor.bud, actLy: labor.actLy, subLines: labor.subLines });
+    }
+  }
+  return out;
+}
+
 function fmtPct(v: number) {
   const sign = v > 0 ? '+' : '';
   return `${sign}${v.toFixed(1)}%`;
@@ -1050,25 +1162,12 @@ function safePct(diff: number, base: number) {
   return base !== 0 ? (diff / base) * 100 : 0;
 }
 
-// Expense semantics: ACT > BUD is UNFAVORABLE (over budget → red).
-// ACT < BUD is FAVORABLE (under budget → green).
-function varColor(act: number, bud: number) {
-  if (act > bud) return 'var(--danger)';
-  if (act < bud) return 'var(--success)';
-  return 'var(--text-secondary)';
-}
-
-function varBg(act: number, bud: number) {
-  if (act > bud) return 'rgba(239, 68, 68, 0.1)';
-  if (act < bud) return 'rgba(16, 185, 129, 0.1)';
-  return 'transparent';
-}
-
 export default function ExpensesPage() {
   const [hotel, setHotel] = useState<string>('Fort');
   const [year, setYear] = useState<string>('2026');
   const [month, setMonth] = useState<string>('March');
   const [timeframe, setTimeframe] = useState<Timeframe>('MTD');
+  const [basis, setBasis] = useState<Basis>('Total');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const toggleRow = (key: string) => {
@@ -1096,8 +1195,8 @@ export default function ExpensesPage() {
 
   const viewedGroups = useMemo<Group[]>(
     () => [
-      { key: 'dept', label: 'Grand Total Dept Costs', items: viewedDept },
-      { key: 'nondist', label: 'Grand Total Non-Distributed', items: viewedNonDist },
+      { key: 'dept', label: 'Total Departmental Expenses', items: viewedDept },
+      { key: 'nondist', label: 'Total Undistributed Expenses', items: viewedNonDist },
     ],
     [viewedDept, viewedNonDist],
   );
@@ -1129,7 +1228,50 @@ export default function ExpensesPage() {
     return { overruns, savings };
   }, [allItems]);
 
-  const netVar = totals.gtAct - totals.gtBud;
+  // Payroll total across every department + undistributed category.
+  const payroll = useMemo(
+    () => collectPayroll([...DEPT_COSTS, ...NON_DISTRIBUTED], monthIdx, timeframe),
+    [monthIdx, timeframe],
+  );
+
+  // Per-room basis: divide every displayed money figure by the room-night
+  // denominator. Total keeps factor 1. Source data (drivers, composition,
+  // progression) stays in absolute $ — only the KPI cards and the breakdown
+  // switch basis, per spec.
+  const denom = basisDenominator(basis, monthIdx, timeframe);
+  const factor = basis === 'Total' ? 1 : denom > 0 ? 1 / denom : 0;
+
+  const displayTotals = useMemo(() => {
+    if (factor === 1) return totals;
+    return Object.fromEntries(
+      Object.entries(totals).map(([k, v]) => [k, v * factor]),
+    ) as typeof totals;
+  }, [totals, factor]);
+
+  const displayGroups = useMemo<Group[]>(
+    () =>
+      factor === 1
+        ? viewedGroups
+        : viewedGroups.map((g) => ({ ...g, items: scaleItems(g.items, factor) })),
+    [viewedGroups, factor],
+  );
+
+  const displayPayroll = payroll.act * factor;
+  // Share of total expenses that payroll represents (basis-independent ratio).
+  const payrollPct = totals.gtAct !== 0 ? (payroll.act / totals.gtAct) * 100 : 0;
+
+  // vs-Budget deltas for the KPI cards. Expenses: over budget (delta > 0) is
+  // unfavorable, so the "vs BUD" figure turns red.
+  const gtVarBud = displayTotals.gtAct - displayTotals.gtBud;
+  const deptVarBud = displayTotals.deptAct - displayTotals.deptBud;
+  const ndVarBud = displayTotals.ndAct - displayTotals.ndBud;
+  const payrollVarBud = (payroll.act - payroll.bud) * factor;
+  const overBudget = (delta: number) => (delta > 0 ? 'var(--danger)' : undefined);
+
+  // Basis-aware formatters: integers on Total, 2-decimal per-room on POR/PAR.
+  const money = basis === 'Total' ? fmtMoneyShort : fmtPerRoom;
+  const varMoney = basis === 'Total' ? fmtVarDollar : fmtVarPerRoom;
+  const boxMoney = basis === 'Total' ? fmtInt : fmtPerRoom;
 
   return (
     <div className="flex flex-col gap-5" style={{ color: 'var(--text-primary)' }}>
@@ -1181,9 +1323,9 @@ export default function ExpensesPage() {
           {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
 
-        {/* MTD / YTD segmented toggle */}
+        {/* MTD / YTD / FY segmented toggle */}
         <div className="flex h-9 rounded-md border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
-          {(['MTD', 'YTD'] as const).map((t) => (
+          {(['MTD', 'YTD', 'FY'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTimeframe(t)}
@@ -1198,35 +1340,61 @@ export default function ExpensesPage() {
             </button>
           ))}
         </div>
+
+        {/* Total / POR / PAR basis toggle */}
+        <div className="flex h-9 rounded-md border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+          {(['Total', 'POR', 'PAR'] as const).map((b) => (
+            <button
+              key={b}
+              onClick={() => setBasis(b)}
+              className="px-3.5 text-[0.8125rem] font-medium cursor-pointer transition-colors border-none"
+              style={{
+                background: basis === b ? 'var(--muted)' : 'transparent',
+                color: basis === b ? 'var(--primary)' : 'var(--text-secondary)',
+                fontWeight: basis === b ? 600 : 500,
+              }}
+            >
+              {b}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* KPI cards */}
       <div className="grid grid-cols-4 gap-3 max-[1100px]:grid-cols-2 max-[640px]:grid-cols-1">
         <KpiCard
-          label="Grand Total Expenses"
-          value={fmtMoneyShort(totals.gtAct)}
-          sub={`vs BUD ${fmtVarDollar(totals.gtAct - totals.gtBud)} · vs LY ${fmtVarDollar(totals.gtAct - totals.gtLy)}`}
+          label="Total Expenses"
+          value={boxMoney(displayTotals.gtAct)}
+          sub={`vs BUD ${varMoney(gtVarBud)}`}
+          subColor={overBudget(gtVarBud)}
+          subRight={`vs LY ${varMoney(displayTotals.gtAct - displayTotals.gtLy)}`}
           color="var(--primary)"
           accent="var(--primary)"
         />
         <KpiCard
-          label="Dept Costs"
-          value={fmtMoneyShort(totals.deptAct)}
-          sub={`vs BUD ${fmtVarDollar(totals.deptAct - totals.deptBud)} · vs LY ${fmtVarDollar(totals.deptAct - totals.deptLy)}`}
+          label="Departmental Expenses"
+          value={boxMoney(displayTotals.deptAct)}
+          sub={`vs BUD ${varMoney(deptVarBud)}`}
+          subColor={overBudget(deptVarBud)}
+          subRight={`vs LY ${varMoney(displayTotals.deptAct - displayTotals.deptLy)}`}
           color="var(--primary)"
           accent="var(--accent)"
         />
         <KpiCard
-          label="Non-Distributed"
-          value={fmtMoneyShort(totals.ndAct)}
-          sub={`vs BUD ${fmtVarDollar(totals.ndAct - totals.ndBud)} · vs LY ${fmtVarDollar(totals.ndAct - totals.ndLy)}`}
+          label="Undistributed Expenses"
+          value={boxMoney(displayTotals.ndAct)}
+          sub={`vs BUD ${varMoney(ndVarBud)}`}
+          subColor={overBudget(ndVarBud)}
+          subRight={`vs LY ${varMoney(displayTotals.ndAct - displayTotals.ndLy)}`}
           color="var(--primary)"
           accent="var(--accent-light)"
         />
         <KpiCard
-          label="Net Variance vs Budget"
-          value={fmtVarDollar(netVar)}
-          sub={netVar < 0 ? 'Favorable' : netVar > 0 ? 'Unfavorable' : 'On budget'}
+          label="Total Payroll"
+          value={boxMoney(displayPayroll)}
+          sub={`vs BUD ${varMoney(payrollVarBud)}`}
+          subColor={overBudget(payrollVarBud)}
+          subRight={`${payrollPct.toFixed(1)}% of Total Expenses`}
           color="var(--primary)"
           accent="var(--accent)"
         />
@@ -1240,10 +1408,11 @@ export default function ExpensesPage() {
 
       {/* Detailed breakdown */}
       <DetailedBreakdown
-        groups={viewedGroups}
-        totals={totals}
+        groups={displayGroups}
         expandedRows={expandedRows}
         toggleRow={toggleRow}
+        money={money}
+        varMoney={varMoney}
       />
 
       {/* Expense composition */}
@@ -1453,23 +1622,83 @@ function Legend({ labels }: { labels: string[] }) {
 
 // ─── Detailed breakdown table ─────────────────────────────────
 function DetailedBreakdown({
-  groups, totals, expandedRows, toggleRow,
+  groups, expandedRows, toggleRow, money, varMoney,
 }: {
   groups: Group[];
-  totals: {
-    deptAct: number; deptBud: number; deptLy: number;
-    ndAct: number; ndBud: number; ndLy: number;
-    gtAct: number; gtBud: number; gtLy: number;
-  };
   expandedRows: Set<string>;
   toggleRow: (key: string) => void;
+  money: (v: number) => string;
+  varMoney: (v: number) => string;
 }) {
+  // "%" mode shows ACT/BUD/ACT LY as each line's share of the grand total
+  // (so every column sums to ~100%). Variance columns are unchanged. Shares
+  // are basis-independent — POR/PAR scaling cancels out.
+  const [pctMode, setPctMode] = useState(false);
+  // "Payroll" filter restricts the table to each department's payroll subtree.
+  const [payrollMode, setPayrollMode] = useState(false);
+
+  const shownGroups = payrollMode
+    ? groups.map((g) => ({ ...g, items: payrollOnlyItems(g.items) }))
+    : groups;
+  // Subtotals and grand total are summed from whatever is shown, so they stay
+  // correct under the payroll filter.
+  const groupTotals = shownGroups.map((g) => ({
+    act: sum(g.items, 'act'),
+    bud: sum(g.items, 'bud'),
+    actLy: sum(g.items, 'actLy'),
+  }));
+  const grand = groupTotals.reduce(
+    (a, t) => ({ act: a.act + t.act, bud: a.bud + t.bud, actLy: a.actLy + t.actLy }),
+    { act: 0, bud: 0, actLy: 0 },
+  );
+
+  const fmtAct = (v: number) => (pctMode ? fmtShare(v, grand.act) : money(v));
+  const fmtBud = (v: number) => (pctMode ? fmtShare(v, grand.bud) : money(v));
+  const fmtLy = (v: number) => (pctMode ? fmtShare(v, grand.actLy) : money(v));
+
+  const toggleBtn = 'px-3.5 text-[0.8125rem] font-medium cursor-pointer transition-colors border-none';
+  const toggleStyle = (active: boolean) => ({
+    background: active ? 'var(--muted)' : 'transparent',
+    color: active ? 'var(--primary)' : 'var(--text-secondary)',
+    fontWeight: active ? 600 : 500,
+  });
+
   return (
     <div>
-      <SectionHeader
-        title="Detailed Breakdown"
-        subtitle="Click any department to expand sub-lines"
-      />
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <SectionHeader
+          title="Detailed Breakdown"
+          subtitle="Click any department to expand sub-lines"
+        />
+        <div className="flex items-center gap-2 shrink-0">
+          {/* All / Payroll filter */}
+          <div className="flex h-9 rounded-md border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+            {([['All', false], ['Payroll', true]] as const).map(([labelText, on]) => (
+              <button
+                key={labelText}
+                onClick={() => setPayrollMode(on)}
+                className={toggleBtn}
+                style={toggleStyle(payrollMode === on)}
+              >
+                {labelText}
+              </button>
+            ))}
+          </div>
+          {/* $ / % of total toggle */}
+          <div className="flex h-9 rounded-md border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+            {([['$', false], ['%', true]] as const).map(([labelText, on]) => (
+              <button
+                key={labelText}
+                onClick={() => setPctMode(on)}
+                className={toggleBtn}
+                style={toggleStyle(pctMode === on)}
+              >
+                {labelText}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
       <div
         className="bg-white border rounded-lg overflow-hidden"
         style={{ borderColor: 'var(--border)' }}
@@ -1493,21 +1722,29 @@ function DetailedBreakdown({
               </tr>
             </thead>
             <tbody>
-              {groups.map((g) => (
+              {shownGroups.map((g, i) => (
                 <GroupRows
                   key={g.key}
                   group={g}
                   expandedRows={expandedRows}
                   toggleRow={toggleRow}
                   subtotalLabel={g.label}
-                  subtotal={
-                    g.key === 'dept'
-                      ? { act: totals.deptAct, bud: totals.deptBud, actLy: totals.deptLy }
-                      : { act: totals.ndAct, bud: totals.ndBud, actLy: totals.ndLy }
-                  }
+                  subtotal={groupTotals[i]}
+                  fmtAct={fmtAct}
+                  fmtBud={fmtBud}
+                  fmtLy={fmtLy}
+                  varMoney={varMoney}
                 />
               ))}
-              <GrandTotalRow act={totals.gtAct} bud={totals.gtBud} actLy={totals.gtLy} />
+              <GrandTotalRow
+                act={grand.act}
+                bud={grand.bud}
+                actLy={grand.actLy}
+                fmtAct={fmtAct}
+                fmtBud={fmtBud}
+                fmtLy={fmtLy}
+                varMoney={varMoney}
+              />
             </tbody>
           </table>
         </div>
@@ -1517,13 +1754,17 @@ function DetailedBreakdown({
 }
 
 function GroupRows({
-  group, expandedRows, toggleRow, subtotalLabel, subtotal,
+  group, expandedRows, toggleRow, subtotalLabel, subtotal, fmtAct, fmtBud, fmtLy, varMoney,
 }: {
   group: Group;
   expandedRows: Set<string>;
   toggleRow: (k: string) => void;
   subtotalLabel: string;
   subtotal: { act: number; bud: number; actLy: number };
+  fmtAct: (v: number) => string;
+  fmtBud: (v: number) => string;
+  fmtLy: (v: number) => string;
+  varMoney: (v: number) => string;
 }) {
   return (
     <>
@@ -1533,8 +1774,21 @@ function GroupRows({
         expandedRows={expandedRows}
         toggleRow={toggleRow}
         depth={0}
+        fmtAct={fmtAct}
+        fmtBud={fmtBud}
+        fmtLy={fmtLy}
+        varMoney={varMoney}
       />
-      <SubtotalRow label={subtotalLabel} act={subtotal.act} bud={subtotal.bud} actLy={subtotal.actLy} />
+      <SubtotalRow
+        label={subtotalLabel}
+        act={subtotal.act}
+        bud={subtotal.bud}
+        actLy={subtotal.actLy}
+        fmtAct={fmtAct}
+        fmtBud={fmtBud}
+        fmtLy={fmtLy}
+        varMoney={varMoney}
+      />
     </>
   );
 }
@@ -1543,13 +1797,17 @@ function GroupRows({
 // item's own subLines and gets a deeper indent. Keys cascade through
 // parentKey so independent branches don't collide in the expanded set.
 function ItemRows({
-  items, parentKey, expandedRows, toggleRow, depth,
+  items, parentKey, expandedRows, toggleRow, depth, fmtAct, fmtBud, fmtLy, varMoney,
 }: {
   items: LineItem[];
   parentKey: string;
   expandedRows: Set<string>;
   toggleRow: (k: string) => void;
   depth: number;
+  fmtAct: (v: number) => string;
+  fmtBud: (v: number) => string;
+  fmtLy: (v: number) => string;
+  varMoney: (v: number) => string;
 }) {
   return (
     <>
@@ -1568,6 +1826,10 @@ function ItemRows({
               expanded={isExpanded}
               onToggle={() => toggleRow(key)}
               depth={depth}
+              fmtAct={fmtAct}
+              fmtBud={fmtBud}
+              fmtLy={fmtLy}
+              varMoney={varMoney}
             />
             {isExpanded && (
               <ItemRows
@@ -1576,6 +1838,10 @@ function ItemRows({
                 expandedRows={expandedRows}
                 toggleRow={toggleRow}
                 depth={depth + 1}
+                fmtAct={fmtAct}
+                fmtBud={fmtBud}
+                fmtLy={fmtLy}
+                varMoney={varMoney}
               />
             )}
           </Fragment>
@@ -1586,7 +1852,7 @@ function ItemRows({
 }
 
 function DataRow({
-  name, act, bud, actLy, expandable, expanded, onToggle, depth = 0,
+  name, act, bud, actLy, expandable, expanded, onToggle, depth = 0, fmtAct, fmtBud, fmtLy, varMoney,
 }: {
   name: string;
   act: number;
@@ -1596,15 +1862,15 @@ function DataRow({
   expanded?: boolean;
   onToggle?: () => void;
   depth?: number;
+  fmtAct: (v: number) => string;
+  fmtBud: (v: number) => string;
+  fmtLy: (v: number) => string;
+  varMoney: (v: number) => string;
 }) {
   const diffBud = act - bud;
   const diffLy = act - actLy;
   const pctBud = safePct(diffBud, bud);
   const pctLy = safePct(diffLy, actLy);
-  const budColor = varColor(act, bud);
-  const budBg = varBg(act, bud);
-  const lyColor = varColor(act, actLy);
-  const lyBg = varBg(act, actLy);
 
   // Text shade darkens-to-lightens with depth so each level is visually
   // distinct: department/subcategory are darkest (primary), sub-sub-categories
@@ -1638,64 +1904,46 @@ function DataRow({
         </span>
       </td>
       <td className="px-3.5 py-2.5 text-right whitespace-nowrap">
-        {fmtMoneyShort(act)}
+        {fmtAct(act)}
       </td>
       <td className="px-3.5 py-2.5 text-right whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>
-        {fmtMoneyShort(bud)}
+        {fmtBud(bud)}
       </td>
-      <td className="px-3.5 py-2.5 text-right whitespace-nowrap">
-        <span
-          className="inline-block px-2 py-0.5 rounded-sm font-semibold"
-          style={{ color: budColor, background: budBg }}
-        >
-          {fmtVarDollar(diffBud)}
-        </span>
+      <td className="px-3.5 py-2.5 text-right whitespace-nowrap font-medium" style={{ color: 'var(--text-secondary)' }}>
+        {varMoney(diffBud)}
       </td>
-      <td className="px-3.5 py-2.5 text-right whitespace-nowrap">
-        <span
-          className="inline-block px-2 py-0.5 rounded-sm font-semibold"
-          style={{ color: budColor, background: budBg }}
-        >
-          {fmtPct(pctBud)}
-        </span>
+      <td className="px-3.5 py-2.5 text-right whitespace-nowrap font-medium" style={{ color: 'var(--text-secondary)' }}>
+        {fmtPct(pctBud)}
       </td>
       <td className="px-3.5 py-2.5 text-right whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>
-        {fmtMoneyShort(actLy)}
+        {fmtLy(actLy)}
       </td>
-      <td className="px-3.5 py-2.5 text-right whitespace-nowrap">
-        <span
-          className="inline-block px-2 py-0.5 rounded-sm font-semibold"
-          style={{ color: lyColor, background: lyBg }}
-        >
-          {fmtVarDollar(diffLy)}
-        </span>
+      <td className="px-3.5 py-2.5 text-right whitespace-nowrap font-medium" style={{ color: 'var(--text-secondary)' }}>
+        {varMoney(diffLy)}
       </td>
-      <td className="px-3.5 py-2.5 text-right whitespace-nowrap">
-        <span
-          className="inline-block px-2 py-0.5 rounded-sm font-semibold"
-          style={{ color: lyColor, background: lyBg }}
-        >
-          {fmtPct(pctLy)}
-        </span>
+      <td className="px-3.5 py-2.5 text-right whitespace-nowrap font-medium" style={{ color: 'var(--text-secondary)' }}>
+        {fmtPct(pctLy)}
       </td>
     </tr>
   );
 }
 
 function SubtotalRow({
-  label, act, bud, actLy,
+  label, act, bud, actLy, fmtAct, fmtBud, fmtLy, varMoney,
 }: {
   label: string;
   act: number;
   bud: number;
   actLy: number;
+  fmtAct: (v: number) => string;
+  fmtBud: (v: number) => string;
+  fmtLy: (v: number) => string;
+  varMoney: (v: number) => string;
 }) {
   const diffBud = act - bud;
   const diffLy = act - actLy;
   const pctBud = safePct(diffBud, bud);
   const pctLy = safePct(diffLy, actLy);
-  const budColor = varColor(act, bud);
-  const lyColor = varColor(act, actLy);
 
   return (
     <tr style={{ background: 'var(--muted)', borderBottom: '1px solid var(--border)' }}>
@@ -1703,61 +1951,68 @@ function SubtotalRow({
         {label}
       </td>
       <td className="px-3.5 py-2.5 text-right font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
-        {fmtMoneyShort(act)}
+        {fmtAct(act)}
       </td>
       <td className="px-3.5 py-2.5 text-right font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
-        {fmtMoneyShort(bud)}
+        {fmtBud(bud)}
       </td>
-      <td className="px-3.5 py-2.5 text-right font-bold whitespace-nowrap" style={{ color: budColor }}>
-        {fmtVarDollar(diffBud)}
+      <td className="px-3.5 py-2.5 text-right font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
+        {varMoney(diffBud)}
       </td>
-      <td className="px-3.5 py-2.5 text-right font-bold whitespace-nowrap" style={{ color: budColor }}>
+      <td className="px-3.5 py-2.5 text-right font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
         {fmtPct(pctBud)}
       </td>
       <td className="px-3.5 py-2.5 text-right font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
-        {fmtMoneyShort(actLy)}
+        {fmtLy(actLy)}
       </td>
-      <td className="px-3.5 py-2.5 text-right font-bold whitespace-nowrap" style={{ color: lyColor }}>
-        {fmtVarDollar(diffLy)}
+      <td className="px-3.5 py-2.5 text-right font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
+        {varMoney(diffLy)}
       </td>
-      <td className="px-3.5 py-2.5 text-right font-bold whitespace-nowrap" style={{ color: lyColor }}>
+      <td className="px-3.5 py-2.5 text-right font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
         {fmtPct(pctLy)}
       </td>
     </tr>
   );
 }
 
-function GrandTotalRow({ act, bud, actLy }: { act: number; bud: number; actLy: number }) {
+function GrandTotalRow({
+  act, bud, actLy, fmtAct, fmtBud, fmtLy, varMoney,
+}: {
+  act: number;
+  bud: number;
+  actLy: number;
+  fmtAct: (v: number) => string;
+  fmtBud: (v: number) => string;
+  fmtLy: (v: number) => string;
+  varMoney: (v: number) => string;
+}) {
   const diffBud = act - bud;
   const diffLy = act - actLy;
   const pctBud = safePct(diffBud, bud);
   const pctLy = safePct(diffLy, actLy);
-  // Expenses: lower is better, so positive variance = danger, negative = success.
-  const budColor = diffBud <= 0 ? 'var(--success)' : 'var(--danger)';
-  const lyColor = diffLy <= 0 ? 'var(--success)' : 'var(--danger)';
 
   return (
     <tr style={{ background: 'var(--border)' }}>
-      <td className="px-3.5 py-3 font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>GRAND TOTAL EXPENSES</td>
+      <td className="px-3.5 py-3 font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>TOTAL EXPENSES</td>
       <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
-        {fmtMoneyShort(act)}
+        {fmtAct(act)}
       </td>
       <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
-        {fmtMoneyShort(bud)}
+        {fmtBud(bud)}
       </td>
-      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: budColor }}>
-        {fmtVarDollar(diffBud)}
+      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
+        {varMoney(diffBud)}
       </td>
-      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: budColor }}>
+      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
         {fmtPct(pctBud)}
       </td>
       <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
-        {fmtMoneyShort(actLy)}
+        {fmtLy(actLy)}
       </td>
-      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: lyColor }}>
-        {fmtVarDollar(diffLy)}
+      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
+        {varMoney(diffLy)}
       </td>
-      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: lyColor }}>
+      <td className="px-3.5 py-3 text-right font-bold whitespace-nowrap" style={{ color: 'var(--primary)' }}>
         {fmtPct(pctLy)}
       </td>
     </tr>
@@ -1766,8 +2021,8 @@ function GrandTotalRow({ act, bud, actLy }: { act: number; bud: number; actLy: n
 
 // ─── Expense progression ──────────────────────────────────────
 const SCOPE_LABEL: Record<TrendScope, string> = {
-  dept: 'Dept Costs',
-  nondist: 'Non-Distributed',
+  dept: 'Departmental Expenses',
+  nondist: 'Undistributed Expenses',
   total: 'Total Expenses',
 };
 

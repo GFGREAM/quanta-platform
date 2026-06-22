@@ -42,7 +42,7 @@ export const GUESTS: number[] = ROOMS_OCCUPIED.map((occ, i) =>
   Math.round(occ * GUESTS_PER_ROOM[i]),
 );
 
-export type Utility = 'water' | 'electricity' | 'gas';
+export type Utility = 'water' | 'electricity' | 'gas' | 'others';
 
 // Per-utility: monthly consumption in its native unit (m³ / kWh / liters),
 // plus monthly cost in USD for current year, budget, and last year.
@@ -79,10 +79,20 @@ export const GAS: UtilitySeries = {
   costLY:      [13800, 12950, 10900, 9050, 7650, 6950, 6650, 6750, 7350, 8850, 10950, 13400],
 };
 
+// Others — catch-all for misc utilities (sewer, waste, recycling, misc).
+// No native consumption unit, so consumption is left at zero. Tariff n/a.
+export const OTHERS: UtilitySeries = {
+  consumption: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  costCY:      [2600, 2480, 2550, 2700, 2820, 3050, 3180, 3120, 2900, 2720, 2600, 2780],
+  costBudget:  [2500, 2500, 2600, 2700, 2800, 3000, 3100, 3100, 2900, 2700, 2600, 2700],
+  costLY:      [2450, 2400, 2520, 2650, 2760, 2950, 3050, 3020, 2850, 2680, 2560, 2680],
+};
+
 export const UTILITIES: Record<Utility, UtilitySeries> = {
   water: WATER,
   electricity: ELECTRICITY,
   gas: GAS,
+  others: OTHERS,
 };
 
 // Quanta brand palette (from globals.css): --primary → --accent →
@@ -92,4 +102,5 @@ export const UTILITY_META = {
   water:       { label: 'Water',       unit: 'm³',  color: '#172951' }, // --primary (navy)
   electricity: { label: 'Electricity', unit: 'kWh', color: '#00AFAD' }, // --accent (teal)
   gas:         { label: 'Gas',         unit: 'L',   color: '#69D9D0' }, // --accent-light
+  others:      { label: 'Others',      unit: '—',   color: '#64748B' }, // slate (neutral)
 } as const satisfies Record<Utility, { label: string; unit: string; color: string }>;
