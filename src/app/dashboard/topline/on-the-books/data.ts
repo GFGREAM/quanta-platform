@@ -68,6 +68,7 @@ export interface GridDay {
 
 interface OtbApiResponse {
   property: { code: string; name: string; capacity: number; capacityLy: number };
+  properties: { code: string; name: string; capacity: number; capacityLy: number }[];
   asOf: string;
   snapshots: string[];
   segments: string[];
@@ -361,7 +362,7 @@ export function useOtbData(propertyCode: string): OtbData {
     CAPACITY_2026: data?.property.capacity ?? 0,
     DAYS_2026: data?.dates2026.length ?? 365,
     YTD_DAYS_2026: data ? data.dates2026.filter((d) => d <= data.asOf).length : 0,
-    PROPERTIES: data ? [{ code: data.property.code, name: data.property.name, rooms: data.property.capacity }] : [],
+    PROPERTIES: data?.properties?.map((p) => ({ code: p.code, name: p.name, rooms: p.capacity })) ?? [],
     DEFAULT_PROPERTY: data?.property.code ?? '',
     snapshots: data?.snapshots ?? [],
     snapshot: snapshot ?? data?.asOf ?? '',

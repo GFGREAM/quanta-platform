@@ -28,6 +28,12 @@ const SQL_PROPERTY = `
   WHERE property_code = $1
 `;
 
+const SQL_ALL_PROPERTIES = `
+  SELECT property_code, property_name, capacity, capacity_ly
+  FROM daily_segmentation_otb.properties
+  ORDER BY property_name
+`;
+
 const SQL_SEGMENTS = `
   SELECT segment_key
   FROM daily_segmentation_otb.segments
@@ -126,13 +132,24 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const property = searchParams.get("property");
+
+    // No property → return only the property list (for slicer population).
     if (!property) {
-      return NextResponse.json({ error: "property is required" }, { status: 400 });
+      const allPropsRes = await pool.query(SQL_ALL_PROPERTIES);
+      return NextResponse.json({
+        properties: allPropsRes.rows.map((r) => ({
+          code: r.property_code,
+          name: r.property_name,
+          capacity: Number(r.capacity),
+          capacityLy: Number(r.capacity_ly),
+        })),
+      });
     }
 
     // Parallel queries
-    const [propRes, segRes, snapRes] = await Promise.all([
+    const [propRes, allPropsRes, segRes, snapRes] = await Promise.all([
       pool.query(SQL_PROPERTY, [property]),
+      pool.query(SQL_ALL_PROPERTIES),
       pool.query(SQL_SEGMENTS),
       pool.query(SQL_SNAPSHOTS, [property]),
     ]);
@@ -276,6 +293,12 @@ export async function GET(request: Request) {
         capacity: Number(prop.capacity),
         capacityLy: Number(prop.capacity_ly),
       },
+      properties: allPropsRes.rows.map((r) => ({
+        code: r.property_code,
+        name: r.property_name,
+        capacity: Number(r.capacity),
+        capacityLy: Number(r.capacity_ly),
+      })),
       asOf: snapshot,
       snapshots,
       segments,
