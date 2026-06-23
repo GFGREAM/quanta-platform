@@ -161,6 +161,7 @@ const EMPTY_SUMMARY: SegmentSummary = {
 
 export function useOtbData(propertyCode: string): OtbData {
   const [data, setData] = useState<OtbApiResponse | null>(null);
+  const [properties, setProperties] = useState<PropertyMeta[]>([]);
   const [loading, setLoading] = useState(true);
   // Selected weekly snapshot (null = latest). Lets the Monthly board view a prior week.
   const [snapshot, setSnapshot] = useState<string | null>(null);
@@ -173,8 +174,14 @@ export function useOtbData(propertyCode: string): OtbData {
         const url = `/api/otb/dataset?property=${encodeURIComponent(propertyCode)}${snapshot ? `&snapshot=${encodeURIComponent(snapshot)}` : ''}`;
         const res = await fetch(url);
         if (!res.ok) { if (!cancelled) setLoading(false); return; }
-        const json: OtbApiResponse = await res.json();
-        if (!cancelled) { setData(json); setLoading(false); }
+        const json = await res.json();
+        if (!cancelled) {
+          if (json.properties) {
+            setProperties(json.properties.map((p: { code: string; name: string; capacity: number }) => ({ code: p.code, name: p.name, rooms: p.capacity })));
+          }
+          if (json.property) setData(json as OtbApiResponse);
+          setLoading(false);
+        }
       } catch {
         if (!cancelled) setLoading(false);
       }
@@ -362,7 +369,7 @@ export function useOtbData(propertyCode: string): OtbData {
     CAPACITY_2026: data?.property.capacity ?? 0,
     DAYS_2026: data?.dates2026.length ?? 365,
     YTD_DAYS_2026: data ? data.dates2026.filter((d) => d <= data.asOf).length : 0,
-    PROPERTIES: data?.properties?.map((p) => ({ code: p.code, name: p.name, rooms: p.capacity })) ?? [],
+    PROPERTIES: properties,
     DEFAULT_PROPERTY: data?.property.code ?? '',
     snapshots: data?.snapshots ?? [],
     snapshot: snapshot ?? data?.asOf ?? '',
