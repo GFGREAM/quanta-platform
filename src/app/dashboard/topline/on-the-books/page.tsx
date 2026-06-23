@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { createContext, Fragment, useContext, useMemo, useRef, useState } from 'react';
+import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, ChevronDown, Download } from 'lucide-react';
 import {
   CartesianGrid, Legend, Line, LineChart, ReferenceLine,
@@ -55,10 +55,16 @@ const BOARD_VIEWS: { key: BoardView; label: string }[] = [
 export default function OnTheBooksPage() {
   const [boardView, setBoardView] = useState<BoardView>('fullYear');
 
-  const [propertyCode, setPropertyCode] = useState<string>('WACCR');
+  const [propertyCode, setPropertyCode] = useState<string>('');
   const otb = useOtbData(propertyCode);
   const { loading, AS_OF, TC_SEGMENTS, CAPACITY_2025, CAPACITY_2026, PROPERTIES, snapshots, snapshot, setSnapshot, getSegmentSummary, getGridDaily, getGroupDaily } = otb;
   const property = PROPERTIES.find((p) => p.code === propertyCode) ?? PROPERTIES[0];
+
+  useEffect(() => {
+    if (!propertyCode && PROPERTIES.length > 0) {
+      setPropertyCode(PROPERTIES[0].code);
+    }
+  }, [propertyCode, PROPERTIES]);
   const [segSel, setSegSel] = useState<string[]>([]);
   const [view, setView] = useState<ViewMode>('cumulative');
   const [month, setMonth] = useState<MonthFilter>('all');
