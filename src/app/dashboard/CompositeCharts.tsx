@@ -1,5 +1,7 @@
 "use client";
 
+import { LOCAL_EXCHANGE_FACTOR } from "./_placeholders";
+
 const r4 = (n: number) => Math.round(n * 1e4) / 1e4;
 
 function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
@@ -32,6 +34,14 @@ function DonutChart({ title, segments }: { title: string; segments: Segment[] })
   const CX = 100, CY = 100, R = 90, RI = 42;
   const total = segments.reduce((s, seg) => s + seg.value, 0);
 
+  if (total === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center min-h-0 px-2">
+        <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>No data</span>
+      </div>
+    );
+  }
+
   const slices = segments.reduce<Array<Segment & { start: number; end: number; sweep: number }>>((acc, seg) => {
     const start = acc.length > 0 ? acc[acc.length - 1].end : 0;
     const sweep = (seg.value / total) * 360;
@@ -52,7 +62,7 @@ function DonutChart({ title, segments }: { title: string; segments: Segment[] })
               <g key={s.label}>
                 <path d={donutSegmentPath(CX, CY, R, RI, s.start, s.end)} fill={s.color} />
                 {showLabel && (
-                  <text x={lp.x} y={lp.y} textAnchor="middle" dominantBaseline="middle" fontSize={14} fontWeight={700} fill="#172951">
+                  <text x={lp.x} y={lp.y} textAnchor="middle" dominantBaseline="middle" fontSize={14} fontWeight={700} fill="var(--primary)">
                     {pct}
                   </text>
                 )}
@@ -61,15 +71,15 @@ function DonutChart({ title, segments }: { title: string; segments: Segment[] })
           })}
           {title.includes(' ') ? (
             <>
-              <text x={CX} y={CY - 11} textAnchor="middle" dominantBaseline="middle" fontSize={16} fontWeight={700} fill="#172951">
+              <text x={CX} y={CY - 11} textAnchor="middle" dominantBaseline="middle" fontSize={16} fontWeight={700} fill="var(--primary)">
                 {title.split(' ')[0]}
               </text>
-              <text x={CX} y={CY + 11} textAnchor="middle" dominantBaseline="middle" fontSize={16} fontWeight={700} fill="#172951">
+              <text x={CX} y={CY + 11} textAnchor="middle" dominantBaseline="middle" fontSize={16} fontWeight={700} fill="var(--primary)">
                 {title.split(' ').slice(1).join(' ')}
               </text>
             </>
           ) : (
-            <text x={CX} y={CY} textAnchor="middle" dominantBaseline="middle" fontSize={16} fontWeight={700} fill="#172951">
+            <text x={CX} y={CY} textAnchor="middle" dominantBaseline="middle" fontSize={16} fontWeight={700} fill="var(--primary)">
               {title}
             </text>
           )}
@@ -88,9 +98,6 @@ function DonutChart({ title, segments }: { title: string; segments: Segment[] })
 }
 
 type Props = {
-  selectedHotels: string[];
-  selectedMonths: string[];
-  year: string;
   metric: "USD" | "Local";
 };
 
@@ -98,8 +105,7 @@ export default function CompositeCharts({ metric }: Props) {
   // TODO: en producción, query a PostgreSQL filtrando por hotel/month/year
   // USD:   columnas convertidas de AAG (suma directa)
   // Local: columnas Non Converted de AAG (pre-calculadas, NO multiplicar en frontend)
-  const LOCAL_FACTOR = 17.2; // TODO: eliminar en producción — solo placeholder visual
-  const f = metric === "USD" ? 1 : LOCAL_FACTOR;
+  const f = metric === "USD" ? 1 : LOCAL_EXCHANGE_FACTOR;
 
   const donuts = [
     {

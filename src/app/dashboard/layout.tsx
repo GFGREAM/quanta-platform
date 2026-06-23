@@ -29,7 +29,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </PermissionGate>
           </div>
           <p className="text-xs text-center py-3" style={{ color: "var(--text-secondary)" }}>
-            &copy; 2026 GFG Asset Management. All Rights Reserved. CONFIDENTIAL &amp; PROPRIETARY. May not be reproduced or distributed without written permission.
+            &copy; {new Date().getFullYear()} GFG Asset Management. All Rights Reserved. CONFIDENTIAL &amp; PROPRIETARY. May not be reproduced or distributed without written permission.
           </p>
         </main>
       </div>

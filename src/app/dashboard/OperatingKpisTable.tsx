@@ -103,10 +103,7 @@ function VariancePill({ actual, compare, vsType, bad }: PillProps) {
 
 type Props = {
   selectedHotels: string[];
-  selectedMonths: string[];
-  year: string;
   metric: "USD" | "Local";
-  compSet: string;
 };
 
 export default function OperatingKpisTable({ selectedHotels, metric }: Props) {
@@ -154,13 +151,17 @@ export default function OperatingKpisTable({ selectedHotels, metric }: Props) {
               // Exchange Rate$ rule: show '—' when not exactly 1 hotel selected
               const exchHide = row.exch && !singleHotel;
 
-              // Actual display value (Local multiplier for usd/mxn formats — placeholder only)
+              // Placeholder-only scale factor. In production, actual/plan/ly must come
+              // from the correct currency columns in PostgreSQL — do NOT multiply here.
+              // TODO: remove `lm` and `f` once DB queries supply pre-converted values.
+              const f = metric === "Local" ? row.lm : 1;
+              const scaledActual = row.actual * f;
+              const scaledPlan   = row.plan   * f;
+              const scaledLy     = row.ly     * f;
+
               const displayVal = exchHide || row.noActual
                 ? "—"
-                : fmtActual(
-                    metric === "Local" ? row.actual * row.lm : row.actual,
-                    row.fmt,
-                  );
+                : fmtActual(scaledActual, row.fmt);
 
               return (
                 <tr
@@ -178,14 +179,14 @@ export default function OperatingKpisTable({ selectedHotels, metric }: Props) {
                     {exchHide ? (
                       <span style={{ color: "var(--text-secondary)" }}>—</span>
                     ) : (
-                      <VariancePill actual={row.actual} compare={row.plan} vsType={row.vsType} bad={row.bad} />
+                      <VariancePill actual={scaledActual} compare={scaledPlan} vsType={row.vsType} bad={row.bad} />
                     )}
                   </td>
                   <td className="px-3 py-[3px] text-right">
                     {exchHide ? (
                       <span style={{ color: "var(--text-secondary)" }}>—</span>
                     ) : (
-                      <VariancePill actual={row.actual} compare={row.ly}   vsType={row.vsType} bad={row.bad} />
+                      <VariancePill actual={scaledActual} compare={scaledLy} vsType={row.vsType} bad={row.bad} />
                     )}
                   </td>
                 </tr>
