@@ -32,7 +32,7 @@ const SQL_HOTELS_ALL = `
 const SQL_HOTELS_FILTERED = `
   SELECT hotel, MAX(hotel_name) AS hotel_name, MAX(rooms) AS rooms
   FROM weekly_pace.weekly_pace
-  WHERE hotel_name = ANY($1::text[])
+  WHERE hotel = ANY($1::text[]) OR hotel_name = ANY($1::text[])
   GROUP BY hotel
   ORDER BY MAX(hotel_name)
 `;

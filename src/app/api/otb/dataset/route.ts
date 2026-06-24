@@ -40,7 +40,7 @@ const SQL_ALL_PROPERTIES = `
 const SQL_ALLOWED_PROPERTIES = `
   SELECT property_code, property_name, capacity, capacity_ly
   FROM daily_segmentation_otb.properties
-  WHERE property_name = ANY($1::text[])
+  WHERE property_code = ANY($1::text[]) OR property_name = ANY($1::text[])
   ORDER BY property_name
 `;
 
@@ -184,7 +184,7 @@ export async function GET(request: Request) {
     const prop = propRes.rows[0];
 
     // Verify the requested property is in the user's allowed list.
-    if (allowedProps && !allowedProps.includes(prop.property_name)) {
+    if (allowedProps && !allowedProps.includes(prop.property_name) && !allowedProps.includes(prop.property_code)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     const segments: string[] = segRes.rows.map((r) => r.segment_key);
