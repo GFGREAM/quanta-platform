@@ -78,7 +78,7 @@ export default function OnTheBooksPage() {
     : (allowedSources[0]?.key ?? 'hotel');
 
   const [propertyCode, setPropertyCode] = useState<string>('');
-  const otb = useOtbData(propertyCode);
+  const otb = useOtbData(propertyCode, effectiveSource === 'd360');
   const { loading, AS_OF, TC_SEGMENTS, CAPACITY_2025, CAPACITY_2026, PROPERTIES, snapshots, snapshot, setSnapshot, getSegmentSummary, getGridDaily, getGroupDaily } = otb;
   const property = PROPERTIES.find((p) => p.code === propertyCode) ?? PROPERTIES[0];
 
@@ -259,7 +259,9 @@ export default function OnTheBooksPage() {
   const varSub = (cur: number, ref: number) =>
     isOcc ? `${cur - ref >= 0 ? '+' : ''}${(cur - ref).toFixed(1)} pts` : fmtVar(cur, ref);
 
-  if (loading || TC_SEGMENTS.length === 0) {
+  // D360 skeleton gate: only block the page when D360 is the active source.
+  // Hotel Report has its own loading state and doesn't depend on TC_SEGMENTS.
+  if (effectiveSource === 'd360' && (loading || TC_SEGMENTS.length === 0)) {
     return (
       <div className="animate-pulse flex flex-col gap-4">
         <div className="h-4 w-48 rounded" style={{ background: 'var(--border)' }} />
