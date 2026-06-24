@@ -15,6 +15,7 @@ import {
   useOtbData, TOTAL_KEY,
   type OtbData, type TcSegment, type SegmentKey, type GridDay,
 } from './data';
+import { useHotelReport, type HotelMonth, type ProgWeek } from './hotelReport';
 
 // Context so sub-components (SegmentGrid, SegmentTree) can access the OTB data
 // without prop drilling through every intermediate component.
@@ -52,8 +53,19 @@ const BOARD_VIEWS: { key: BoardView; label: string }[] = [
   { key: 'dailySegment', label: 'Daily Segment' },
 ];
 
+// Data-source tabs (mirrors Group Pipeline's Visual tabs). Today every property
+// is sourced from Demand 360; new sources (each backed by a different database)
+// get added here one at a time as their structure is defined. The board content
+// is shared for now — each source will branch off `dataSource` as it's wired in.
+type DataSource = 'd360' | 'hotel';
+const DATA_SOURCES: { key: DataSource; label: string; title: string }[] = [
+  { key: 'hotel', label: 'Hotel Report', title: "On the Books sourced from the hotel's own report" },
+  { key: 'd360', label: 'Demand 360', title: 'On the Books sourced from Demand 360' },
+];
+
 export default function OnTheBooksPage() {
-  const [boardView, setBoardView] = useState<BoardView>('fullYear');
+  const [boardView, setBoardView] = useState<BoardView>('summary');
+  const [dataSource, setDataSource] = useState<DataSource>('hotel');
 
   const [propertyCode, setPropertyCode] = useState<string>('');
   const otb = useOtbData(propertyCode);
@@ -65,6 +77,27 @@ export default function OnTheBooksPage() {
       setPropertyCode(PROPERTIES[0].code);
     }
   }, [propertyCode, PROPERTIES]);
+
+  // Hotel Report (weekly_pace) — its own hotel list/snapshots, independent of D360.
+  const [hotelCode, setHotelCode] = useState<string>('');
+  const hotelReport = useHotelReport(hotelCode, dataSource === 'hotel');
+  useEffect(() => {
+    if (dataSource === 'hotel' && !hotelCode && hotelReport.hotels.length > 0) {
+      setHotelCode(hotelReport.hotels[0].code);
+    }
+  }, [dataSource, hotelCode, hotelReport.hotels]);
+
+  // Hotel Report Summary feeds on monthly PaceAggs (vs D360's daily roll-up).
+  const hotelAggs = useMemo(
+    () => (dataSource === 'hotel'
+      ? { months: hotelReport.months.map(hotelMonthToAgg), grand: hotelGrandAgg(hotelReport.months), name: hotelReport.hotelName }
+      : null),
+    [dataSource, hotelReport.months, hotelReport.hotelName],
+  );
+  const hotelProgSeries = useMemo(
+    () => hotelReport.progression.map(progWeekToPoint),
+    [hotelReport.progression],
+  );
   const [segSel, setSegSel] = useState<string[]>([]);
   const [view, setView] = useState<ViewMode>('cumulative');
   const [month, setMonth] = useState<MonthFilter>('all');
@@ -246,10 +279,12 @@ export default function OnTheBooksPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight m-0" style={{ color: 'var(--primary)' }}>
-            {BOARD_VIEWS.find((v) => v.key === boardView)?.label ?? 'Daily'} On The Books — {selectedLabel}
+            {BOARD_VIEWS.find((v) => v.key === boardView)?.label ?? 'Daily'} On The Books — {dataSource === 'hotel' ? 'Total' : selectedLabel}
           </h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-            {property.name} · Room Nights by TC segment · FY26 budget mapped onto actuals · pace as of {AS_OF}
+            {dataSource === 'hotel'
+              ? `${hotelReport.hotelName} · Monthly pace · Hotel Report${hotelReport.week ? ` · as of ${hotelReport.week}` : ''}`
+              : `${property.name} · Room Nights by TC segment · FY26 budget mapped onto actuals · pace as of ${AS_OF}`}
           </p>
         </div>
         <button
@@ -263,6 +298,20 @@ export default function OnTheBooksPage() {
         </button>
       </div>
 
+      {/* Data-source tabs (scaffold) — one source today (Demand 360); more added one by one */}
+      <div className="flex items-center gap-2 border-b" style={{ borderColor: 'var(--border)' }}>
+        {DATA_SOURCES.map((s) => (
+          <TabButton
+            key={s.key}
+            active={dataSource === s.key}
+            onClick={() => setDataSource(s.key)}
+            title={s.title}
+          >
+            {s.label}
+          </TabButton>
+        ))}
+      </div>
+
       {/* view toggle — Monthly / Daily / Daily Segment */}
       <div className="flex rounded-lg p-[3px] gap-0.5 self-start" style={{ background: 'var(--muted)' }}>
         {BOARD_VIEWS.map((v) => (
@@ -274,6 +323,12 @@ export default function OnTheBooksPage() {
         ))}
       </div>
 
+      {/* Hotel Report: Summary mirrors the Demand 360 board for now (we'll branch it later);
+          the remaining views stay on the Coming soon placeholder. */}
+      {dataSource === 'hotel' && boardView !== 'summary' ? (
+        <ComingSoon view={boardView} />
+      ) : (
+        <>
       {/* Summary / Full Year controls — Property + Week (snapshot) + Segment */}
       {(boardView === 'summary' || boardView === 'fullYear') && (
       <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
@@ -282,12 +337,12 @@ export default function OnTheBooksPage() {
             Property
           </label>
           <select
-            value={propertyCode}
-            onChange={(e) => setPropertyCode(e.target.value)}
+            value={dataSource === 'hotel' ? hotelCode : propertyCode}
+            onChange={(e) => (dataSource === 'hotel' ? setHotelCode(e.target.value) : setPropertyCode(e.target.value))}
             style={selectStyle}
             className="h-9 w-52 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
           >
-            {PROPERTIES.map((p) => (
+            {(dataSource === 'hotel' ? hotelReport.hotels : PROPERTIES).map((p) => (
               <option key={p.code} value={p.code}>{p.name}</option>
             ))}
           </select>
@@ -297,16 +352,18 @@ export default function OnTheBooksPage() {
             Week
           </label>
           <select
-            value={snapshot}
-            onChange={(e) => setSnapshot(e.target.value)}
+            value={dataSource === 'hotel' ? hotelReport.week : snapshot}
+            onChange={(e) => (dataSource === 'hotel' ? hotelReport.setWeek(e.target.value) : setSnapshot(e.target.value))}
             style={selectStyle}
             className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
           >
-            {snapshots.map((s, i) => (
+            {(dataSource === 'hotel' ? hotelReport.weeks : snapshots).map((s, i) => (
               <option key={s} value={s}>{i === 0 ? `${s} (latest)` : s}</option>
             ))}
           </select>
         </div>
+        {/* Hotel Report has no segment breakdown yet — hide the Segment filter there. */}
+        {dataSource !== 'hotel' && (
         <div className="flex flex-col gap-1.5">
           <label className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
             Segment
@@ -320,6 +377,7 @@ export default function OnTheBooksPage() {
             placeholder="All segments"
           />
         </div>
+        )}
       </div>
       )}
 
@@ -331,12 +389,12 @@ export default function OnTheBooksPage() {
             Property
           </label>
           <select
-            value={propertyCode}
-            onChange={(e) => setPropertyCode(e.target.value)}
+            value={dataSource === 'hotel' ? hotelCode : propertyCode}
+            onChange={(e) => (dataSource === 'hotel' ? setHotelCode(e.target.value) : setPropertyCode(e.target.value))}
             style={selectStyle}
             className="h-9 w-52 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
           >
-            {PROPERTIES.map((p) => (
+            {(dataSource === 'hotel' ? hotelReport.hotels : PROPERTIES).map((p) => (
               <option key={p.code} value={p.code}>{p.name}</option>
             ))}
           </select>
@@ -346,12 +404,12 @@ export default function OnTheBooksPage() {
             Week
           </label>
           <select
-            value={snapshot}
-            onChange={(e) => setSnapshot(e.target.value)}
+            value={dataSource === 'hotel' ? hotelReport.week : snapshot}
+            onChange={(e) => (dataSource === 'hotel' ? hotelReport.setWeek(e.target.value) : setSnapshot(e.target.value))}
             style={selectStyle}
             className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
           >
-            {snapshots.map((s, i) => (
+            {(dataSource === 'hotel' ? hotelReport.weeks : snapshots).map((s, i) => (
               <option key={s} value={s}>{i === 0 ? `${s} (latest)` : s}</option>
             ))}
           </select>
@@ -577,9 +635,14 @@ export default function OnTheBooksPage() {
       {boardView === 'daily' && <SegmentGrid segment={TOTAL_KEY} month={month} isOcc={isOcc} granularity="daily" />}
       {boardView === 'dailySegment' && <SegmentTree month={month} />}
       {boardView === 'fullYear' && <MonthlyBoard segments={selectedSegs} />}
-      {boardView === 'summary' && <SummaryView segments={selectedSegs} />}
+      {boardView === 'summary' && <SummaryView segments={selectedSegs} source={dataSource} hotelAggs={hotelAggs} />}
+      {dataSource === 'hotel' && boardView === 'summary' && (
+        <ProgressionChart series={hotelProgSeries} loading={hotelReport.loading} />
+      )}
       {boardView === 'monthly' && <MonthlyView month={month} />}
       </div>
+        </>
+      )}
     </div>
     </OtbCtx.Provider>
   );
@@ -846,7 +909,7 @@ function SegmentGrid({ segment, month, isOcc, granularity }: { segment: SegmentK
 // Columns: 12 months grouped into quarters, plus FY, YTD (≤ as-of) and ROY (rest of year).
 // Sections stack absolute On-the-Books over five variance views. Per the user's preference,
 // variance is shown with green/red TEXT only — no background fill.
-type PaceSection = 'otb' | 'stly' | 'puLw' | 'pu4w' | 'budget' | 'risk';
+type PaceSection = 'otb' | 'stly' | 'puLw' | 'pu4w' | 'budget' | 'risk' | 'riskLy' | 'lyFull' | 'riskStly';
 const PACE_SECTIONS: { key: PaceSection; label: string; variance: boolean }[] = [
   { key: 'otb', label: 'On the Books', variance: false },
   { key: 'stly', label: 'On the Books vs STLY', variance: true },
@@ -868,6 +931,7 @@ interface PaceAgg {
   n: number; cap: number; capLy: number;
   rn: number; rev: number; budRn: number; budRev: number;
   stlyRn: number; stlyRev: number; lyPaceRn: number; lyPaceRev: number;
+  lyFullRn: number; lyFullRev: number;
   puRn: number | null; puRev: number | null;
   pu4Rn: number | null; pu4Rev: number | null;
 }
@@ -876,11 +940,13 @@ interface PaceAgg {
 // contributed (so the section renders "—" instead of a misleading zero).
 function aggregatePace(days: GridDay[], cap: number, capLy: number): PaceAgg {
   let rn = 0, rev = 0, budRn = 0, budRev = 0, stlyRn = 0, stlyRev = 0, lyPaceRn = 0, lyPaceRev = 0;
+  let lyFullRn = 0, lyFullRev = 0;
   let puRn = 0, puRev = 0, puHas = false, pu4Rn = 0, pu4Rev = 0, pu4Has = false;
   for (const d of days) {
     rn += d.rn; rev += d.rev;
     budRn += d.budgetRn; budRev += d.budgetRev;
     stlyRn += d.rnStly; stlyRev += d.stlyRev;
+    lyFullRn += d.rnLy; lyFullRev += d.revLy;
     if (d.isPace) { lyPaceRn += d.rnLy; lyPaceRev += d.revLy; }
     if (d.pickupW != null) { puRn += d.pickupW; puHas = true; }
     if (d.revPickupW != null) puRev += d.revPickupW;
@@ -889,6 +955,7 @@ function aggregatePace(days: GridDay[], cap: number, capLy: number): PaceAgg {
   }
   return {
     n: days.length, cap, capLy, rn, rev, budRn, budRev, stlyRn, stlyRev, lyPaceRn, lyPaceRev,
+    lyFullRn, lyFullRev,
     puRn: puHas ? puRn : null, puRev: puHas ? puRev : null,
     pu4Rn: pu4Has ? pu4Rn : null, pu4Rev: pu4Has ? pu4Rev : null,
   };
@@ -939,6 +1006,15 @@ function paceCellValue(section: PaceSection, metric: PaceMetric, a: PaceAgg): nu
     case 'risk':
       // (OTB + last-year rest-of-year) − Budget.
       return metricOf(a.rn + a.lyPaceRn, a.rev + a.lyPaceRev) - metricOf(a.budRn, a.budRev);
+    case 'riskLy':
+      // (OTB + last-year rest-of-year) − last year's full-year actual.
+      return metricOf(a.rn + a.lyPaceRn, a.rev + a.lyPaceRev) - metricOf(a.lyFullRn, a.lyFullRev);
+    case 'lyFull':
+      // OTB − last year's full-year actual (final), not the same-time position.
+      return metricOf(a.rn, a.rev) - metricLy(a.lyFullRn, a.lyFullRev);
+    case 'riskStly':
+      // (OTB + last-year rest-of-year) − same-time-last-year.
+      return metricOf(a.rn + a.lyPaceRn, a.rev + a.lyPaceRev) - metricOf(a.stlyRn, a.stlyRev);
   }
 }
 
@@ -972,7 +1048,7 @@ const sumM5 = (s: PaceSection): SumCol[] => [
 ];
 // Current Year is always shown; the header toggle picks one comparison family so the board fits
 // without horizontal scroll.
-type SumCompare = 'bud' | 'ly' | 'cs';
+type SumCompare = 'bud' | 'stly' | 'ly' | 'cs';
 const SUM_COMPARE: [SumCompare, string][] = [['bud', 'vs Budget'], ['ly', 'vs Last Year'], ['cs', 'Comp Set']];
 const SUMMARY_CY: SumGroup = { label: 'On the Books Current Year', variance: false, cols: sumM5('otb') };
 const SUMMARY_CMP: (SumGroup & { compare: SumCompare })[] = [
@@ -994,6 +1070,54 @@ const SUMMARY_CMP: (SumGroup & { compare: SumCompare })[] = [
   ] },
 ];
 
+// Hotel Report's "vs STLY" mirrors the "vs Budget" layout: the 5-metric comparison group
+// plus a Risk/Surplus group, measured against same-time-last-year (booking pace position).
+const SUMMARY_STLY_HOTEL: SumGroup[] = [
+  { label: 'On the Books to STLY', variance: true, cols: sumM5('stly') },
+  { label: 'Risk /Surplus to STLY', variance: true, cols: [
+    { key: 'riskstly-rn', label: 'Room Nights', section: 'riskStly', metric: 'rn' },
+    { key: 'riskstly-rev', label: "Rev$ ('000)", section: 'riskStly', metric: 'rev' },
+  ] },
+];
+// Hotel Report's "vs Last Year" uses last year's full-year actual (final), not the
+// same-time position — distinct from the vs STLY board above.
+const SUMMARY_LY_HOTEL: SumGroup[] = [
+  { label: 'On the Books to Last Year', variance: true, cols: sumM5('lyFull') },
+  { label: 'Risk /Surplus to Last Year', variance: true, cols: [
+    { key: 'riskly-rn', label: 'Room Nights', section: 'riskLy', metric: 'rn' },
+    { key: 'riskly-rev', label: "Rev$ ('000)", section: 'riskLy', metric: 'rev' },
+  ] },
+];
+
+// Build a monthly PaceAgg from one Hotel Report (weekly_pace) month. cap=avail and n=1
+// make OCC = rn/avail and RevPAR = rev/avail (avail reused for capLy). stly = same-time-LY
+// (otb_*_ly); lyFull = last-year close (prior-year rows). lyPace carries the last-year close
+// only for still-open months, so the Risk sections evaluate to (OTB + LY-close-of-open) −
+// reference — the established Risk/Surplus, no outlook.
+function hotelMonthToAgg(mo: HotelMonth): PaceAgg {
+  return {
+    n: 1, cap: mo.avail, capLy: mo.avail,
+    rn: mo.otbRn, rev: mo.otbRev,
+    budRn: mo.budRn, budRev: mo.budRev,
+    stlyRn: mo.stlyRn, stlyRev: mo.stlyRev,
+    lyPaceRn: mo.open ? mo.lyCloseRn : 0, lyPaceRev: mo.open ? mo.lyCloseRev : 0,
+    lyFullRn: mo.lyCloseRn, lyFullRev: mo.lyCloseRev,
+    puRn: null, puRev: null, pu4Rn: null, pu4Rev: null,
+  };
+}
+function hotelGrandAgg(months: HotelMonth[]): PaceAgg {
+  const s = (f: (m: HotelMonth) => number) => months.reduce((a, m) => a + f(m), 0);
+  return {
+    n: 1, cap: s((m) => m.avail), capLy: s((m) => m.avail),
+    rn: s((m) => m.otbRn), rev: s((m) => m.otbRev),
+    budRn: s((m) => m.budRn), budRev: s((m) => m.budRev),
+    stlyRn: s((m) => m.stlyRn), stlyRev: s((m) => m.stlyRev),
+    lyPaceRn: s((m) => (m.open ? m.lyCloseRn : 0)), lyPaceRev: s((m) => (m.open ? m.lyCloseRev : 0)),
+    lyFullRn: s((m) => m.lyCloseRn), lyFullRev: s((m) => m.lyCloseRev),
+    puRn: null, puRev: null, pu4Rn: null, pu4Rev: null,
+  };
+}
+
 function fmtSummary(metric: PaceMetric, v: number): string {
   switch (metric) {
     case 'occ': return `${v.toFixed(1)}%`;
@@ -1012,11 +1136,25 @@ const sumNearZero = (metric: PaceMetric, v: number) =>
 // keeps Full Year / Summary equal to the Monthly board's Grand Total (w/o Comps).
 const NON_DEFINITE: string[] = ['Comp-Permanent-Other'];
 
-function SummaryView({ segments }: { segments: TcSegment[] }) {
+function SummaryView({ segments, source, hotelAggs }: {
+  segments: TcSegment[];
+  source: DataSource;
+  hotelAggs: { months: PaceAgg[]; grand: PaceAgg; name: string } | null;
+}) {
   const { getGridDaily, TC_SEGMENTS, CAPACITY_2025, CAPACITY_2026, PROPERTIES } = useOtb();
-  const propertyName = PROPERTIES[0]?.name ?? '';
+  const propertyName = hotelAggs ? hotelAggs.name : (PROPERTIES[0]?.name ?? '');
+  // Hotel Report has no comp set; its toggles are Budget · STLY · Last Year.
+  const compareOptions: [SumCompare, string][] = source === 'hotel'
+    ? [['bud', 'vs Budget'], ['stly', 'vs STLY'], ['ly', 'vs Last Year']]
+    : SUM_COMPARE;
   const [compare, setCompare] = useState<SumCompare>('bud');
-  const groups: SumGroup[] = [SUMMARY_CY, ...SUMMARY_CMP.filter((g) => g.compare === compare)];
+  const hotelGroups: SumGroup[] =
+    compare === 'stly' ? SUMMARY_STLY_HOTEL
+    : compare === 'ly' ? SUMMARY_LY_HOTEL
+    : SUMMARY_CMP.filter((g) => g.compare === compare);
+  const groups: SumGroup[] = source === 'hotel'
+    ? [SUMMARY_CY, ...hotelGroups]
+    : [SUMMARY_CY, ...SUMMARY_CMP.filter((g) => g.compare === compare)];
   // Total when all (or no) segments are selected; otherwise sum the chosen segments per day.
   const days = useMemo(() => {
     const allSel = segments.length === 0 || segments.length >= TC_SEGMENTS.length;
@@ -1026,13 +1164,16 @@ function SummaryView({ segments }: { segments: TcSegment[] }) {
   }, [getGridDaily, segments, TC_SEGMENTS]);
 
   // One aggregate per month (full month = act + pace), plus a Grand Total over the whole year.
-  const monthAggs = useMemo(
+  const d360MonthAggs = useMemo(
     () => MONTH_ABBR.map((_, m) => aggregatePace(days.filter((d) => Number(d.date.slice(5, 7)) === m + 1), CAPACITY_2026, CAPACITY_2025)),
     [days, CAPACITY_2026, CAPACITY_2025],
   );
-  const grandAgg = useMemo(() => aggregatePace(days, CAPACITY_2026, CAPACITY_2025), [days, CAPACITY_2026, CAPACITY_2025]);
+  const d360GrandAgg = useMemo(() => aggregatePace(days, CAPACITY_2026, CAPACITY_2025), [days, CAPACITY_2026, CAPACITY_2025]);
+  // Hotel Report supplies its own monthly aggregates; D360 derives them from the daily roll-up.
+  const monthAggs = hotelAggs ? hotelAggs.months : d360MonthAggs;
+  const grandAgg = hotelAggs ? hotelAggs.grand : d360GrandAgg;
 
-  if (days.length === 0) {
+  if (!hotelAggs && days.length === 0) {
     return (
       <div className="bg-white border rounded-lg shadow-sm flex items-center justify-center" style={{ borderColor: 'var(--border)', minHeight: 260 }}>
         <span className="text-sm" style={{ color: 'var(--text-muted)' }}>No data</span>
@@ -1065,7 +1206,7 @@ function SummaryView({ segments }: { segments: TcSegment[] }) {
       <div className="px-3 py-2 border-b flex items-center justify-between gap-3" style={{ background: 'var(--muted)', borderColor: 'var(--border)' }}>
         <span className="text-sm font-bold" style={{ color: 'var(--primary)' }}>Booking Pace Summary {propertyName}</span>
         <div className="flex gap-1">
-          {SUM_COMPARE.map(([k, lbl]) => (
+          {compareOptions.map(([k, lbl]) => (
             <button key={k} type="button" onClick={() => setCompare(k)}
               className="px-2.5 py-0.5 rounded border text-[0.625rem] font-semibold cursor-pointer transition-colors"
               style={{
@@ -1119,6 +1260,99 @@ function SummaryView({ segments }: { segments: TcSegment[] }) {
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+// ---- Week-over-week progression chart (Hotel Report · Summary) ----
+// Plots one FY-total metric across every weekly snapshot (week), so you can see how the
+// full-year position moved load over load. Series comes precomputed from /api/otb/hotel-report
+// (one GROUP BY week query); Risk = projected final (OTB + LY close of the ROY months) − Budget.
+const PROG_MAX_WEEKS = 20; // progression chart shows only the last N weekly snapshots
+type ProgMetric = 'rn' | 'occ' | 'adr' | 'revpar' | 'rev' | 'riskRn' | 'riskRev';
+const PROG_METRICS: { key: ProgMetric; label: string }[] = [
+  { key: 'rn', label: 'Room Nights' },
+  { key: 'occ', label: 'OCC%' },
+  { key: 'adr', label: 'ADR' },
+  { key: 'revpar', label: 'RevPAR' },
+  { key: 'rev', label: 'Revenue' },
+  { key: 'riskRn', label: 'Risk RN' },
+  { key: 'riskRev', label: 'Risk Rev' },
+];
+interface ProgPoint {
+  snapshot: string; label: string;
+  rn: number; occ: number; adr: number; revpar: number; rev: number; riskRn: number; riskRev: number;
+}
+
+const progShortLabel = (date: string): string => {
+  const [, mm, dd] = date.split('-');
+  return `${MONTH_ABBR[Number(mm) - 1]} ${Number(dd)}`;
+};
+const fmtProg = (m: ProgMetric, v: number): string => {
+  switch (m) {
+    case 'occ': return `${v.toFixed(1)}%`;
+    case 'adr':
+    case 'revpar': return v.toFixed(1);
+    case 'rev':
+    case 'riskRev': return `${Math.round(v / 1000).toLocaleString('en-US')}K`;
+    default: return Math.round(v).toLocaleString('en-US');
+  }
+};
+
+// Map one FY-total-per-week row (weekly_pace) to a chart point. Risk = projected final
+// (OTB + last-year close for the open months) − Budget. OCC/ADR/RevPAR from FY totals + avail.
+function progWeekToPoint(w: ProgWeek): ProgPoint {
+  return {
+    snapshot: w.week, label: progShortLabel(w.week),
+    rn: w.otbRn, rev: w.otbRev,
+    occ: w.avail ? (w.otbRn / w.avail) * 100 : 0,
+    adr: w.otbRn ? w.otbRev / w.otbRn : 0,
+    revpar: w.avail ? w.otbRev / w.avail : 0,
+    riskRn: w.projRn - w.budRn, riskRev: w.projRev - w.budRev,
+  };
+}
+
+function ProgressionChart({ series, loading }: { series: ProgPoint[]; loading: boolean }) {
+  const [metric, setMetric] = useState<ProgMetric>('rn');
+  // Show only the most recent weeks so the week-over-week trend stays readable.
+  const points = series.slice(-PROG_MAX_WEEKS);
+
+  const isRisk = metric === 'riskRn' || metric === 'riskRev';
+  const metricLabel = PROG_METRICS.find((m) => m.key === metric)?.label ?? '';
+
+  return (
+    <div className="bg-white border rounded-lg overflow-hidden shadow-sm" style={{ borderColor: 'var(--border)' }}>
+      <div className="px-3 py-2 border-b flex items-center justify-between gap-3" style={{ background: 'var(--muted)', borderColor: 'var(--border)' }}>
+        <span className="text-sm font-bold" style={{ color: 'var(--primary)' }}>Booking Pace Progression · FY Total</span>
+        <select
+          value={metric}
+          onChange={(e) => setMetric(e.target.value as ProgMetric)}
+          style={selectStyle}
+          className="h-8 px-2.5 pr-7 rounded-md border text-[0.75rem] bg-white appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
+        >
+          {PROG_METRICS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+        </select>
+      </div>
+      <div className="h-[300px] p-4">
+        {loading ? (
+          <div className="h-full flex items-center justify-center text-sm" style={{ color: 'var(--text-muted)' }}>Loading…</div>
+        ) : points.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-sm" style={{ color: 'var(--text-muted)' }}>No data</div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={points} margin={{ top: 8, right: 16, bottom: 4, left: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
+              <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} width={56} tickFormatter={(v: number) => fmtProg(metric, v)} />
+              <Tooltip formatter={(v) => [fmtProg(metric, Number(v)), metricLabel] as [string, string]} labelStyle={{ color: 'var(--text-primary)' }} />
+              {isRisk && <ReferenceLine y={0} stroke="var(--text-secondary)" strokeDasharray="4 3" />}
+              <Line type="monotone" dataKey={metric} name={metricLabel}
+                stroke={isRisk ? 'var(--accent)' : 'var(--primary)'} strokeWidth={2.5}
+                dot={{ r: 3 }} activeDot={{ r: 5 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </div>
   );
@@ -1811,5 +2045,39 @@ function ChartTooltip({ active, payload, label, fmt }: {
         </div>
       ))}
     </div>
+  );
+}
+
+// Placeholder shown while a data source's board is being built out, one view at a
+// time. Replaced per board view as each Hotel Report visual is wired in.
+function ComingSoon({ view }: { view: BoardView }) {
+  const label = BOARD_VIEWS.find((v) => v.key === view)?.label ?? '';
+  return (
+    <div
+      className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed py-20 text-center"
+      style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+    >
+      <span className="text-lg font-semibold" style={{ color: 'var(--primary)' }}>Coming soon</span>
+      <span className="text-sm">{label} · Hotel Report</span>
+    </div>
+  );
+}
+
+// Data-source tab — same look-and-feel as Group Pipeline's Visual tabs.
+function TabButton({ active, onClick, children, title }: { active: boolean; onClick: () => void; children: React.ReactNode; title?: string }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className={`px-4 py-2 text-sm transition-colors border-b-2 -mb-px ${
+        active ? 'font-semibold' : 'hover:opacity-80'
+      }`}
+      style={{
+        color: active ? 'var(--primary)' : 'var(--text-secondary)',
+        borderBottomColor: active ? 'var(--accent)' : 'transparent',
+      }}
+    >
+      {children}
+    </button>
   );
 }
