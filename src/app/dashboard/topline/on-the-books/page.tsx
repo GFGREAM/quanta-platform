@@ -58,14 +58,24 @@ const BOARD_VIEWS: { key: BoardView; label: string }[] = [
 // get added here one at a time as their structure is defined. The board content
 // is shared for now — each source will branch off `dataSource` as it's wired in.
 type DataSource = 'd360' | 'hotel';
-const DATA_SOURCES: { key: DataSource; label: string; title: string }[] = [
-  { key: 'hotel', label: 'Hotel Report', title: "On the Books sourced from the hotel's own report" },
-  { key: 'd360', label: 'Demand 360', title: 'On the Books sourced from Demand 360' },
+const DATA_SOURCES: { key: DataSource; label: string; title: string; sectionKey: string }[] = [
+  { key: 'hotel', label: 'Hotel Report', title: "On the Books sourced from the hotel's own report", sectionKey: 'topline-otb-hotel-report' },
+  { key: 'd360', label: 'Demand 360', title: 'On the Books sourced from Demand 360', sectionKey: 'topline-otb-demand-360' },
 ];
 
 export default function OnTheBooksPage() {
   const [boardView, setBoardView] = useState<BoardView>('summary');
+  const { hasFullAccess, sections } = usePermissions();
+
+  // Filter tabs to only those the user has access to.
+  const allowedSources = hasFullAccess
+    ? DATA_SOURCES
+    : DATA_SOURCES.filter((s) => s.sectionKey in sections);
   const [dataSource, setDataSource] = useState<DataSource>('hotel');
+  // If current tab is not allowed, switch to the first allowed one.
+  const effectiveSource = allowedSources.some((s) => s.key === dataSource)
+    ? dataSource
+    : (allowedSources[0]?.key ?? 'hotel');
 
   const [propertyCode, setPropertyCode] = useState<string>('');
   const otb = useOtbData(propertyCode);
@@ -80,19 +90,19 @@ export default function OnTheBooksPage() {
 
   // Hotel Report (weekly_pace) — its own hotel list/snapshots, independent of D360.
   const [hotelCode, setHotelCode] = useState<string>('');
-  const hotelReport = useHotelReport(hotelCode, dataSource === 'hotel');
+  const hotelReport = useHotelReport(hotelCode, effectiveSource === 'hotel');
   useEffect(() => {
-    if (dataSource === 'hotel' && !hotelCode && hotelReport.hotels.length > 0) {
+    if (effectiveSource === 'hotel' && !hotelCode && hotelReport.hotels.length > 0) {
       setHotelCode(hotelReport.hotels[0].code);
     }
-  }, [dataSource, hotelCode, hotelReport.hotels]);
+  }, [effectiveSource, hotelCode, hotelReport.hotels]);
 
   // Hotel Report Summary feeds on monthly PaceAggs (vs D360's daily roll-up).
   const hotelAggs = useMemo(
-    () => (dataSource === 'hotel'
+    () => (effectiveSource === 'hotel'
       ? { months: hotelReport.months.map(hotelMonthToAgg), grand: hotelGrandAgg(hotelReport.months), name: hotelReport.hotelName }
       : null),
-    [dataSource, hotelReport.months, hotelReport.hotelName],
+    [effectiveSource, hotelReport.months, hotelReport.hotelName],
   );
   const hotelProgSeries = useMemo(
     () => hotelReport.progression.map(progWeekToPoint),
@@ -105,7 +115,6 @@ export default function OnTheBooksPage() {
   const isOcc = metric === 'OCC';
   // PDF export of the visuals (KPIs + chart + pace board). Admins (full access)
   // get the clean internal copy; everyone else gets the confidentiality watermark.
-  const { hasFullAccess } = usePermissions();
   const exportRef = useRef<HTMLDivElement>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
   const handleExportPdf = async () => {
@@ -279,10 +288,10 @@ export default function OnTheBooksPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight m-0" style={{ color: 'var(--primary)' }}>
-            {BOARD_VIEWS.find((v) => v.key === boardView)?.label ?? 'Daily'} On The Books — {dataSource === 'hotel' ? 'Total' : selectedLabel}
+            {BOARD_VIEWS.find((v) => v.key === boardView)?.label ?? 'Daily'} On The Books — {effectiveSource === 'hotel' ? 'Total' : selectedLabel}
           </h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-            {dataSource === 'hotel'
+            {effectiveSource === 'hotel'
               ? `${hotelReport.hotelName} · Monthly pace · Hotel Report${hotelReport.week ? ` · as of ${hotelReport.week}` : ''}`
               : `${property.name} · Room Nights by TC segment · FY26 budget mapped onto actuals · pace as of ${AS_OF}`}
           </p>
@@ -298,12 +307,13 @@ export default function OnTheBooksPage() {
         </button>
       </div>
 
-      {/* Data-source tabs (scaffold) — one source today (Demand 360); more added one by one */}
+      {/* Data-source tabs — hidden when user only has access to one source */}
+      {allowedSources.length > 1 && (
       <div className="flex items-center gap-2 border-b" style={{ borderColor: 'var(--border)' }}>
-        {DATA_SOURCES.map((s) => (
+        {allowedSources.map((s) => (
           <TabButton
             key={s.key}
-            active={dataSource === s.key}
+            active={effectiveSource === s.key}
             onClick={() => setDataSource(s.key)}
             title={s.title}
           >
@@ -311,6 +321,7 @@ export default function OnTheBooksPage() {
           </TabButton>
         ))}
       </div>
+      )}
 
       {/* view toggle — Monthly / Daily / Daily Segment */}
       <div className="flex rounded-lg p-[3px] gap-0.5 self-start" style={{ background: 'var(--muted)' }}>
@@ -325,7 +336,7 @@ export default function OnTheBooksPage() {
 
       {/* Hotel Report: Summary mirrors the Demand 360 board for now (we'll branch it later);
           the remaining views stay on the Coming soon placeholder. */}
-      {dataSource === 'hotel' && boardView !== 'summary' ? (
+      {effectiveSource === 'hotel' && boardView !== 'summary' ? (
         <ComingSoon view={boardView} />
       ) : (
         <>
@@ -337,12 +348,12 @@ export default function OnTheBooksPage() {
             Property
           </label>
           <select
-            value={dataSource === 'hotel' ? hotelCode : propertyCode}
-            onChange={(e) => (dataSource === 'hotel' ? setHotelCode(e.target.value) : setPropertyCode(e.target.value))}
+            value={effectiveSource === 'hotel' ? hotelCode : propertyCode}
+            onChange={(e) => (effectiveSource === 'hotel' ? setHotelCode(e.target.value) : setPropertyCode(e.target.value))}
             style={selectStyle}
             className="h-9 w-52 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
           >
-            {(dataSource === 'hotel' ? hotelReport.hotels : PROPERTIES).map((p) => (
+            {(effectiveSource === 'hotel' ? hotelReport.hotels : PROPERTIES).map((p) => (
               <option key={p.code} value={p.code}>{p.name}</option>
             ))}
           </select>
@@ -352,18 +363,18 @@ export default function OnTheBooksPage() {
             Week
           </label>
           <select
-            value={dataSource === 'hotel' ? hotelReport.week : snapshot}
-            onChange={(e) => (dataSource === 'hotel' ? hotelReport.setWeek(e.target.value) : setSnapshot(e.target.value))}
+            value={effectiveSource === 'hotel' ? hotelReport.week : snapshot}
+            onChange={(e) => (effectiveSource === 'hotel' ? hotelReport.setWeek(e.target.value) : setSnapshot(e.target.value))}
             style={selectStyle}
             className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
           >
-            {(dataSource === 'hotel' ? hotelReport.weeks : snapshots).map((s, i) => (
+            {(effectiveSource === 'hotel' ? hotelReport.weeks : snapshots).map((s, i) => (
               <option key={s} value={s}>{i === 0 ? `${s} (latest)` : s}</option>
             ))}
           </select>
         </div>
         {/* Hotel Report has no segment breakdown yet — hide the Segment filter there. */}
-        {dataSource !== 'hotel' && (
+        {effectiveSource !== 'hotel' && (
         <div className="flex flex-col gap-1.5">
           <label className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
             Segment
@@ -389,12 +400,12 @@ export default function OnTheBooksPage() {
             Property
           </label>
           <select
-            value={dataSource === 'hotel' ? hotelCode : propertyCode}
-            onChange={(e) => (dataSource === 'hotel' ? setHotelCode(e.target.value) : setPropertyCode(e.target.value))}
+            value={effectiveSource === 'hotel' ? hotelCode : propertyCode}
+            onChange={(e) => (effectiveSource === 'hotel' ? setHotelCode(e.target.value) : setPropertyCode(e.target.value))}
             style={selectStyle}
             className="h-9 w-52 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
           >
-            {(dataSource === 'hotel' ? hotelReport.hotels : PROPERTIES).map((p) => (
+            {(effectiveSource === 'hotel' ? hotelReport.hotels : PROPERTIES).map((p) => (
               <option key={p.code} value={p.code}>{p.name}</option>
             ))}
           </select>
@@ -404,12 +415,12 @@ export default function OnTheBooksPage() {
             Week
           </label>
           <select
-            value={dataSource === 'hotel' ? hotelReport.week : snapshot}
-            onChange={(e) => (dataSource === 'hotel' ? hotelReport.setWeek(e.target.value) : setSnapshot(e.target.value))}
+            value={effectiveSource === 'hotel' ? hotelReport.week : snapshot}
+            onChange={(e) => (effectiveSource === 'hotel' ? hotelReport.setWeek(e.target.value) : setSnapshot(e.target.value))}
             style={selectStyle}
             className="h-9 w-44 px-3 pr-8 rounded-md border text-[0.8125rem] bg-white appearance-none cursor-pointer transition-colors outline-none truncate focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)]"
           >
-            {(dataSource === 'hotel' ? hotelReport.weeks : snapshots).map((s, i) => (
+            {(effectiveSource === 'hotel' ? hotelReport.weeks : snapshots).map((s, i) => (
               <option key={s} value={s}>{i === 0 ? `${s} (latest)` : s}</option>
             ))}
           </select>
@@ -635,8 +646,8 @@ export default function OnTheBooksPage() {
       {boardView === 'daily' && <SegmentGrid segment={TOTAL_KEY} month={month} isOcc={isOcc} granularity="daily" />}
       {boardView === 'dailySegment' && <SegmentTree month={month} />}
       {boardView === 'fullYear' && <MonthlyBoard segments={selectedSegs} />}
-      {boardView === 'summary' && <SummaryView segments={selectedSegs} source={dataSource} hotelAggs={hotelAggs} />}
-      {dataSource === 'hotel' && boardView === 'summary' && (
+      {boardView === 'summary' && <SummaryView segments={selectedSegs} source={effectiveSource} hotelAggs={hotelAggs} />}
+      {effectiveSource === 'hotel' && boardView === 'summary' && (
         <ProgressionChart series={hotelProgSeries} loading={hotelReport.loading} />
       )}
       {boardView === 'monthly' && <MonthlyView month={month} />}
@@ -1091,16 +1102,16 @@ const SUMMARY_LY_HOTEL: SumGroup[] = [
 
 // Build a monthly PaceAgg from one Hotel Report (weekly_pace) month. cap=avail and n=1
 // make OCC = rn/avail and RevPAR = rev/avail (avail reused for capLy). stly = same-time-LY
-// (otb_*_ly); lyFull = last-year close (prior-year rows). lyPace carries the last-year close
-// only for still-open months, so the Risk sections evaluate to (OTB + LY-close-of-open) −
-// reference — the established Risk/Surplus, no outlook.
+// (otb_*_ly); lyFull = last-year close (prior-year rows). lyPace carries last year's
+// rest-of-year pickup (lyClose − STLY) for still-open months, so the Risk sections evaluate
+// to (OTB + LY-rest-of-year) − reference — projected final at last year's pace, no outlook.
 function hotelMonthToAgg(mo: HotelMonth): PaceAgg {
   return {
     n: 1, cap: mo.avail, capLy: mo.avail,
     rn: mo.otbRn, rev: mo.otbRev,
     budRn: mo.budRn, budRev: mo.budRev,
     stlyRn: mo.stlyRn, stlyRev: mo.stlyRev,
-    lyPaceRn: mo.open ? mo.lyCloseRn : 0, lyPaceRev: mo.open ? mo.lyCloseRev : 0,
+    lyPaceRn: mo.open ? mo.lyCloseRn - mo.stlyRn : 0, lyPaceRev: mo.open ? mo.lyCloseRev - mo.stlyRev : 0,
     lyFullRn: mo.lyCloseRn, lyFullRev: mo.lyCloseRev,
     puRn: null, puRev: null, pu4Rn: null, pu4Rev: null,
   };
@@ -1112,7 +1123,7 @@ function hotelGrandAgg(months: HotelMonth[]): PaceAgg {
     rn: s((m) => m.otbRn), rev: s((m) => m.otbRev),
     budRn: s((m) => m.budRn), budRev: s((m) => m.budRev),
     stlyRn: s((m) => m.stlyRn), stlyRev: s((m) => m.stlyRev),
-    lyPaceRn: s((m) => (m.open ? m.lyCloseRn : 0)), lyPaceRev: s((m) => (m.open ? m.lyCloseRev : 0)),
+    lyPaceRn: s((m) => (m.open ? m.lyCloseRn - m.stlyRn : 0)), lyPaceRev: s((m) => (m.open ? m.lyCloseRev - m.stlyRev : 0)),
     lyFullRn: s((m) => m.lyCloseRn), lyFullRev: s((m) => m.lyCloseRev),
     puRn: null, puRev: null, pu4Rn: null, pu4Rev: null,
   };

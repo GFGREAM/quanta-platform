@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { pool } from "@/lib/db";
+import { hasAccessToSection, getAllowedProperties } from "@/lib/permissions";
+
+const SECTION_KEY = "topline-otb-hotel-report";
 
 // On The Books · Hotel Report data source: weekly_pace.weekly_pace.
 // Monthly pace (no segments). Grain: week (snapshot) × hotel × period (month).
@@ -12,15 +15,24 @@ import { pool } from "@/lib/db";
 //   Budget: bud_rns_cy / bud_rev_cy
 //   Last Year (close): the prior YEAR's rows (year - 1), already closed.
 // KPIs derived client-side (OCC = otb_rns/avail, ADR = otb_rev/otb_rns, RevPAR = otb_rev/avail).
-// Risk/Surplus = (OTB + last-year close for the still-open months) − reference. No outlook/forecast.
+// Risk/Surplus = (OTB + last year's rest-of-year pickup [LY close − STLY] for the still-open
+// months) − reference. Projected final at last year's booking pace; no outlook/forecast.
 // NULL measures are "no data" (not zero).
 
 const asNum = (v: unknown): number =>
   v === null || v === undefined ? 0 : Number(v);
 
-const SQL_HOTELS = `
+const SQL_HOTELS_ALL = `
   SELECT hotel, MAX(hotel_name) AS hotel_name, MAX(rooms) AS rooms
   FROM weekly_pace.weekly_pace
+  GROUP BY hotel
+  ORDER BY MAX(hotel_name)
+`;
+
+const SQL_HOTELS_FILTERED = `
+  SELECT hotel, MAX(hotel_name) AS hotel_name, MAX(rooms) AS rooms
+  FROM weekly_pace.weekly_pace
+  WHERE hotel_name = ANY($1::text[])
   GROUP BY hotel
   ORDER BY MAX(hotel_name)
 `;
@@ -33,11 +45,12 @@ const SQL_WEEKS = `
 `;
 
 // Board: months of the selected year (CY) plus the prior year (year-1) rows, which
-// carry the closed Last-Year actuals. `open` = the month hasn't closed at this week.
+// carry the closed Last-Year actuals. `open` = the month hasn't fully closed at this week;
+// the snapshot's own (in-progress) month counts as open so its remaining pickup is projected.
 const SQL_MONTHS = `
   SELECT EXTRACT(MONTH FROM period)::int AS m,
          year::int                      AS yr,
-         (date_trunc('month', period::date) > date_trunc('month', $2::date)) AS open,
+         (date_trunc('month', period::date) >= date_trunc('month', $2::date)) AS open,
          days::int  AS days,
          avail::int AS avail,
          otb_rns_cy, otb_rev_cy, otb_rns_ly, otb_rev_ly, bud_rns_cy, bud_rev_cy
@@ -46,8 +59,9 @@ const SQL_MONTHS = `
   ORDER BY period
 `;
 
-// FY total per week (progression). proj_* = projected final = OTB + last-year close for
-// the months still open at that week (lyc = prior-year close, taken at the latest week).
+// FY total per week (progression). proj_* = projected final = OTB + last year's rest-of-year
+// pickup (LY close − same-time-last-year) for the months still open at that week. lyc =
+// prior-year close (taken at the latest week); w.otb_*_ly = same-time-LY position at that week.
 const SQL_PROGRESSION = `
   WITH lyc AS (
     SELECT EXTRACT(MONTH FROM period)::int AS m,
@@ -60,8 +74,8 @@ const SQL_PROGRESSION = `
          SUM(w.otb_rns_cy) AS otb_rns_cy, SUM(w.otb_rev_cy) AS otb_rev_cy,
          SUM(w.bud_rns_cy) AS bud_rns_cy, SUM(w.bud_rev_cy) AS bud_rev_cy,
          SUM(w.avail) AS avail,
-         SUM(w.otb_rns_cy + CASE WHEN date_trunc('month', w.period::date) > date_trunc('month', w.week::date) THEN COALESCE(lyc.ly_rns, 0) ELSE 0 END) AS proj_rns,
-         SUM(w.otb_rev_cy + CASE WHEN date_trunc('month', w.period::date) > date_trunc('month', w.week::date) THEN COALESCE(lyc.ly_rev, 0) ELSE 0 END) AS proj_rev
+         SUM(w.otb_rns_cy + CASE WHEN date_trunc('month', w.period::date) >= date_trunc('month', w.week::date) THEN COALESCE(lyc.ly_rns, 0) - COALESCE(w.otb_rns_ly, 0) ELSE 0 END) AS proj_rns,
+         SUM(w.otb_rev_cy + CASE WHEN date_trunc('month', w.period::date) >= date_trunc('month', w.week::date) THEN COALESCE(lyc.ly_rev, 0) - COALESCE(w.otb_rev_ly, 0) ELSE 0 END) AS proj_rev
   FROM weekly_pace.weekly_pace w
   LEFT JOIN lyc ON lyc.m = EXTRACT(MONTH FROM w.period)::int
   WHERE w.hotel = $1 AND w.year = $2::int
@@ -77,10 +91,21 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
+    const email = session?.user?.email ?? "";
+    if (!bypass && !(await hasAccessToSection(email, SECTION_KEY))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // allowed_properties stores hotel display names (e.g. "Zoetry Marigot Bay").
+    // null = all hotels allowed.
+    const allowedProps = bypass ? null : await getAllowedProperties(email, SECTION_KEY);
+
     const { searchParams } = new URL(request.url);
     const hotel = searchParams.get("hotel");
 
-    const hotelsRes = await pool.query(SQL_HOTELS);
+    const hotelsRes = allowedProps
+      ? await pool.query(SQL_HOTELS_FILTERED, [allowedProps])
+      : await pool.query(SQL_HOTELS_ALL);
     const hotels = hotelsRes.rows.map((r) => ({
       code: r.hotel as string,
       name: r.hotel_name as string,
@@ -89,6 +114,11 @@ export async function GET(request: Request) {
 
     if (!hotel) {
       return NextResponse.json({ hotels });
+    }
+
+    // Verify the requested hotel is in the allowed list.
+    if (!hotels.some((h) => h.code === hotel)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const weeksRes = await pool.query(SQL_WEEKS, [hotel]);
