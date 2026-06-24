@@ -159,7 +159,7 @@ const EMPTY_SUMMARY: SegmentSummary = {
   budgetFull: 0, budgetYtd: 0, hasBudget: false, usedFallbackCurve: false,
 };
 
-export function useOtbData(propertyCode: string): OtbData {
+export function useOtbData(propertyCode: string, enabled = true): OtbData {
   const [data, setData] = useState<OtbApiResponse | null>(null);
   const [properties, setProperties] = useState<PropertyMeta[]>([]);
   const [loading, setLoading] = useState(true);
@@ -167,9 +167,10 @@ export function useOtbData(propertyCode: string): OtbData {
   const [snapshot, setSnapshot] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
-    setLoading(true);
-    (async () => {
+    const run = async () => {
+      setLoading(true);
       try {
         const url = `/api/otb/dataset?property=${encodeURIComponent(propertyCode)}${snapshot ? `&snapshot=${encodeURIComponent(snapshot)}` : ''}`;
         const res = await fetch(url);
@@ -185,9 +186,10 @@ export function useOtbData(propertyCode: string): OtbData {
       } catch {
         if (!cancelled) setLoading(false);
       }
-    })();
+    };
+    run();
     return () => { cancelled = true; };
-  }, [propertyCode, snapshot]);
+  }, [propertyCode, snapshot, enabled]);
 
   // Derived values from the fetched dataset
   const derived = useMemo(() => {
@@ -362,7 +364,7 @@ export function useOtbData(propertyCode: string): OtbData {
   }, [derived, getSegmentDaily]);
 
   return {
-    loading,
+    loading: enabled ? loading : false,
     AS_OF: data?.asOf ?? '',
     TC_SEGMENTS: (data?.segments ?? []) as TcSegment[],
     CAPACITY_2025: data?.property.capacityLy ?? 0,
