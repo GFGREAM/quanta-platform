@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { pool } from "@/lib/db";
+import { hasAccessToSection, getAllowedProperties } from "@/lib/permissions";
+
+const SECTION_KEY = "topline-otb-demand-360";
 
 const asNum = (v: unknown): number =>
   v === null || v === undefined ? 0 : Number(v);
@@ -31,6 +34,13 @@ const SQL_PROPERTY = `
 const SQL_ALL_PROPERTIES = `
   SELECT property_code, property_name, capacity, capacity_ly
   FROM daily_segmentation_otb.properties
+  ORDER BY property_name
+`;
+
+const SQL_ALLOWED_PROPERTIES = `
+  SELECT property_code, property_name, capacity, capacity_ly
+  FROM daily_segmentation_otb.properties
+  WHERE property_name = ANY($1::text[])
   ORDER BY property_name
 `;
 
@@ -130,14 +140,25 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
+    const email = session?.user?.email ?? "";
+    if (!bypass && !(await hasAccessToSection(email, SECTION_KEY))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // allowed_properties stores hotel display names (e.g. "Waldorf Astoria Costa Rica").
+    // null = all properties allowed.
+    const allowedProps = bypass ? null : await getAllowedProperties(email, SECTION_KEY);
+
     const { searchParams } = new URL(request.url);
     const property = searchParams.get("property");
 
     // No property → return only the property list (for slicer population).
     if (!property) {
-      const allPropsRes = await pool.query(SQL_ALL_PROPERTIES);
+      const propsRes = allowedProps
+        ? await pool.query(SQL_ALLOWED_PROPERTIES, [allowedProps])
+        : await pool.query(SQL_ALL_PROPERTIES);
       return NextResponse.json({
-        properties: allPropsRes.rows.map((r) => ({
+        properties: propsRes.rows.map((r) => ({
           code: r.property_code,
           name: r.property_name,
           capacity: Number(r.capacity),
@@ -149,7 +170,9 @@ export async function GET(request: Request) {
     // Parallel queries
     const [propRes, allPropsRes, segRes, snapRes] = await Promise.all([
       pool.query(SQL_PROPERTY, [property]),
-      pool.query(SQL_ALL_PROPERTIES),
+      allowedProps
+        ? pool.query(SQL_ALLOWED_PROPERTIES, [allowedProps])
+        : pool.query(SQL_ALL_PROPERTIES),
       pool.query(SQL_SEGMENTS),
       pool.query(SQL_SNAPSHOTS, [property]),
     ]);
@@ -159,6 +182,11 @@ export async function GET(request: Request) {
     }
 
     const prop = propRes.rows[0];
+
+    // Verify the requested property is in the user's allowed list.
+    if (allowedProps && !allowedProps.includes(prop.property_name)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     const segments: string[] = segRes.rows.map((r) => r.segment_key);
     const snapshots: string[] = snapRes.rows.map((r) => r.snapshot_date);
 

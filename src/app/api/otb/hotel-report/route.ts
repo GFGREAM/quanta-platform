@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { pool } from "@/lib/db";
+import { hasAccessToSection, getAllowedProperties } from "@/lib/permissions";
+
+const SECTION_KEY = "topline-otb-hotel-report";
 
 // On The Books · Hotel Report data source: weekly_pace.weekly_pace.
 // Monthly pace (no segments). Grain: week (snapshot) × hotel × period (month).
@@ -18,9 +21,17 @@ import { pool } from "@/lib/db";
 const asNum = (v: unknown): number =>
   v === null || v === undefined ? 0 : Number(v);
 
-const SQL_HOTELS = `
+const SQL_HOTELS_ALL = `
   SELECT hotel, MAX(hotel_name) AS hotel_name, MAX(rooms) AS rooms
   FROM weekly_pace.weekly_pace
+  GROUP BY hotel
+  ORDER BY MAX(hotel_name)
+`;
+
+const SQL_HOTELS_FILTERED = `
+  SELECT hotel, MAX(hotel_name) AS hotel_name, MAX(rooms) AS rooms
+  FROM weekly_pace.weekly_pace
+  WHERE hotel_name = ANY($1::text[])
   GROUP BY hotel
   ORDER BY MAX(hotel_name)
 `;
@@ -77,10 +88,21 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
+    const email = session?.user?.email ?? "";
+    if (!bypass && !(await hasAccessToSection(email, SECTION_KEY))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // allowed_properties stores hotel display names (e.g. "Zoetry Marigot Bay").
+    // null = all hotels allowed.
+    const allowedProps = bypass ? null : await getAllowedProperties(email, SECTION_KEY);
+
     const { searchParams } = new URL(request.url);
     const hotel = searchParams.get("hotel");
 
-    const hotelsRes = await pool.query(SQL_HOTELS);
+    const hotelsRes = allowedProps
+      ? await pool.query(SQL_HOTELS_FILTERED, [allowedProps])
+      : await pool.query(SQL_HOTELS_ALL);
     const hotels = hotelsRes.rows.map((r) => ({
       code: r.hotel as string,
       name: r.hotel_name as string,
@@ -89,6 +111,11 @@ export async function GET(request: Request) {
 
     if (!hotel) {
       return NextResponse.json({ hotels });
+    }
+
+    // Verify the requested hotel is in the allowed list.
+    if (!hotels.some((h) => h.code === hotel)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const weeksRes = await pool.query(SQL_WEEKS, [hotel]);
