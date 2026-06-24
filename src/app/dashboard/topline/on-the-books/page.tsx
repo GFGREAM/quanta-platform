@@ -1091,16 +1091,16 @@ const SUMMARY_LY_HOTEL: SumGroup[] = [
 
 // Build a monthly PaceAgg from one Hotel Report (weekly_pace) month. cap=avail and n=1
 // make OCC = rn/avail and RevPAR = rev/avail (avail reused for capLy). stly = same-time-LY
-// (otb_*_ly); lyFull = last-year close (prior-year rows). lyPace carries the last-year close
-// only for still-open months, so the Risk sections evaluate to (OTB + LY-close-of-open) −
-// reference — the established Risk/Surplus, no outlook.
+// (otb_*_ly); lyFull = last-year close (prior-year rows). lyPace carries last year's
+// rest-of-year pickup (lyClose − STLY) for still-open months, so the Risk sections evaluate
+// to (OTB + LY-rest-of-year) − reference — projected final at last year's pace, no outlook.
 function hotelMonthToAgg(mo: HotelMonth): PaceAgg {
   return {
     n: 1, cap: mo.avail, capLy: mo.avail,
     rn: mo.otbRn, rev: mo.otbRev,
     budRn: mo.budRn, budRev: mo.budRev,
     stlyRn: mo.stlyRn, stlyRev: mo.stlyRev,
-    lyPaceRn: mo.open ? mo.lyCloseRn : 0, lyPaceRev: mo.open ? mo.lyCloseRev : 0,
+    lyPaceRn: mo.open ? mo.lyCloseRn - mo.stlyRn : 0, lyPaceRev: mo.open ? mo.lyCloseRev - mo.stlyRev : 0,
     lyFullRn: mo.lyCloseRn, lyFullRev: mo.lyCloseRev,
     puRn: null, puRev: null, pu4Rn: null, pu4Rev: null,
   };
@@ -1112,7 +1112,7 @@ function hotelGrandAgg(months: HotelMonth[]): PaceAgg {
     rn: s((m) => m.otbRn), rev: s((m) => m.otbRev),
     budRn: s((m) => m.budRn), budRev: s((m) => m.budRev),
     stlyRn: s((m) => m.stlyRn), stlyRev: s((m) => m.stlyRev),
-    lyPaceRn: s((m) => (m.open ? m.lyCloseRn : 0)), lyPaceRev: s((m) => (m.open ? m.lyCloseRev : 0)),
+    lyPaceRn: s((m) => (m.open ? m.lyCloseRn - m.stlyRn : 0)), lyPaceRev: s((m) => (m.open ? m.lyCloseRev - m.stlyRev : 0)),
     lyFullRn: s((m) => m.lyCloseRn), lyFullRev: s((m) => m.lyCloseRev),
     puRn: null, puRev: null, pu4Rn: null, pu4Rev: null,
   };

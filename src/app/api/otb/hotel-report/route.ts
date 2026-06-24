@@ -12,7 +12,8 @@ import { pool } from "@/lib/db";
 //   Budget: bud_rns_cy / bud_rev_cy
 //   Last Year (close): the prior YEAR's rows (year - 1), already closed.
 // KPIs derived client-side (OCC = otb_rns/avail, ADR = otb_rev/otb_rns, RevPAR = otb_rev/avail).
-// Risk/Surplus = (OTB + last-year close for the still-open months) − reference. No outlook/forecast.
+// Risk/Surplus = (OTB + last year's rest-of-year pickup [LY close − STLY] for the still-open
+// months) − reference. Projected final at last year's booking pace; no outlook/forecast.
 // NULL measures are "no data" (not zero).
 
 const asNum = (v: unknown): number =>
@@ -33,11 +34,12 @@ const SQL_WEEKS = `
 `;
 
 // Board: months of the selected year (CY) plus the prior year (year-1) rows, which
-// carry the closed Last-Year actuals. `open` = the month hasn't closed at this week.
+// carry the closed Last-Year actuals. `open` = the month hasn't fully closed at this week;
+// the snapshot's own (in-progress) month counts as open so its remaining pickup is projected.
 const SQL_MONTHS = `
   SELECT EXTRACT(MONTH FROM period)::int AS m,
          year::int                      AS yr,
-         (date_trunc('month', period::date) > date_trunc('month', $2::date)) AS open,
+         (date_trunc('month', period::date) >= date_trunc('month', $2::date)) AS open,
          days::int  AS days,
          avail::int AS avail,
          otb_rns_cy, otb_rev_cy, otb_rns_ly, otb_rev_ly, bud_rns_cy, bud_rev_cy
@@ -46,8 +48,9 @@ const SQL_MONTHS = `
   ORDER BY period
 `;
 
-// FY total per week (progression). proj_* = projected final = OTB + last-year close for
-// the months still open at that week (lyc = prior-year close, taken at the latest week).
+// FY total per week (progression). proj_* = projected final = OTB + last year's rest-of-year
+// pickup (LY close − same-time-last-year) for the months still open at that week. lyc =
+// prior-year close (taken at the latest week); w.otb_*_ly = same-time-LY position at that week.
 const SQL_PROGRESSION = `
   WITH lyc AS (
     SELECT EXTRACT(MONTH FROM period)::int AS m,
@@ -60,8 +63,8 @@ const SQL_PROGRESSION = `
          SUM(w.otb_rns_cy) AS otb_rns_cy, SUM(w.otb_rev_cy) AS otb_rev_cy,
          SUM(w.bud_rns_cy) AS bud_rns_cy, SUM(w.bud_rev_cy) AS bud_rev_cy,
          SUM(w.avail) AS avail,
-         SUM(w.otb_rns_cy + CASE WHEN date_trunc('month', w.period::date) > date_trunc('month', w.week::date) THEN COALESCE(lyc.ly_rns, 0) ELSE 0 END) AS proj_rns,
-         SUM(w.otb_rev_cy + CASE WHEN date_trunc('month', w.period::date) > date_trunc('month', w.week::date) THEN COALESCE(lyc.ly_rev, 0) ELSE 0 END) AS proj_rev
+         SUM(w.otb_rns_cy + CASE WHEN date_trunc('month', w.period::date) >= date_trunc('month', w.week::date) THEN COALESCE(lyc.ly_rns, 0) - COALESCE(w.otb_rns_ly, 0) ELSE 0 END) AS proj_rns,
+         SUM(w.otb_rev_cy + CASE WHEN date_trunc('month', w.period::date) >= date_trunc('month', w.week::date) THEN COALESCE(lyc.ly_rev, 0) - COALESCE(w.otb_rev_ly, 0) ELSE 0 END) AS proj_rev
   FROM weekly_pace.weekly_pace w
   LEFT JOIN lyc ON lyc.m = EXTRACT(MONTH FROM w.period)::int
   WHERE w.hotel = $1 AND w.year = $2::int
