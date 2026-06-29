@@ -15,6 +15,8 @@ export interface HotelMonth {
   m: number; days: number; avail: number; open: boolean;
   otbRn: number; otbRev: number; stlyRn: number; stlyRev: number;
   budRn: number; budRev: number; lyCloseRn: number; lyCloseRev: number;
+  // Pickup vs the prior weekly snapshot (last week) and 4 snapshots back; null = no baseline.
+  puRn: number | null; puRev: number | null; pu4Rn: number | null; pu4Rev: number | null;
 }
 
 export interface ProgWeek {
