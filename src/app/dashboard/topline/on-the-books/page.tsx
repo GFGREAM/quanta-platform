@@ -338,7 +338,7 @@ export default function OnTheBooksPage() {
 
       {/* Hotel Report: Summary mirrors the Demand 360 board for now (we'll branch it later);
           the remaining views stay on the Coming soon placeholder. */}
-      {effectiveSource === 'hotel' && boardView !== 'summary' ? (
+      {effectiveSource === 'hotel' && boardView !== 'summary' && boardView !== 'fullYear' ? (
         <ComingSoon view={boardView} />
       ) : (
         <>
@@ -647,7 +647,9 @@ export default function OnTheBooksPage() {
       {/* lower section — Daily: pace board · Daily Segment: hierarchical drill-down · Monthly: TBD */}
       {boardView === 'daily' && <SegmentGrid segment={TOTAL_KEY} month={month} isOcc={isOcc} granularity="daily" />}
       {boardView === 'dailySegment' && <SegmentTree month={month} />}
-      {boardView === 'fullYear' && <MonthlyBoard segments={selectedSegs} />}
+      {boardView === 'fullYear' && (effectiveSource === 'hotel'
+        ? <HotelFullYearBoard months={hotelReport.months} name={hotelReport.hotelName} year={hotelReport.week.slice(0, 4)} />
+        : <MonthlyBoard segments={selectedSegs} />)}
       {boardView === 'summary' && <SummaryView segments={selectedSegs} source={effectiveSource} hotelAggs={hotelAggs} />}
       {effectiveSource === 'hotel' && boardView === 'summary' && (
         <ProgressionChart series={hotelProgSeries} loading={hotelReport.loading} />
@@ -927,9 +929,9 @@ const PACE_SECTIONS: { key: PaceSection; label: string; variance: boolean }[] = 
   { key: 'otb', label: 'On the Books', variance: false },
   { key: 'stly', label: 'On the Books vs STLY', variance: true },
   { key: 'budget', label: 'Reach to Budget', variance: true },
+  { key: 'risk', label: 'Risk or Surplus', variance: true },
   { key: 'puLw', label: 'Last Week Pickup', variance: true },
   { key: 'pu4w', label: 'Last 4 Weeks Pickup', variance: true },
-  { key: 'risk', label: 'Risk or Surplus', variance: true },
 ];
 type PaceMetric = 'occ' | 'adr' | 'revpar' | 'rn' | 'rev';
 const PACE_METRICS: { key: PaceMetric; label: string }[] = [
@@ -1115,7 +1117,7 @@ function hotelMonthToAgg(mo: HotelMonth): PaceAgg {
     stlyRn: mo.stlyRn, stlyRev: mo.stlyRev,
     lyPaceRn: mo.open ? mo.lyCloseRn - mo.stlyRn : 0, lyPaceRev: mo.open ? mo.lyCloseRev - mo.stlyRev : 0,
     lyFullRn: mo.lyCloseRn, lyFullRev: mo.lyCloseRev,
-    puRn: null, puRev: null, pu4Rn: null, pu4Rev: null,
+    puRn: mo.puRn, puRev: mo.puRev, pu4Rn: mo.pu4Rn, pu4Rev: mo.pu4Rev,
   };
 }
 function hotelGrandAgg(months: HotelMonth[]): PaceAgg {
@@ -1128,6 +1130,28 @@ function hotelGrandAgg(months: HotelMonth[]): PaceAgg {
     lyPaceRn: s((m) => (m.open ? m.lyCloseRn - m.stlyRn : 0)), lyPaceRev: s((m) => (m.open ? m.lyCloseRev - m.stlyRev : 0)),
     lyFullRn: s((m) => m.lyCloseRn), lyFullRev: s((m) => m.lyCloseRev),
     puRn: null, puRev: null, pu4Rn: null, pu4Rev: null,
+  };
+}
+
+// Sum monthly Hotel Report aggregates into one period agg (quarter / YTD / ROY / FY).
+// Keeps the hotel convention n=1 with cap = total available room-nights, so OCC = rn/cap
+// and RevPAR = rev/cap stay correct over any span. Pickups have no monthly feed → null.
+function sumHotelAggs(aggs: PaceAgg[]): PaceAgg {
+  const s = (f: (a: PaceAgg) => number) => aggs.reduce((acc, a) => acc + f(a), 0);
+  // Pickups are nullable per month: sum the months that have a baseline, null only if none do.
+  const sNull = (f: (a: PaceAgg) => number | null) => {
+    const vals = aggs.map(f);
+    return vals.every((v) => v == null) ? null : vals.reduce((acc: number, v) => acc + (v ?? 0), 0);
+  };
+  return {
+    n: 1, cap: s((a) => a.cap), capLy: s((a) => a.capLy),
+    rn: s((a) => a.rn), rev: s((a) => a.rev),
+    budRn: s((a) => a.budRn), budRev: s((a) => a.budRev),
+    stlyRn: s((a) => a.stlyRn), stlyRev: s((a) => a.stlyRev),
+    lyPaceRn: s((a) => a.lyPaceRn), lyPaceRev: s((a) => a.lyPaceRev),
+    lyFullRn: s((a) => a.lyFullRn), lyFullRev: s((a) => a.lyFullRev),
+    puRn: sNull((a) => a.puRn), puRev: sNull((a) => a.puRev),
+    pu4Rn: sNull((a) => a.pu4Rn), pu4Rev: sNull((a) => a.pu4Rev),
   };
 }
 
@@ -1403,39 +1427,14 @@ function combineGridDays(parts: GridDay[][]): GridDay[] {
   return out;
 }
 
-function MonthlyBoard({ segments }: { segments: TcSegment[] }) {
-  const { getGridDaily, TC_SEGMENTS, CAPACITY_2025, CAPACITY_2026, AS_OF, PROPERTIES } = useOtb();
-  // Total when all (or no) segments are selected; otherwise sum the chosen segments per day.
-  const days = useMemo(() => {
-    const allSel = segments.length === 0 || segments.length >= TC_SEGMENTS.length;
-    // "All" rolls up only definite/sold business (excludes Unsold Block + Comps).
-    const segs = allSel ? (TC_SEGMENTS.filter((s) => !NON_DEFINITE.includes(s)) as TcSegment[]) : segments;
-    return combineGridDays(segs.map((s) => getGridDaily(s)));
-  }, [getGridDaily, segments, TC_SEGMENTS]);
-  const yy = AS_OF.slice(2, 4); // "26"
-  const propertyName = PROPERTIES[0]?.name ?? '';
+// Shared Booking Pace board (Full Year). Renders PACE_SECTIONS × PACE_METRICS plus the
+// risk pickup rows over a set of pre-aggregated columns. Both data sources feed it the same
+// column shape so the structure is identical — Demand 360 from the daily roll-up, Hotel Report
+// from the monthly weekly_pace aggregates (its pickups are null → "—").
+interface PaceBoardCol { key: string; label: string; group: boolean; agg: PaceAgg }
 
-  // Month → quarter → FY columns, then YTD (≤ as-of) and ROY (after).
-  const columns = useMemo<PaceCol[]>(() => {
-    if (days.length === 0) return [];
-    const inMonth = (d: GridDay, m: number) => Number(d.date.slice(5, 7)) - 1 === m;
-    const cols: PaceCol[] = [];
-    [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]].forEach((q, qi) => {
-      q.forEach((m) => cols.push({ key: MONTH_ABBR[m], label: `${MONTH_ABBR[m]}-${yy}`, group: false, days: days.filter((d) => inMonth(d, m)) }));
-      cols.push({ key: `Q${qi + 1}`, label: `Q${qi + 1}`, group: true, days: days.filter((d) => q.some((m) => inMonth(d, m))) });
-    });
-    cols.push({ key: 'YTD', label: 'YTD', group: true, days: days.filter((d) => d.date <= AS_OF) });
-    cols.push({ key: 'ROY', label: 'ROY', group: true, days: days.filter((d) => d.date > AS_OF) });
-    cols.push({ key: 'FY', label: 'FY', group: true, days });
-    return cols;
-  }, [days, AS_OF, yy]);
-
-  const aggs = useMemo(
-    () => columns.map((c) => aggregatePace(c.days, CAPACITY_2026, CAPACITY_2025)),
-    [columns, CAPACITY_2026, CAPACITY_2025],
-  );
-
-  if (days.length === 0) {
+function PaceBoard({ columns, name }: { columns: PaceBoardCol[]; name: string }) {
+  if (columns.length === 0) {
     return (
       <div className="bg-white border rounded-lg shadow-sm flex items-center justify-center" style={{ borderColor: 'var(--border)', minHeight: 260 }}>
         <span className="text-sm" style={{ color: 'var(--text-muted)' }}>No data</span>
@@ -1446,7 +1445,7 @@ function MonthlyBoard({ segments }: { segments: TcSegment[] }) {
   return (
     <div className="bg-white border rounded-lg overflow-hidden shadow-sm" style={{ borderColor: 'var(--border)' }}>
       <div className="px-3 py-2 border-b text-center" style={{ background: 'var(--muted)', borderColor: 'var(--border)' }}>
-        <span className="text-sm font-bold" style={{ color: 'var(--primary)' }}>Booking Pace {propertyName}</span>
+        <span className="text-sm font-bold" style={{ color: 'var(--primary)' }}>Booking Pace {name}</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full table-fixed border-collapse text-[0.75rem] whitespace-nowrap">
@@ -1479,15 +1478,15 @@ function MonthlyBoard({ segments }: { segments: TcSegment[] }) {
                       style={{ color: 'var(--text-secondary)', minWidth: 150 }}>
                       {m.label}
                     </td>
-                    {aggs.map((a, i) => {
-                      const v = paceCellValue(section.key, m.key, a);
+                    {columns.map((c, i) => {
+                      const v = paceCellValue(section.key, m.key, c.agg);
                       const color = !section.variance
                         ? 'var(--text-primary)'
                         : v == null || Math.abs(v) < 0.05 ? 'var(--text-muted)'
                         : v > 0 ? 'var(--success)' : 'var(--danger)';
                       return (
                         <td key={i} className="px-2 py-0.5 text-right tabular-nums"
-                          style={{ color, fontWeight: section.key === 'otb' ? 600 : 400, background: columns[i].group ? 'var(--muted)' : undefined }}>
+                          style={{ color, fontWeight: section.key === 'otb' ? 600 : 400, background: c.group ? 'var(--muted)' : undefined }}>
                           {fmtPaceCell(m.key, v)}
                         </td>
                       );
@@ -1500,12 +1499,12 @@ function MonthlyBoard({ segments }: { segments: TcSegment[] }) {
                       style={{ color: 'var(--text-secondary)', minWidth: 150 }}>
                       {kind === 'lw' ? 'vs LW' : 'vs L4W'}
                     </td>
-                    {aggs.map((a, i) => {
-                      const v = kind === 'lw' ? a.puRev : a.pu4Rev;
+                    {columns.map((c, i) => {
+                      const v = kind === 'lw' ? c.agg.puRev : c.agg.pu4Rev;
                       const color = v == null || Math.abs(v) < 0.5 ? 'var(--text-muted)' : v > 0 ? 'var(--success)' : 'var(--danger)';
                       return (
                         <td key={i} className="px-2 py-0.5 text-right tabular-nums"
-                          style={{ color, background: columns[i].group ? 'var(--muted)' : undefined }}>
+                          style={{ color, background: c.group ? 'var(--muted)' : undefined }}>
                           {v == null ? '—' : fmtPaceRev(v)}
                         </td>
                       );
@@ -1519,6 +1518,63 @@ function MonthlyBoard({ segments }: { segments: TcSegment[] }) {
       </div>
     </div>
   );
+}
+
+function MonthlyBoard({ segments }: { segments: TcSegment[] }) {
+  const { getGridDaily, TC_SEGMENTS, CAPACITY_2025, CAPACITY_2026, AS_OF, PROPERTIES } = useOtb();
+  // Total when all (or no) segments are selected; otherwise sum the chosen segments per day.
+  const days = useMemo(() => {
+    const allSel = segments.length === 0 || segments.length >= TC_SEGMENTS.length;
+    // "All" rolls up only definite/sold business (excludes Unsold Block + Comps).
+    const segs = allSel ? (TC_SEGMENTS.filter((s) => !NON_DEFINITE.includes(s)) as TcSegment[]) : segments;
+    return combineGridDays(segs.map((s) => getGridDaily(s)));
+  }, [getGridDaily, segments, TC_SEGMENTS]);
+  const yy = AS_OF.slice(2, 4); // "26"
+  const propertyName = PROPERTIES[0]?.name ?? '';
+
+  // Month → quarter → FY columns, then YTD (≤ as-of) and ROY (after). Each column carries the
+  // aggregated pace over its days, ready for the shared PaceBoard.
+  const columns = useMemo<PaceBoardCol[]>(() => {
+    if (days.length === 0) return [];
+    const inMonth = (d: GridDay, m: number) => Number(d.date.slice(5, 7)) - 1 === m;
+    const cols: PaceCol[] = [];
+    [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]].forEach((q, qi) => {
+      q.forEach((m) => cols.push({ key: MONTH_ABBR[m], label: `${MONTH_ABBR[m]}-${yy}`, group: false, days: days.filter((d) => inMonth(d, m)) }));
+      cols.push({ key: `Q${qi + 1}`, label: `Q${qi + 1}`, group: true, days: days.filter((d) => q.some((m) => inMonth(d, m))) });
+    });
+    cols.push({ key: 'YTD', label: 'YTD', group: true, days: days.filter((d) => d.date <= AS_OF) });
+    cols.push({ key: 'ROY', label: 'ROY', group: true, days: days.filter((d) => d.date > AS_OF) });
+    cols.push({ key: 'FY', label: 'FY', group: true, days });
+    return cols.map((c) => ({ key: c.key, label: c.label, group: c.group, agg: aggregatePace(c.days, CAPACITY_2026, CAPACITY_2025) }));
+  }, [days, AS_OF, yy, CAPACITY_2026, CAPACITY_2025]);
+
+  return <PaceBoard columns={columns} name={propertyName} />;
+}
+
+// ---- Hotel Report · Full Year board (monthly Booking Pace) ----
+// Same structure as the D360 MonthlyBoard (shared PaceBoard), but driven by the weekly_pace
+// monthly aggregates (one PaceAgg per month). Columns: 12 months grouped into quarters, plus
+// YTD (closed months), ROY (still-open months) and FY. Pickup rows render "—" (no monthly feed).
+function HotelFullYearBoard({ months, name, year }: { months: HotelMonth[]; name: string; year: string }) {
+  const yy = year.slice(2, 4);
+  const columns = useMemo<PaceBoardCol[]>(() => {
+    if (months.length < 12 || !months.some((m) => m.avail > 0 || m.otbRn > 0)) return [];
+    const monthAggs = months.map(hotelMonthToAgg);
+    const cols: PaceBoardCol[] = [];
+    ([[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]] as number[][]).forEach((q, qi) => {
+      q.forEach((m) => cols.push({ key: MONTH_ABBR[m], label: `${MONTH_ABBR[m]}-${yy}`, group: false, agg: monthAggs[m] }));
+      cols.push({ key: `Q${qi + 1}`, label: `Q${qi + 1}`, group: true, agg: sumHotelAggs(q.map((m) => monthAggs[m])) });
+    });
+    // YTD = months already closed at this snapshot; ROY = the still-open months.
+    const closed = months.flatMap((mo, i) => (mo.open ? [] : [monthAggs[i]]));
+    const open = months.flatMap((mo, i) => (mo.open ? [monthAggs[i]] : []));
+    cols.push({ key: 'YTD', label: 'YTD', group: true, agg: sumHotelAggs(closed) });
+    cols.push({ key: 'ROY', label: 'ROY', group: true, agg: sumHotelAggs(open) });
+    cols.push({ key: 'FY', label: 'FY', group: true, agg: sumHotelAggs(monthAggs) });
+    return cols;
+  }, [months, yy]);
+
+  return <PaceBoard columns={columns} name={name} />;
 }
 
 // ---- Monthly view: segmentation report (segment rows × RN / Revenue / ADR / Mix%) ----

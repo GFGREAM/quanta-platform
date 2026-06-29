@@ -83,6 +83,17 @@ const SQL_PROGRESSION = `
   ORDER BY w.week::date
 `;
 
+// Pickup baseline: OTB for the same CY months at a prior weekly snapshot. Last Week = the
+// snapshot immediately before the selected week; Last 4 Weeks = 4 snapshots back. Pickup is
+// then current − prior, computed per month client-side. NULL prior row → no pickup ("—").
+const SQL_PICKUP = `
+  SELECT EXTRACT(MONTH FROM period)::int AS m,
+         week::date::text AS w,
+         otb_rns_cy, otb_rev_cy
+  FROM weekly_pace.weekly_pace
+  WHERE hotel = $1 AND year = $2::int AND week::date = ANY($3::date[])
+`;
+
 export async function GET(request: Request) {
   try {
     const bypass = process.env.NODE_ENV === "development" && process.env.AUTH_BYPASS === "1";
@@ -130,15 +141,24 @@ export async function GET(request: Request) {
     const week = searchParams.get("week") ?? weeks[0];
     const year = Number(searchParams.get("year") ?? week.slice(0, 4));
 
-    const [monthsRes, progRes] = await Promise.all([
+    // weeks is ordered newest-first; the prior snapshots feed the pickup baselines.
+    const selIdx = weeks.indexOf(week);
+    const prevWeek = selIdx >= 0 && selIdx + 1 < weeks.length ? weeks[selIdx + 1] : null;
+    const week4 = selIdx >= 0 && selIdx + 4 < weeks.length ? weeks[selIdx + 4] : null;
+    const priorWeeks = [prevWeek, week4].filter((w): w is string => w !== null);
+
+    const [monthsRes, progRes, pickupRes] = await Promise.all([
       pool.query(SQL_MONTHS, [hotel, week, year]),
       pool.query(SQL_PROGRESSION, [hotel, year]),
+      pool.query(SQL_PICKUP, [hotel, year, priorWeeks]),
     ]);
 
     const months = Array.from({ length: 12 }, (_, i) => ({
       m: i, days: 0, avail: 0, open: false,
       otbRn: 0, otbRev: 0, stlyRn: 0, stlyRev: 0,
       budRn: 0, budRev: 0, lyCloseRn: 0, lyCloseRev: 0,
+      puRn: null as number | null, puRev: null as number | null,
+      pu4Rn: null as number | null, pu4Rev: null as number | null,
     }));
     for (const r of monthsRes.rows) {
       const i = asNum(r.m) - 1;
@@ -153,6 +173,26 @@ export async function GET(request: Request) {
       } else {
         // Prior-year row → Last-Year close for that month.
         months[i].lyCloseRn = asNum(r.otb_rns_cy); months[i].lyCloseRev = asNum(r.otb_rev_cy);
+      }
+    }
+
+    // Pickup = current OTB − prior-snapshot OTB, per month (RN + Rev). Missing prior row → null.
+    const prevRn = new Map<number, number>(), prevRev = new Map<number, number>();
+    const w4Rn = new Map<number, number>(), w4Rev = new Map<number, number>();
+    for (const r of pickupRes.rows) {
+      const m = asNum(r.m);
+      if (prevWeek && r.w === prevWeek) { prevRn.set(m, asNum(r.otb_rns_cy)); prevRev.set(m, asNum(r.otb_rev_cy)); }
+      else if (week4 && r.w === week4) { w4Rn.set(m, asNum(r.otb_rns_cy)); w4Rev.set(m, asNum(r.otb_rev_cy)); }
+    }
+    for (let i = 0; i < 12; i++) {
+      const mo = i + 1;
+      if (prevWeek && prevRn.has(mo)) {
+        months[i].puRn = months[i].otbRn - (prevRn.get(mo) ?? 0);
+        months[i].puRev = months[i].otbRev - (prevRev.get(mo) ?? 0);
+      }
+      if (week4 && w4Rn.has(mo)) {
+        months[i].pu4Rn = months[i].otbRn - (w4Rn.get(mo) ?? 0);
+        months[i].pu4Rev = months[i].otbRev - (w4Rev.get(mo) ?? 0);
       }
     }
 
