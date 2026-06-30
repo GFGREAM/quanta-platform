@@ -59,13 +59,51 @@ export const PROPERTY = {
 };
 
 export const PERIODS: Period[] = [
-  { key: 'month', label: 'April', days: 30 },
-  { key: 'ytd', label: 'April YTD', days: 120 },
+  { key: 'month', label: 'May', days: 31 },
+  { key: 'ytd', label: 'May YTD', days: 151 },
 ];
 
 // Order of metrics within each section (drives row rendering).
 export const KPM_METRICS: Metric[] = ['OCC', 'ADR', 'RevPAR'];
 export const SALES_METRICS: Metric[] = ['RoomNights', 'Revenue'];
+
+// ─── Filter options (mock — to be sourced from SQL alongside the data) ─
+export const HOTELS: string[] = [
+  'Waldorf Astoria Costa Rica Punta Cacique',
+  'Grand Hyatt Playa del Carmen',
+  'Dreams Vista Cancun',
+  'JW Marriott Cancun',
+  'Casa Dorada Los Cabos',
+];
+
+export const MONTH_OPTIONS: string[] = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+export const COMP_SETS: string[] = ['Comp Set #1', 'Comp Set #2', 'Comp Set #3'];
+
+// ─── Monthly progression (mock) ───────────────────────────────────────
+// Month-by-month penetration indices (MPI = OCC, ARI = ADR, RGI = RevPAR)
+// and the hotel's rank vs the comp set (1 = best, 7 = worst). May lines up
+// with the headline table; earlier months trend toward it.
+export interface MonthlyPoint {
+  month: string; // "Jan" … "Dec"
+  mpi: number;   // OCC penetration index (%)
+  ari: number;   // ADR penetration index (%)
+  rgi: number;   // RevPAR penetration index (%)
+  rankOcc: number;
+  rankAdr: number;
+  rankRev: number;
+}
+
+export const MONTHLY_PROGRESSION: MonthlyPoint[] = [
+  { month: 'Jan', mpi: 103.2, ari: 94.1, rgi: 97.1, rankOcc: 4, rankAdr: 4, rankRev: 5 },
+  { month: 'Feb', mpi: 105.8, ari: 92.8, rgi: 98.2, rankOcc: 3, rankAdr: 5, rankRev: 4 },
+  { month: 'Mar', mpi: 108.1, ari: 91.5, rgi: 99.0, rankOcc: 3, rankAdr: 5, rankRev: 4 },
+  { month: 'Apr', mpi: 109.4, ari: 90.9, rgi: 99.8, rankOcc: 2, rankAdr: 6, rankRev: 4 },
+  { month: 'May', mpi: 110.7, ari: 90.7, rgi: 100.4, rankOcc: 2, rankAdr: 5, rankRev: 4 },
+];
 
 // ─── Mock data (April example from the spec) ─────────────────────────
 // period index: 0 = month, 1 = ytd.
@@ -77,24 +115,24 @@ const SRC: Record<Metric, {
   ranks: [[string, string, string], [string, string, string]];
 }> = {
   OCC: {
-    hotelCY: [57.9, 57.6], compCY: [60.9, 61.3], hotelLY: [63.7, 62.2], compLY: [60.1, 61.1],
-    ranks: [['5 of 7', '4 of 7', '6 of 7'], ['5 of 7', '5 of 7', '7 of 7']],
+    hotelCY: [52.5, 76.8], compCY: [47.4, 70.9], hotelLY: [60.5, 78.9], compLY: [60.0, 76.4],
+    ranks: [['2 of 7', '4 of 7', '3 of 7'], ['2 of 7', '3 of 7', '3 of 7']],
   },
   ADR: {
-    hotelCY: [104.6, 104.3], compCY: [98.0, 100.4], hotelLY: [112.1, 99.7], compLY: [101.4, 91.8],
-    ranks: [['2 of 7', '3 of 7', '6 of 7'], ['3 of 7', '3 of 7', '6 of 7']],
+    hotelCY: [210.2, 278.6], compCY: [231.9, 308.0], hotelLY: [236.1, 326.7], compLY: [255.8, 351.7],
+    ranks: [['5 of 7', '5 of 7', '6 of 7'], ['4 of 7', '4 of 7', '5 of 7']],
   },
   RevPAR: {
-    hotelCY: [60.6, 60.1], compCY: [59.6, 61.6], hotelLY: [71.5, 62.1], compLY: [60.9, 56.1],
-    ranks: [['3 of 7', '2 of 7', '7 of 7'], ['4 of 7', '2 of 7', '7 of 7']],
+    hotelCY: [110.4, 213.9], compCY: [110.0, 218.4], hotelLY: [142.9, 257.7], compLY: [153.6, 268.9],
+    ranks: [['4 of 7', '5 of 7', '3 of 7'], ['4 of 7', '4 of 7', '4 of 7']],
   },
   RoomNights: {
-    hotelCY: [2467, 9821], compCY: [2593, 10452], hotelLY: [2715, 10607], compLY: [2558, 10408],
-    ranks: [['5 of 7', '4 of 7', '6 of 7'], ['5 of 7', '5 of 7', '7 of 7']],
+    hotelCY: [4963, 35362], compCY: [4484, 32662], hotelLY: [5724, 36332], compLY: [5677, 35202],
+    ranks: [['2 of 7', '4 of 7', '3 of 7'], ['2 of 7', '3 of 7', '3 of 7']],
   },
   Revenue: {
-    hotelCY: [258100, 1023900], compCY: [254000, 1049100], hotelLY: [304400, 1057700], compLY: [259400, 955200],
-    ranks: [['3 of 7', '2 of 7', '7 of 7'], ['4 of 7', '2 of 7', '7 of 7']],
+    hotelCY: [1043400, 9850500], compCY: [1039700, 10058900], hotelLY: [1351200, 11869700], compLY: [1452300, 12382200],
+    ranks: [['4 of 7', '5 of 7', '3 of 7'], ['4 of 7', '4 of 7', '4 of 7']],
   },
 };
 
@@ -174,3 +212,74 @@ export const fmtSignedPct = (v: number): string => `${sign(v)}${Math.abs(v).toFi
 
 // Index level as a percentage (e.g. 95.2%).
 export const fmtIndex = (v: number): string => `${v.toFixed(1)}%`;
+
+// ─── Detail table: faithful transcription of the report image ─────────
+// Each row holds 8 pre-formatted display cells laid out as two period
+// groups of four: [May: Hotel, Comp Set, third, Rank#] then the same for
+// [May YTD]. The values carry their own rounding so the table matches the
+// source exactly; cell colouring is derived at render time (see page.tsx)
+// from the leading sign plus the column rules below.
+
+export type RowKind = 'cy' | 'ly' | 'change';
+
+export interface DetailRow {
+  label: string;       // leftmost cell, e.g. "OCC% CY" / "Change %"
+  kind: RowKind;       // drives which Hotel/Comp/third cells get coloured
+  cells: string[];     // 8 strings: May[H, C, third, Rank] + YTD[H, C, third, Rank]
+}
+
+export interface DetailGroup {
+  name: string;            // section label: "KPM's" | "Sales" | "Sales x Day"
+  thirdCol: string;        // header of the 3rd data column: "KPI's" | "vs CS"
+  alwaysToneThird: boolean; // KPM: colour 3rd col only on change rows; Sales: always
+  rows: DetailRow[];       // metric blocks of 3 rows each, in order
+}
+
+export const DETAIL_GROUPS: DetailGroup[] = [
+  {
+    name: "KPM's",
+    thirdCol: "KPI's",
+    alwaysToneThird: false,
+    rows: [
+      { label: 'OCC% CY',  kind: 'cy',     cells: ['52.5%', '47.4%', '110.7%', '2 of 7', '76.8%', '70.9%', '108.3%', '2 of 7'] },
+      { label: 'OCC% LY',  kind: 'ly',     cells: ['60.5%', '60.0%', '100.8%', '4 of 7', '78.9%', '76.4%', '103.2%', '3 of 7'] },
+      { label: 'Change %', kind: 'change', cells: ['-13.3%', '-21.0%', '9.8%', '3 of 7', '-2.7%', '-7.2%', '4.9%', '3 of 7'] },
+
+      { label: 'ADR CY',   kind: 'cy',     cells: ['210.2', '231.9', '90.7%', '5 of 7', '278.6', '308.0', '90.5%', '4 of 7'] },
+      { label: 'ADR LY',   kind: 'ly',     cells: ['236.1', '255.8', '92.3%', '5 of 7', '326.7', '351.7', '92.9%', '4 of 7'] },
+      { label: 'Change %', kind: 'change', cells: ['-10.9%', '-9.4%', '-1.8%', '6 of 7', '-14.7%', '-12.4%', '-2.6%', '5 of 7'] },
+
+      { label: 'RevPAR CY', kind: 'cy',     cells: ['110.4', '110.0', '100.4%', '4 of 7', '213.9', '218.4', '97.9%', '4 of 7'] },
+      { label: 'RevPAR LY', kind: 'ly',     cells: ['142.9', '153.6', '93.0%', '5 of 7', '257.7', '268.9', '95.9%', '4 of 7'] },
+      { label: 'Change %',  kind: 'change', cells: ['-22.8%', '-28.4%', '7.9%', '3 of 7', '-17.0%', '-18.8%', '2.2%', '4 of 7'] },
+    ],
+  },
+  {
+    name: 'Sales',
+    thirdCol: 'vs CS',
+    alwaysToneThird: true,
+    rows: [
+      { label: 'Room Nights CY', kind: 'cy',     cells: ['4,963', '4,484', '479', '2 of 7', '35,362', '32,662', '2,700', '2 of 7'] },
+      { label: 'Room Nights LY', kind: 'ly',     cells: ['5,724', '5,677', '47', '4 of 7', '36,332', '35,202', '1,130', '3 of 7'] },
+      { label: 'Change',         kind: 'change', cells: ['-761', '-1,194', '433', '3 of 7', '-970', '-2,540', '1,570', '3 of 7'] },
+
+      { label: 'Revenue CY', kind: 'cy',     cells: ['1,043.4K', '1,039.7K', '3.7K', '4 of 7', '9,850.5K', '10,058.9K', '-208.4K', '4 of 7'] },
+      { label: 'Revenue LY', kind: 'ly',     cells: ['1,351.2K', '1,452.3K', '-101.1K', '5 of 7', '11,869.7K', '12,382.2K', '-512.4K', '4 of 7'] },
+      { label: 'Change$',    kind: 'change', cells: ['-307.8K', '-412.6K', '104.8K', '3 of 7', '-2,019.2K', '-2,323.2K', '304.1K', '4 of 7'] },
+    ],
+  },
+  {
+    name: 'Sales x Day',
+    thirdCol: 'vs CS',
+    alwaysToneThird: true,
+    rows: [
+      { label: 'Room Nights CY', kind: 'cy',     cells: ['160', '145', '15', '2 of 7', '234', '216', '18', '2 of 7'] },
+      { label: 'Room Nights LY', kind: 'ly',     cells: ['185', '183', '2', '4 of 7', '241', '233', '7', '3 of 7'] },
+      { label: 'Change',         kind: 'change', cells: ['-25', '-39', '14', '3 of 7', '-6', '-17', '10', '3 of 7'] },
+
+      { label: 'Revenue CY', kind: 'cy',     cells: ['33.7K', '33.5K', '0.1K', '4 of 7', '65.2K', '66.6K', '-1.4K', '4 of 7'] },
+      { label: 'Revenue LY', kind: 'ly',     cells: ['43.6K', '46.8K', '-3.3K', '5 of 7', '78.6K', '82.0K', '-3.4K', '4 of 7'] },
+      { label: 'Change$',    kind: 'change', cells: ['-9.9K', '-13.3K', '3.4K', '3 of 7', '-13.4K', '-15.4K', '2.0K', '4 of 7'] },
+    ],
+  },
+];
