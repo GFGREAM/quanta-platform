@@ -13,15 +13,21 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, profile }) {
+    async jwt({ token, profile, account }) {
       if (profile) {
         token.email = (profile as Record<string, unknown>).preferred_username as string || profile.email;
+      }
+      if (account?.id_token) {
+        token.idToken = account.id_token;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user && token.email) {
         session.user.email = token.email as string;
+      }
+      if (token.idToken) {
+        session.idToken = token.idToken;
       }
       return session;
     },

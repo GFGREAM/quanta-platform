@@ -4,7 +4,7 @@ import { Search, ChevronDown, LogOut, Menu } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 
 const searchableDashboards = [
   { label: 'RevPAR', href: '/dashboard/financials/revpar' },
@@ -87,7 +87,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             <p className="px-4 py-2 text-sm font-medium" style={{ color: 'var(--primary)' }}>{userName}</p>
             <p className="px-4 pb-2 text-xs" style={{ color: 'var(--text-secondary)' }}>{userEmail}</p>
             <div className="border-t" style={{ borderColor: 'var(--border)' }} />
-            <button onClick={() => signOut({ callbackUrl: '/login' })} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-[var(--bg-hover)] transition-colors"><LogOut size={16} />Cerrar sesion</button>
+            <button onClick={() => { window.location.href = '/api/auth/federated-logout'; }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:bg-[var(--bg-hover)] transition-colors"><LogOut size={16} />Cerrar sesion</button>
           </div>
         )}
       </div>
