@@ -85,9 +85,9 @@ export default function MarketSharePage() {
           disabled={exportingPdf}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors hover:bg-[var(--bg-hover)] disabled:opacity-60 disabled:cursor-wait shrink-0"
           style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-          title="Descargar las visuales como PDF"
+          title="Download the visuals as a PDF"
         >
-          <Download size={13} /> {exportingPdf ? 'Generando…' : 'PDF'}
+          <Download size={13} /> {exportingPdf ? 'Generating…' : 'PDF'}
         </button>
       </div>
 
@@ -96,7 +96,7 @@ export default function MarketSharePage() {
         <Filter label="Hotel">
           <SingleSelect options={HOTELS} value={hotel} onChange={setHotel} width="20rem" />
         </Filter>
-        <Filter label="Mes">
+        <Filter label="Month">
           <SingleSelect options={MONTH_OPTIONS} value={month} onChange={setMonth} width="9rem" />
         </Filter>
         <Filter label="Comp Set">
@@ -126,7 +126,7 @@ export default function MarketSharePage() {
             );
           })}
         </div>
-        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>vs año anterior (LY)</span>
+        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>vs last year (LY)</span>
       </div>
 
       {/* Exportable visuals — cards + report table + charts, wrapped so the PDF captures them as one. */}
@@ -147,8 +147,8 @@ export default function MarketSharePage() {
 
       {/* Footnotes */}
       <div className="mt-6 text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-        <p><b>MPI / ARI / RGI</b> = índice de penetración Hotel ÷ Comp Set × 100. <b>100 = fair share</b>.</p>
-        <p className="mt-1">KPM&apos;s usa <b>KPI&apos;s</b> (índice de penetración) y <b>Δ%</b>; Sales usa <b>vs CS</b> (Hotel − Comp Set) y <b>Δ absoluto</b>. <b>Sales x Day</b> = total ÷ días del periodo.</p>
+        <p><b>MPI / ARI / RGI</b> = penetration index Hotel ÷ Comp Set × 100. <b>100 = fair share</b>.</p>
+        <p className="mt-1">KPM&apos;s uses <b>KPI&apos;s</b> (penetration index) and <b>Δ%</b>; Sales uses <b>vs CS</b> (Hotel − Comp Set) and <b>absolute Δ</b>. <b>Sales x Day</b> = total ÷ days in period.</p>
         <p className="mt-1 opacity-70">Mock data — to be sourced from SQL.</p>
       </div>
     </div>
@@ -175,7 +175,7 @@ function IndexCard({ metric, period }: { metric: Metric; period: PeriodKey }) {
           className="text-[10px] font-medium px-2 py-0.5 rounded-full"
           style={{ color: aboveFair ? COLOR_GOOD : COLOR_BAD, background: aboveFair ? BG_GOOD : BG_BAD }}
         >
-          {aboveFair ? 'Sobre fair share' : 'Bajo fair share'}
+          {aboveFair ? 'Above fair share' : 'Below fair share'}
         </span>
       </div>
 

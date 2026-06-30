@@ -27,7 +27,7 @@ export default function ProgressionCharts({ month }: { month: string }) {
       <div className={CARD} style={{ borderColor: 'var(--border)' }}>
         <div className={HEAD} style={{ background: 'var(--muted)', borderColor: 'var(--border)' }}>
           <span className={HEAD_TXT} style={{ color: 'var(--text-secondary)' }}>
-            KPI&apos;s · Índice de penetración (MPI / ARI / RGI) — mes a mes
+            KPI&apos;s · Penetration index (MPI / ARI / RGI) — month by month
           </span>
         </div>
         <div className="h-[320px] p-4">
@@ -59,7 +59,7 @@ export default function ProgressionCharts({ month }: { month: string }) {
       <div className={CARD} style={{ borderColor: 'var(--border)' }}>
         <div className={HEAD} style={{ background: 'var(--muted)', borderColor: 'var(--border)' }}>
           <span className={HEAD_TXT} style={{ color: 'var(--text-secondary)' }}>
-            Rank vs comp set (1 = mejor) — mes a mes
+            Rank vs comp set (1 = best) — month by month
           </span>
         </div>
         <div className="h-[320px] p-4">
