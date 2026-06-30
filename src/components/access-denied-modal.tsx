@@ -96,9 +96,7 @@ export default function AccessDeniedModal({ email, allowedMenus }: AccessDeniedM
 
           {/* Sign Out button */}
           <button
-            onClick={() => {
-              import('next-auth/react').then(({ signOut }) => signOut({ callbackUrl: '/login' }));
-            }}
+            onClick={() => { window.location.href = '/api/auth/federated-logout'; }}
             className="w-full h-10 mt-5 rounded-lg text-sm font-semibold cursor-pointer transition-colors border-none"
             style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.85)' }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; }}
