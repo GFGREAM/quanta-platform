@@ -1,25 +1,29 @@
 'use client';
-import { useState } from 'react';
-import { Star, RefreshCw, Maximize2, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
+import { Fragment, useRef, useState } from 'react';
+import { ChevronRight, ArrowUp, ArrowDown, Download } from 'lucide-react';
+import { SingleSelect } from '@/components/ui/SingleSelect';
+import { exportNodeToPdf } from '@/lib/pdfExport';
+import { usePermissions } from '@/components/permissions-provider';
+import ProgressionCharts from './ProgressionCharts';
 import {
-  PROPERTY,
   PERIODS,
   KPM_METRICS,
-  SALES_METRICS,
   METRIC_KIND,
+  REPORT_TITLE,
+  DETAIL_GROUPS,
+  HOTELS,
+  MONTH_OPTIONS,
+  COMP_SETS,
   getRow,
-  daysFor,
   penetrationIndex,
   changePct,
-  vsCompSet,
-  change,
-  perDay,
   fmtLevel,
-  fmtSigned,
-  fmtSignedPct,
   fmtIndex,
+  fmtSignedPct,
   type Metric,
   type PeriodKey,
+  type DetailGroup,
+  type RowKind,
 } from './data';
 
 const COLOR_GOOD = 'var(--success)';
@@ -34,17 +38,28 @@ const METRIC_LABEL: Record<Metric, string> = {
   OCC: 'OCC', ADR: 'ADR', RevPAR: 'RevPAR', RoomNights: 'Room Nights', Revenue: 'Revenue',
 };
 
-const isKPM = (m: Metric) => m === 'OCC' || m === 'ADR' || m === 'RevPAR';
-
-// Fair-share gauge track range. 100 sits at the center; values are clamped.
-const GAUGE_MIN = 60;
-const GAUGE_MAX = 140;
-const gaugePos = (idx: number) =>
-  Math.max(0, Math.min(100, ((idx - GAUGE_MIN) / (GAUGE_MAX - GAUGE_MIN)) * 100));
-
 export default function MarketSharePage() {
-  const [isFavorite, setIsFavorite] = useState(false);
   const [period, setPeriod] = useState<PeriodKey>('month');
+  const [hotel, setHotel] = useState<string>(HOTELS[0]);
+  const [month, setMonth] = useState<string>('May');
+  const [compSet, setCompSet] = useState<string>(COMP_SETS[0]);
+
+  // ─── PDF export (cards + report table + charts) ───────────────────
+  // Admins (full access) export the clean internal copy; everyone else gets the
+  // confidentiality watermark on externally-shareable copies.
+  const { hasFullAccess } = usePermissions();
+  const exportRef = useRef<HTMLDivElement>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const handleExportPdf = async () => {
+    if (exportingPdf || !exportRef.current) return;
+    setExportingPdf(true);
+    try {
+      const fileBase = `market-share-${month}-${new Date().toISOString().slice(0, 10)}`;
+      await exportNodeToPdf(exportRef.current, fileBase, { watermark: !hasFullAccess });
+    } finally {
+      setExportingPdf(false);
+    }
+  };
 
   return (
     <div>
@@ -62,20 +77,31 @@ export default function MarketSharePage() {
         <div>
           <h1 className="text-xl font-semibold" style={{ color: 'var(--primary)' }}>Market Share</h1>
           <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-            {PROPERTY.name} <span className="opacity-60">· {PROPERTY.compSet}</span>
+            {hotel} <span className="opacity-60">· {compSet} · 7 properties</span>
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setIsFavorite(!isFavorite)} className="p-2 rounded-lg hover:bg-[var(--bg-hover)] transition-colors" aria-label="Favorite">
-            <Star size={18} fill={isFavorite ? 'var(--accent)' : 'none'} color={isFavorite ? 'var(--accent)' : 'var(--text-secondary)'} />
-          </button>
-          <button className="p-2 rounded-lg hover:bg-[var(--bg-hover)] transition-colors" aria-label="Refresh">
-            <RefreshCw size={18} style={{ color: 'var(--text-secondary)' }} />
-          </button>
-          <button className="p-2 rounded-lg hover:bg-[var(--bg-hover)] transition-colors" aria-label="Fullscreen">
-            <Maximize2 size={18} style={{ color: 'var(--text-secondary)' }} />
-          </button>
-        </div>
+        <button
+          onClick={handleExportPdf}
+          disabled={exportingPdf}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors hover:bg-[var(--bg-hover)] disabled:opacity-60 disabled:cursor-wait shrink-0"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+          title="Descargar las visuales como PDF"
+        >
+          <Download size={13} /> {exportingPdf ? 'Generando…' : 'PDF'}
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className="mb-4 flex flex-wrap items-end gap-4">
+        <Filter label="Hotel">
+          <SingleSelect options={HOTELS} value={hotel} onChange={setHotel} width="20rem" />
+        </Filter>
+        <Filter label="Mes">
+          <SingleSelect options={MONTH_OPTIONS} value={month} onChange={setMonth} width="9rem" />
+        </Filter>
+        <Filter label="Comp Set">
+          <SingleSelect options={COMP_SETS} value={compSet} onChange={setCompSet} width="11rem" />
+        </Filter>
       </div>
 
       {/* Period toggle */}
@@ -83,6 +109,7 @@ export default function MarketSharePage() {
         <div className="inline-flex rounded-md border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
           {PERIODS.map((p, i) => {
             const active = p.key === period;
+            const label = p.key === 'ytd' ? `${month} YTD` : month;
             return (
               <button
                 key={p.key}
@@ -94,7 +121,7 @@ export default function MarketSharePage() {
                   borderColor: 'var(--border)',
                 }}
               >
-                {p.label}
+                {label}
               </button>
             );
           })}
@@ -102,22 +129,26 @@ export default function MarketSharePage() {
         <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>vs año anterior (LY)</span>
       </div>
 
-      {/* ── Headline: penetration index cards ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        {KPM_METRICS.map((metric) => (
-          <IndexCard key={metric} metric={metric} period={period} />
-        ))}
-      </div>
+      {/* Exportable visuals — cards + report table + charts, wrapped so the PDF captures them as one. */}
+      <div ref={exportRef} className="bg-[var(--background)]">
+        {/* ── Headline: penetration index cards ── */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          {KPM_METRICS.map((metric) => (
+            <IndexCard key={metric} metric={metric} period={period} />
+          ))}
+        </div>
 
-      {/* ── Detail (non-table tiles) ── */}
-      <DetailSection title="KPM's · OCC / ADR / RevPAR" metrics={KPM_METRICS} cols={3} period={period} />
-      <DetailSection title="Sales" metrics={SALES_METRICS} cols={2} period={period} />
-      <DetailSection title="Sales x Day" metrics={SALES_METRICS} cols={2} period={period} perDayMode />
+        {/* ── Full report table (recreated from the source image) ── */}
+        <DetailTable month={month} />
+
+        {/* ── Monthly progression charts ── */}
+        <ProgressionCharts month={month} />
+      </div>
 
       {/* Footnotes */}
       <div className="mt-6 text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
         <p><b>MPI / ARI / RGI</b> = índice de penetración Hotel ÷ Comp Set × 100. <b>100 = fair share</b>.</p>
-        <p className="mt-1">En cada tile: valor <b>CY</b> arriba, <b>LY</b> debajo y el cambio en chip. KPM&apos;s usa <b>Δ%</b> (variación %); Sales usa <b>Δ absoluto</b>. <b>vs CS</b> = Hotel − Comp Set. <b>Sales x Day</b> = total ÷ días.</p>
+        <p className="mt-1">KPM&apos;s usa <b>KPI&apos;s</b> (índice de penetración) y <b>Δ%</b>; Sales usa <b>vs CS</b> (Hotel − Comp Set) y <b>Δ absoluto</b>. <b>Sales x Day</b> = total ÷ días del periodo.</p>
         <p className="mt-1 opacity-70">Mock data — to be sourced from SQL.</p>
       </div>
     </div>
@@ -132,146 +163,162 @@ function IndexCard({ metric, period }: { metric: Metric; period: PeriodKey }) {
   const yoy = changePct(idxCY, idxLY);
 
   const aboveFair = idxCY >= 100;
-  const pos = gaugePos(idxCY);
   const up = yoy >= 0;
 
   return (
-    <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: 'var(--border)' }}>
-      <div className="flex items-baseline justify-between">
-        <div className="text-sm font-semibold" style={{ color: 'var(--primary)' }}>
+    <div className="bg-white rounded-lg border px-4 py-3 shadow-sm" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold" style={{ color: 'var(--primary)' }}>
           {INDEX_NAME[metric]} <span className="font-normal opacity-60">· {METRIC_LABEL[metric]}</span>
-        </div>
+        </span>
         <span
-          className="text-[11px] font-medium px-2 py-0.5 rounded-full"
+          className="text-[10px] font-medium px-2 py-0.5 rounded-full"
           style={{ color: aboveFair ? COLOR_GOOD : COLOR_BAD, background: aboveFair ? BG_GOOD : BG_BAD }}
         >
           {aboveFair ? 'Sobre fair share' : 'Bajo fair share'}
         </span>
       </div>
 
-      <div className="mt-3 flex items-end gap-3">
-        <span className="text-4xl font-bold tabular-nums" style={{ color: aboveFair ? COLOR_GOOD : COLOR_BAD }}>
+      <div className="mt-1 flex items-baseline gap-2">
+        <span className="text-2xl font-bold tabular-nums leading-none" style={{ color: 'var(--primary)' }}>
           {fmtIndex(idxCY)}
         </span>
-        <span className="inline-flex items-center gap-0.5 text-sm font-semibold tabular-nums mb-1" style={{ color: up ? COLOR_GOOD : COLOR_BAD }}>
-          {up ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
-          {fmtSignedPct(yoy)} YoY
+        <span className="inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums" style={{ color: up ? COLOR_GOOD : COLOR_BAD }}>
+          {up ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+          {fmtSignedPct(yoy)}
         </span>
       </div>
 
-      <div className="mt-4">
-        <div className="relative h-2 rounded-full" style={{ background: 'var(--muted)' }}>
-          <div className="absolute top-[-3px] bottom-[-3px] w-px" style={{ left: '50%', background: 'var(--text-secondary)', opacity: 0.5 }} />
-          <div
-            className="absolute w-3 h-3 rounded-full border-2 border-white shadow"
-            style={{ left: `${pos}%`, top: '-2px', transform: 'translateX(-50%)', background: aboveFair ? COLOR_GOOD : COLOR_BAD }}
-          />
-        </div>
-        <div className="flex justify-between mt-1.5 text-[10px]" style={{ color: 'var(--text-secondary)' }}>
-          <span>{GAUGE_MIN}</span><span>fair = 100</span><span>{GAUGE_MAX}</span>
-        </div>
-      </div>
-
-      <div className="mt-4 pt-3 border-t flex items-center justify-between text-xs" style={{ borderColor: 'var(--border)' }}>
-        <span style={{ color: 'var(--text-secondary)' }}>
+      <div className="mt-1.5 flex items-center justify-between text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+        <span>
           Hotel <b style={{ color: 'var(--text-primary)' }}>{fmtLevel(r.hotelCY, kind)}</b>
           <span className="opacity-50"> · </span>
           Comp <b style={{ color: 'var(--text-primary)' }}>{fmtLevel(r.compCY, kind)}</b>
         </span>
-        <span className="font-medium" style={{ color: 'var(--text-secondary)' }}>Rank {r.rankCY}</span>
+        <span className="font-medium">Rank {r.rankCY}</span>
       </div>
     </div>
   );
 }
 
-function DetailSection({
-  title, metrics, cols, period, perDayMode = false,
-}: {
-  title: string;
-  metrics: Metric[];
-  cols: 2 | 3;
-  period: PeriodKey;
-  perDayMode?: boolean;
-}) {
+// ── Filter field wrapper ─────────────────────────────────────────────
+function Filter({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="mb-6">
-      <div className="text-[11px] uppercase tracking-wider font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
-        {title}
-      </div>
-      <div className={`grid grid-cols-1 ${cols === 3 ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
-        {metrics.map((metric) => (
-          <DetailCard key={metric} metric={metric} period={period} perDayMode={perDayMode} />
-        ))}
-      </div>
+    <div>
+      <label className="block text-[11px] uppercase tracking-wider font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
+        {label}
+      </label>
+      {children}
     </div>
   );
 }
 
-type TileData = {
-  label: string;
-  cyText: string;
-  lyText: string;
-  changeText: string;
-  changeVal: number;
-  colorLevels?: boolean; // color CY/LY by sign too (vs CS tile)
-  cyVal?: number;
-  lyVal?: number;
-};
+// ── Full report table ────────────────────────────────────────────────
+type Tone = 'good' | 'bad' | null;
 
-function DetailCard({ metric, period, perDayMode }: { metric: Metric; period: PeriodKey; perDayMode: boolean }) {
-  const r = getRow(metric, period);
-  const kind = METRIC_KIND[metric];
-  let tiles: TileData[];
+// Colouring rules, mirroring the source image:
+//   • Hotel & Comp Set cells: coloured only on the Change row.
+//   • Third column (KPI's / vs CS): KPM colours it only on Change; Sales always.
+//   • Rank# is never coloured.
+// Tone follows the value's sign (a leading "-" reads as negative → bad).
+function cellTone(group: DetailGroup, kind: RowKind, colInPeriod: number, text: string): Tone {
+  if (colInPeriod === 3) return null; // Rank#
+  const isThird = colInPeriod === 2;
+  const toned = isThird ? group.alwaysToneThird || kind === 'change' : kind === 'change';
+  if (!toned) return null;
+  return text.trim().startsWith('-') ? 'bad' : 'good';
+}
 
-  if (isKPM(metric)) {
-    const idxCY = penetrationIndex(r.hotelCY, r.compCY);
-    const idxLY = penetrationIndex(r.hotelLY, r.compLY);
-    tiles = [
-      { label: 'Hotel', cyText: fmtLevel(r.hotelCY, kind), lyText: fmtLevel(r.hotelLY, kind), changeText: fmtSignedPct(changePct(r.hotelCY, r.hotelLY)), changeVal: changePct(r.hotelCY, r.hotelLY) },
-      { label: 'Comp Set', cyText: fmtLevel(r.compCY, kind), lyText: fmtLevel(r.compLY, kind), changeText: fmtSignedPct(changePct(r.compCY, r.compLY)), changeVal: changePct(r.compCY, r.compLY) },
-      { label: INDEX_NAME[metric], cyText: fmtIndex(idxCY), lyText: fmtIndex(idxLY), changeText: fmtSignedPct(changePct(idxCY, idxLY)), changeVal: changePct(idxCY, idxLY) },
-    ];
-  } else {
-    const d = daysFor(period);
-    const adj = (v: number) => (perDayMode ? perDay(v, d) : v);
-    const hCY = adj(r.hotelCY), cCY = adj(r.compCY), hLY = adj(r.hotelLY), cLY = adj(r.compLY);
-    const vsCY = vsCompSet(hCY, cCY);
-    const vsLY = vsCompSet(hLY, cLY);
-    tiles = [
-      { label: 'Hotel', cyText: fmtLevel(hCY, kind), lyText: fmtLevel(hLY, kind), changeText: fmtSigned(change(hCY, hLY), kind), changeVal: change(hCY, hLY) },
-      { label: 'Comp Set', cyText: fmtLevel(cCY, kind), lyText: fmtLevel(cLY, kind), changeText: fmtSigned(change(cCY, cLY), kind), changeVal: change(cCY, cLY) },
-      { label: 'vs CS', cyText: fmtSigned(vsCY, kind), lyText: fmtSigned(vsLY, kind), changeText: fmtSigned(vsCY - vsLY, kind), changeVal: vsCY - vsLY, colorLevels: true, cyVal: vsCY, lyVal: vsLY },
-    ];
-  }
+const COL_HEADERS = ['Hotel', 'Comp Set', '', 'Rank#']; // index 2 filled per group
 
+function DataCell({ tone, text }: { tone: Tone; text: string }) {
+  const color = tone === 'good' ? COLOR_GOOD : tone === 'bad' ? COLOR_BAD : 'var(--text-primary)';
   return (
-    <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--border)' }}>
-      <div className="flex items-baseline justify-between mb-3">
-        <span className="text-sm font-semibold" style={{ color: 'var(--primary)' }}>{METRIC_LABEL[metric]}</span>
-        <span className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>Rank {r.rankCY}</span>
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        {tiles.map((t) => <Tile key={t.label} t={t} />)}
-      </div>
-    </div>
+    <td
+      className={`px-3 py-1 text-center tabular-nums whitespace-nowrap ${tone ? 'font-semibold' : ''}`}
+      style={{ color }}
+    >
+      {text}
+    </td>
   );
 }
 
-function Tile({ t }: { t: TileData }) {
-  const chgGood = t.changeVal >= 0;
-  const cyColor = t.colorLevels ? ((t.cyVal ?? 0) >= 0 ? COLOR_GOOD : COLOR_BAD) : 'var(--text-primary)';
-  const lyColor = t.colorLevels ? ((t.lyVal ?? 0) >= 0 ? COLOR_GOOD : COLOR_BAD) : 'var(--text-secondary)';
+function DetailTable({ month }: { month: string }) {
+  const headerCell = 'px-3 py-1.5 text-center text-sm font-semibold whitespace-nowrap';
+  const spacer = <td className="w-4" />;
+
   return (
-    <div className="rounded-lg px-2.5 py-2" style={{ background: 'var(--muted)' }}>
-      <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>{t.label}</div>
-      <div className="text-base font-bold tabular-nums mt-0.5" style={{ color: cyColor }}>{t.cyText}</div>
-      <div className="text-[11px] tabular-nums" style={{ color: lyColor }}>LY {t.lyText}</div>
-      <div
-        className="mt-1.5 inline-flex items-center text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded-sm"
-        style={{ color: chgGood ? COLOR_GOOD : COLOR_BAD, background: chgGood ? BG_GOOD : BG_BAD }}
-      >
-        {t.changeText}
-      </div>
+    <div className="bg-white rounded-xl border p-5 shadow-sm overflow-x-auto" style={{ borderColor: 'var(--border)' }}>
+      <h2 className="text-center text-lg font-bold tracking-wide mb-4" style={{ color: 'var(--primary)' }}>
+        {REPORT_TITLE}
+      </h2>
+
+      <table className="w-full border-collapse text-sm">
+        {/* Period band: May | May YTD */}
+        <thead>
+          <tr>
+            <th className="w-40" />
+            <th colSpan={4} className="pb-1 text-center text-base font-semibold" style={{ color: 'var(--text-primary)', borderBottom: '2px solid var(--border)' }}>
+              {month}
+            </th>
+            {spacer}
+            <th colSpan={4} className="pb-1 text-center text-base font-semibold" style={{ color: 'var(--text-primary)', borderBottom: '2px solid var(--border)' }}>
+              {month} YTD
+            </th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {DETAIL_GROUPS.map((group, gi) => {
+            const headers = [...COL_HEADERS];
+            headers[2] = group.thirdCol;
+            return (
+              <Fragment key={group.name}>
+                {/* Spacer between groups */}
+                {gi > 0 && (
+                  <tr>
+                    <td className="h-6" colSpan={10} />
+                  </tr>
+                )}
+
+                {/* Group header: section name + column titles */}
+                <tr>
+                  <td className={`${headerCell} text-left`} style={{ color: 'var(--primary)', borderBottom: '1px solid var(--border)' }}>
+                    {group.name}
+                  </td>
+                  {headers.map((h, i) => (
+                    <td key={`a-${i}`} className={headerCell} style={{ color: 'var(--text-primary)', borderBottom: '1px solid var(--border)' }}>{h}</td>
+                  ))}
+                  <td style={{ borderBottom: '1px solid var(--border)' }} />
+                  {headers.map((h, i) => (
+                    <td key={`b-${i}`} className={headerCell} style={{ color: 'var(--text-primary)', borderBottom: '1px solid var(--border)' }}>{h}</td>
+                  ))}
+                </tr>
+
+                {/* Data rows, in metric blocks of 3 (CY / LY / Change) */}
+                {group.rows.map((row, ri) => {
+                  const blockStart = ri % 3 === 0 && ri > 0;
+                  const rowStyle = blockStart ? { borderTop: '1px solid var(--border)' } : undefined;
+                  return (
+                    <tr key={`${group.name}-${ri}`} style={rowStyle}>
+                      <td className="px-3 py-1 text-left font-medium whitespace-nowrap" style={{ color: 'var(--text-primary)' }}>
+                        {row.label}
+                      </td>
+                      {row.cells.slice(0, 4).map((c, i) => (
+                        <DataCell key={`m-${i}`} tone={cellTone(group, row.kind, i, c)} text={c} />
+                      ))}
+                      {spacer}
+                      {row.cells.slice(4, 8).map((c, i) => (
+                        <DataCell key={`y-${i}`} tone={cellTone(group, row.kind, i, c)} text={c} />
+                      ))}
+                    </tr>
+                  );
+                })}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
